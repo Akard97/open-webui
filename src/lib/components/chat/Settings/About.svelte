@@ -114,7 +114,7 @@
 
 		{#if $config?.license_metadata}
 			<div class="mb-2 text-xs">
-				{#if !$WEBUI_NAME.includes('Open WebUI')}
+				{#if !$WEBUI_NAME.includes('Osool Intelligence Hub')}
 					<span class=" text-gray-500 dark:text-gray-300 font-medium">{$WEBUI_NAME}</span> -
 				{/if}
 
@@ -126,14 +126,14 @@
 				<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
 					<img
 						alt="Discord"
-						src="https://img.shields.io/badge/Discord-Open_WebUI-blue?logo=discord&logoColor=white"
+						src="https://img.shields.io/badge/Discord-Osool_Intelligence_Hub-blue?logo=discord&logoColor=white"
 					/>
 				</a>
 
-				<a href="https://twitter.com/OpenWebUI" target="_blank">
+				<a href="https://twitter.com/OsoolIntelligenceHub" target="_blank">
 					<img
 						alt="X (formerly Twitter) Follow"
-						src="https://img.shields.io/twitter/follow/OpenWebUI"
+						src="https://img.shields.io/twitter/follow/OsoolIntelligenceHub"
 					/>
 				</a>
 
@@ -157,7 +157,7 @@
 				class="text-xs text-gray-400 dark:text-gray-500">Copyright (c) {new Date().getFullYear()} <a
 					href="https://openwebui.com"
 					target="_blank"
-					class="underline">Open WebUI Inc.</a
+					class="underline">Osool Intelligence Hub Inc.</a
 				> <a href="https://github.com/open-webui/open-webui/blob/main/LICENSE" target="_blank"
 					>All rights reserved.</a
 				>

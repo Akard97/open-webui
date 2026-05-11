@@ -1,6 +1,6 @@
 {
-  "name": "Open WebUI",
-  "short_name": "WebUI",
+  "name": "Osool Intelligence Hub",
+  "short_name": "Osool",
   "icons": [
     {
       "src": "/static/web-app-manifest-192x192.png",
