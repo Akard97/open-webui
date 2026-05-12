@@ -37,7 +37,7 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_permission, filter_allowed_access_grants
 from open_webui.config import BYPASS_ADMIN_ACCESS_CONTROL
-from open_webui.env import ENABLE_PROFILE_IMAGE_URL_FORWARDING
+from open_webui.env import ENABLE_PROFILE_IMAGE_URL_FORWARDING, STATIC_DIR
 from open_webui.internal.db import get_async_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,6 +72,29 @@ def _safe_static_redirect_path(url: str) -> Optional[str]:
     if normalized == '/static':
         return '/static/'
     return normalized
+
+
+def _dark_variant_static_path(static_path: str) -> Optional[str]:
+    """
+    Given a normalized /static/<name>.<ext> path, return the matching
+    /static/<name>-dark.<ext> path if that file exists on disk; otherwise None.
+    The input is expected to have already passed _safe_static_redirect_path.
+    """
+    if not static_path or not static_path.startswith('/static/'):
+        return None
+    rel = static_path[len('/static/'):]
+    if not rel or rel.endswith('/'):
+        return None
+    dot = rel.rfind('.')
+    if dot <= 0:
+        return None
+    stem, ext = rel[:dot], rel[dot:]
+    if stem.endswith('-dark'):
+        return None
+    dark_rel = f'{stem}-dark{ext}'
+    if (STATIC_DIR / dark_rel).is_file():
+        return f'/static/{dark_rel}'
+    return None
 
 
 def is_valid_model_id(model_id: str) -> bool:
@@ -466,11 +489,13 @@ async def get_model_by_id(id: str, user=Depends(get_verified_user), db: AsyncSes
 async def get_model_profile_image(
     request: Request,
     id: str,
+    theme: Optional[str] = None,
     user=Depends(get_verified_user),
     db: AsyncSession = Depends(get_async_session),
 ):
     profile_image_url = None
     updated_at = None
+    want_dark = (theme or '').lower() == 'dark'
 
     # First, check the database for regular models
     model_meta = await Models.get_model_meta_by_id(id, db=db)
@@ -521,13 +546,20 @@ async def get_model_profile_image(
         else:
             safe_static = _safe_static_redirect_path(profile_image_url)
             if safe_static:
+                if want_dark:
+                    dark_variant = _dark_variant_static_path(safe_static)
+                    if dark_variant:
+                        safe_static = dark_variant
                 return RedirectResponse(
                     url=safe_static,
                     status_code=status.HTTP_302_FOUND,
                 )
 
+    fallback = '/static/favicon.png'
+    if want_dark:
+        fallback = _dark_variant_static_path(fallback) or fallback
     return RedirectResponse(
-        url='/static/favicon.png',
+        url=fallback,
         status_code=status.HTTP_302_FOUND,
     )
 

@@ -125,15 +125,18 @@
 											selectedModelIdx = modelIdx;
 										}}
 									>
-										<img
-											src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}`}
-											class=" size-9 @sm:size-10 rounded-full border-[1px] border-gray-100 dark:border-none"
-											aria-hidden="true"
-											draggable="false"
-											on:error={(e) => {
-												e.currentTarget.src = '/favicon.png';
-											}}
-										/>
+									<img
+										src="/static/osool-ai-logo-black-transparent.png"
+										class=" size-9 @sm:size-10 block dark:hidden"
+										aria-hidden="true"
+										draggable="false"
+									/>
+									<img
+										src="/static/osool-ai-logo-whitish-transparent.png"
+										class=" size-9 @sm:size-10 hidden dark:block"
+										aria-hidden="true"
+										draggable="false"
+									/>
 									</button>
 								</Tooltip>
 							{/each}
@@ -189,18 +192,7 @@
 
 							{#if models[selectedModelIdx]?.info?.meta?.user}
 								<div class="mt-0.5 text-sm font-normal text-gray-400 dark:text-gray-500">
-									By
-									{#if models[selectedModelIdx]?.info?.meta?.user.community}
-										<a
-											href="https://openwebui.com/m/{models[selectedModelIdx]?.info?.meta?.user
-												.username}"
-											>{models[selectedModelIdx]?.info?.meta?.user.name
-												? models[selectedModelIdx]?.info?.meta?.user.name
-												: `@${models[selectedModelIdx]?.info?.meta?.user.username}`}</a
-										>
-									{:else}
-										{models[selectedModelIdx]?.info?.meta?.user.name}
-									{/if}
+									By {models[selectedModelIdx]?.info?.meta?.user.name}
 								</div>
 							{/if}
 						{/if}

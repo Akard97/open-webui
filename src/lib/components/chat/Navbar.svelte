@@ -11,6 +11,7 @@
 		settings,
 		showArchivedChats,
 		showControls,
+		showRailDrawer,
 		showSidebar,
 		temporaryChatEnabled,
 		user
@@ -97,6 +98,9 @@
 							<button
 								class=" cursor-pointer flex rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition"
 								on:click={() => {
+									if (!$showSidebar) {
+										showRailDrawer.set(false);
+									}
 									showSidebar.set(!$showSidebar);
 								}}
 							>

@@ -662,6 +662,7 @@
 			<ProfileImage
 				src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}`}
 				className={'size-8 assistant-message-profile-image'}
+				rounded={false}
 			/>
 		</div>
 

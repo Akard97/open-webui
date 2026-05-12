@@ -51,6 +51,11 @@
 
 	const i18n = getContext('i18n');
 
+	$: isQaRoute =
+		$page.url.pathname === '/' ||
+		$page.url.pathname.startsWith('/c/') ||
+		$page.url.pathname.startsWith('/channels/');
+
 	let loaded = false;
 	let DB = null;
 	let localDBChats = [];
@@ -454,13 +459,15 @@
 					</div>
 				{/if}
 
-				<Sidebar />
+				{#if isQaRoute}
+					<Sidebar />
+				{/if}
 
 				{#if loaded}
 					<slot />
 				{:else}
 					<div
-						class="w-full flex-1 h-full flex items-center justify-center {$showSidebar
+						class="w-full flex-1 h-full flex items-center justify-center {isQaRoute && $showSidebar
 							? '  md:max-w-[calc(100%-var(--sidebar-width))]'
 							: ' '}"
 					>

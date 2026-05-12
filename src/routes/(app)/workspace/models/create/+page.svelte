@@ -33,8 +33,7 @@
 				...modelInfo,
 				meta: {
 					...modelInfo.meta,
-					profile_image_url:
-						modelInfo.meta.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`,
+					profile_image_url: modelInfo.meta.profile_image_url ?? '/static/favicon.png',
 					suggestion_prompts: modelInfo.meta.suggestion_prompts
 						? modelInfo.meta.suggestion_prompts.filter((prompt) => prompt.content !== '')
 						: null
@@ -63,7 +62,7 @@
 	onMount(() => {
 		const handleMessageEvent = async (event: MessageEvent) => {
 			if (
-				!['https://openwebui.com', 'https://www.openwebui.com', 'http://localhost:9999'].includes(
+				!['http://localhost:9999'].includes(
 					event.origin
 				)
 			) {

@@ -76,7 +76,7 @@
 		base_model_id: null,
 		name: '',
 		meta: {
-			profile_image_url: `${WEBUI_BASE_URL}/static/favicon.png`,
+			profile_image_url: '/static/favicon.png',
 			description: '',
 			suggestion_prompts: null,
 			tags: []
@@ -492,8 +492,9 @@
 						<div class="self-start flex justify-center my-2 shrink-0">
 							<div class="self-center">
 								<button
-									class="rounded-2xl flex shrink-0 items-center {info.meta.profile_image_url !==
-									`${WEBUI_BASE_URL}/static/favicon.png`
+									class="rounded-2xl flex shrink-0 items-center {info.meta.profile_image_url &&
+									info.meta.profile_image_url !== '/static/favicon.png' &&
+									info.meta.profile_image_url !== `${WEBUI_BASE_URL}/static/favicon.png`
 										? 'bg-transparent'
 										: 'bg-white'} shadow-xl group relative"
 									type="button"
@@ -546,12 +547,21 @@
 									<button
 										class="px-2 py-1 text-gray-500 rounded-lg text-xs"
 										on:click={() => {
-											info.meta.profile_image_url = `${WEBUI_BASE_URL}/static/favicon.png`;
+											info.meta.profile_image_url = '/static/favicon.png';
 										}}
 										type="button"
 									>
 										{$i18n.t('Reset Image')}</button
 									>
+								</div>
+
+								<div class="flex w-full mt-1">
+									<input
+										class="w-full px-2 py-1 text-xs bg-transparent border border-gray-200 dark:border-gray-800 rounded-lg outline-hidden"
+										placeholder={$i18n.t('Image URL or /static/... path')}
+										bind:value={info.meta.profile_image_url}
+										type="text"
+									/>
 								</div>
 							</div>
 						</div>

@@ -1,7 +1,8 @@
 {
-	"name": "open-webui",
+	"name": "osool-intelligence-hub",
 	"version": "0.9.5",
 	"private": true,
+	"description": "Osool Intelligence Hub front-end (forked from Open WebUI).",
 	"scripts": {
 		"dev": "npm run pyodide:fetch && vite dev --host",
 		"dev:5050": "npm run pyodide:fetch && vite dev --port 5050",

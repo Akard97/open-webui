@@ -238,13 +238,12 @@
 						<div class=" sm:max-w-md my-auto pb-10 w-full dark:text-gray-100">
 							{#if $config?.metadata?.auth_logo_position === 'center'}
 								<div class="flex justify-center mb-6">
-									<img
-										id="logo"
-										crossorigin="anonymous"
-										src="{WEBUI_BASE_URL}/static/favicon.png"
-										class="size-24 rounded-full"
-										alt="{$WEBUI_NAME} logo"
-									/>
+								<img
+									id="logo"
+									src="{WEBUI_BASE_URL}/static/favicon.png"
+									class="size-24 rounded-full"
+									alt="{$WEBUI_NAME} logo"
+								/>
 								</div>
 							{/if}
 							<form
@@ -590,13 +589,12 @@
 			<div class="fixed m-10 z-50">
 				<div class="flex space-x-2">
 					<div class=" self-center">
-						<img
-							id="logo"
-							crossorigin="anonymous"
-							src="{WEBUI_BASE_URL}/static/favicon.png"
-							class=" w-6 rounded-full"
-							alt=""
-						/>
+					<img
+						id="logo"
+						src="{WEBUI_BASE_URL}/static/favicon.png"
+						class=" w-6 rounded-full"
+						alt=""
+					/>
 					</div>
 				</div>
 			</div>

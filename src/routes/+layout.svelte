@@ -68,11 +68,19 @@
 
 	import NotificationToast from '$lib/components/NotificationToast.svelte';
 	import AppSidebar from '$lib/components/app/AppSidebar.svelte';
+	import MobileAppBar from '$lib/components/app/MobileAppBar.svelte';
+	import MobileRailDrawer from '$lib/components/app/MobileRailDrawer.svelte';
 	import SyncStatsModal from '$lib/components/chat/Settings/SyncStatsModal.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { getUserSettings } from '$lib/apis/users';
 	import dayjs from 'dayjs';
 	import { getChannels } from '$lib/apis/channels';
+
+	$: isPublicRoute =
+		$page.url.pathname === '/auth' ||
+		$page.url.pathname === '/error' ||
+		$page.url.pathname.startsWith('/s/') ||
+		$page.url.pathname === '/watch';
 
 	const unregisterServiceWorkers = async () => {
 		if ('serviceWorker' in navigator) {
@@ -782,7 +790,7 @@
 			// Apply theme classes (mirrors logic from chat/Settings/General.svelte)
 			const themes = ['dark', 'light', 'oled-dark'];
 			let themeToApply =
-				newTheme === 'oled-dark' ? 'dark' : newTheme === 'her' ? 'light' : newTheme;
+				newTheme === 'oled-dark' ? 'dark' : newTheme;
 			if (newTheme === 'system') {
 				themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 			}
@@ -844,7 +852,7 @@
 
 	const windowMessageEventHandler = async (event) => {
 		if (
-			!['https://openwebui.com', 'https://www.openwebui.com', 'http://localhost:9999'].includes(
+			!['http://localhost:9999'].includes(
 				event.origin
 			)
 		) {
@@ -1078,35 +1086,8 @@
 
 		await tick();
 
-		if (
-			document.documentElement.classList.contains('her') &&
-			document.getElementById('progress-bar')
-		) {
-			loadingProgress.subscribe((value) => {
-				const progressBar = document.getElementById('progress-bar');
-
-				if (progressBar) {
-					progressBar.style.width = `${value}%`;
-				}
-			});
-
-			await loadingProgress.set(100);
-
-			document.getElementById('splash-screen')?.remove();
-
-			const audio = new Audio(`/audio/greeting.mp3`);
-			const playAudio = () => {
-				audio.play();
-				document.removeEventListener('click', playAudio);
-			};
-
-			document.addEventListener('click', playAudio);
-
-			loaded = true;
-		} else {
-			document.getElementById('splash-screen')?.remove();
-			loaded = true;
-		}
+		document.getElementById('splash-screen')?.remove();
+		loaded = true;
 
 		// Auto-show SyncStatsModal when opened with ?sync=true (from community)
 		if (
@@ -1154,14 +1135,24 @@
 {/if}
 
 {#if loaded}
-	{#if $isApp}
-		<div class="flex flex-row h-screen">
-			<AppSidebar />
-
-			<div class="w-full flex-1 max-w-[calc(100%-4.5rem)]">
-				<slot />
+	{#if $user && !isPublicRoute}
+		{#if $mobile}
+			<div class="flex flex-col h-screen max-h-[100dvh] overflow-hidden">
+				<MobileAppBar />
+				<div class="flex-1 min-h-0 flex flex-col">
+					<slot />
+				</div>
 			</div>
-		</div>
+			<MobileRailDrawer />
+		{:else}
+			<div class="flex flex-row h-screen">
+				<AppSidebar />
+
+				<div class="w-full flex-1 max-w-[calc(100%-3.6rem)]">
+					<slot />
+				</div>
+			</div>
+		{/if}
 	{:else}
 		<slot />
 	{/if}

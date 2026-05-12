@@ -35,33 +35,6 @@
 		return shareUrl;
 	};
 
-	const shareChat = async () => {
-		const _chat = chat.chat;
-		console.log('share', _chat);
-
-		toast.success($i18n.t('Redirecting you to Osool Intelligence Hub Community'));
-		const url = 'https://openwebui.com';
-		// const url = 'http://localhost:5173';
-
-		const tab = await window.open(`${url}/chats/upload`, '_blank');
-		window.addEventListener(
-			'message',
-			(event) => {
-				if (event.origin !== url) return;
-				if (event.data === 'loaded') {
-					tab.postMessage(
-						JSON.stringify({
-							chat: _chat,
-							models: $models.filter((m) => _chat.models.includes(m.id))
-						}),
-						'*'
-					);
-				}
-			},
-			false
-		);
-	};
-
 	const loadAccessGrants = async () => {
 		if (!chatId) return;
 		try {
@@ -165,18 +138,6 @@
 				{/if}
 
 				<div class="flex justify-end gap-1 mt-3">
-					{#if $config?.features.enable_community_sharing}
-						<button
-							class="flex items-center gap-1 px-3.5 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-800 dark:bg-gray-850 dark:text-white dark:hover:bg-gray-800 transition rounded-full"
-							type="button"
-							on:click={() => {
-								shareChat();
-							}}
-						>
-							{$i18n.t('Share to Osool Intelligence Hub Community')}
-						</button>
-					{/if}
-
 					<button
 						class="flex items-center gap-1 px-3.5 py-2 text-sm font-medium bg-black hover:bg-gray-900 text-white dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full"
 						type="button"

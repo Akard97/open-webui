@@ -1,71 +1,136 @@
 <script lang="ts">
-	import Tooltip from '$lib/components/common/Tooltip.svelte';
-	import Plus from '$lib/components/icons/Plus.svelte';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { getContext } from 'svelte';
+	import { page } from '$app/stores';
 
-	let selected = '';
+	import { WEBUI_NAME, config, showArchivedChats, user } from '$lib/stores';
+	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+
+	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
+
+	import { railItems, activeRailItem, type RailItem } from './railItems';
+
+	const i18n = getContext<any>('i18n');
+
+	let showUserMenu = false;
+
+	$: visibleItems = railItems.filter((item) => item.visible({ user: $user, config: $config }));
+
+	$: activeId = activeRailItem($page.url.pathname, visibleItems)?.id;
+
+	const isActive = (item: RailItem) => item.id === activeId;
 </script>
 
+<!-- Spacer keeps the collapsed gap in the parent flex row. -->
+<div class="w-[3.6rem] shrink-0 h-screen" aria-hidden="true"></div>
+
 <nav
-	aria-label="App navigation"
-	class="min-w-[4.5rem] bg-gray-50 dark:bg-gray-950 flex gap-2.5 flex-col pt-8"
+	aria-label={$i18n?.t('App navigation') ?? 'App navigation'}
+	class="group/rail fixed start-0 top-0 h-screen z-[60] flex flex-col
+		w-[3.6rem] hover:w-60
+		bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur
+		border-e border-gray-200/70 dark:border-gray-900
+		transition-[width] duration-200 ease-out
+		overflow-hidden"
 >
-	<div class="flex justify-center relative">
-		{#if selected === 'home'}
-			<div class="absolute top-0 left-0 flex h-full">
-				<div class="my-auto rounded-r-lg w-1 h-8 bg-black dark:bg-white"></div>
-			</div>
-		{/if}
+	<!-- Logo -->
+	<a
+		href="/home"
+		class="flex items-center h-14 shrink-0 px-3 text-gray-900 dark:text-white"
+		aria-label={$WEBUI_NAME}
+	>
+		<span class="w-10 shrink-0 flex items-center justify-center">
+			<img
+				src="{WEBUI_BASE_URL}/static/favicon.png"
+				alt={$WEBUI_NAME}
+				class="size-6 rounded object-contain"
+				draggable="false"
+			/>
+		</span>
+		<span
+			class="ms-1 text-[13px] font-semibold tracking-tight whitespace-nowrap
+				opacity-0 group-hover/rail:opacity-100 transition-opacity duration-150 delay-100"
+		>
+			{$WEBUI_NAME}
+		</span>
+	</a>
 
-		<Tooltip content="Home" placement="right">
-			<button
-				aria-label="Home"
-				class=" cursor-pointer {selected === 'home' ? 'rounded-2xl' : 'rounded-full'}"
-				on:click={() => {
-					selected = 'home';
+	<!-- Nav items -->
+	<div class="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden">
+		<ul class="flex flex-col gap-0.5 px-2 py-1">
+			{#each visibleItems as item (item.id)}
+				<li>
+					<a
+						href={item.href}
+						aria-label={$i18n?.t(item.label) ?? item.label}
+						aria-current={isActive(item) ? 'page' : undefined}
+						class="flex items-center h-9 rounded-lg transition-colors duration-100
+							{isActive(item)
+								? 'bg-gray-200/60 dark:bg-gray-900 text-gray-900 dark:text-white'
+								: 'text-gray-600 dark:text-gray-400 hover:bg-gray-200/40 dark:hover:bg-gray-900/60 hover:text-gray-900 dark:hover:text-white'}"
+					>
+						<span class="w-10 shrink-0 flex items-center justify-center">
+							<svelte:component this={item.icon} className="size-[1.125rem]" strokeWidth="1.5" />
+						</span>
+						<span
+							class="ms-1 text-[13px] font-medium whitespace-nowrap
+								opacity-0 group-hover/rail:opacity-100 transition-opacity duration-150 delay-100"
+						>
+							{$i18n?.t(item.label) ?? item.label}
+						</span>
+					</a>
+				</li>
+			{/each}
+		</ul>
+	</div>
 
-					if (window.electronAPI) {
-						window.electronAPI.load('home');
+	<!-- User -->
+	{#if $user !== undefined && $user !== null}
+		<div class="shrink-0 px-2 py-2 border-t border-gray-200/70 dark:border-gray-900">
+			<UserMenu
+				bind:show={showUserMenu}
+				role={$user?.role}
+				profile={$config?.features?.enable_user_status ?? true}
+				showActiveUsers={false}
+				className="w-[240px]"
+				align="start"
+				on:show={(e) => {
+					if (e.detail === 'archived-chat') {
+						showArchivedChats.set(true);
 					}
 				}}
 			>
-				<img
-					src="{WEBUI_BASE_URL}/static/splash.png"
-					class="size-11 dark:invert p-0.5"
-					alt="logo"
-					draggable="false"
-				/>
-			</button>
-		</Tooltip>
-	</div>
-
-	<div class=" -mt-1 border-[1.5px] border-gray-100 dark:border-gray-900 mx-4"></div>
-
-	<div class="flex justify-center relative group">
-		{#if selected === ''}
-			<div class="absolute top-0 left-0 flex h-full">
-				<div class="my-auto rounded-r-lg w-1 h-8 bg-black dark:bg-white"></div>
-			</div>
-		{/if}
-		<button
-			aria-label="Chat"
-			class=" cursor-pointer bg-transparent"
-			on:click={() => {
-				selected = '';
-			}}
-		>
-			<img
-				src="{WEBUI_BASE_URL}/static/favicon.png"
-				class="size-10 {selected === '' ? 'rounded-2xl' : 'rounded-full'}"
-				alt="logo"
-				draggable="false"
-			/>
-		</button>
-	</div>
-
-	<!-- <div class="flex justify-center relative group text-gray-400">
-		<button class=" cursor-pointer p-2" on:click={() => {}}>
-			<Plus className="size-4" strokeWidth="2" />
-		</button>
-	</div> -->
+				<button
+					type="button"
+					aria-label={$i18n?.t('Open User Profile Menu') ?? 'Open User Profile Menu'}
+					class="w-full flex items-center h-10 rounded-lg hover:bg-gray-200/40 dark:hover:bg-gray-900/60 transition-colors duration-100"
+				>
+					<span class="w-10 shrink-0 flex items-center justify-center">
+						<img
+							src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
+							class="size-7 object-cover rounded-full"
+							alt={$user?.name ?? ''}
+							draggable="false"
+						/>
+					</span>
+					<span
+						class="ms-1 flex flex-col items-start min-w-0 pe-2 text-start
+							opacity-0 group-hover/rail:opacity-100 transition-opacity duration-150 delay-100"
+					>
+						<span
+							class="text-[13px] font-medium text-gray-900 dark:text-white truncate max-w-[10rem] leading-tight"
+						>
+							{$user?.name ?? ''}
+						</span>
+						{#if $user?.email}
+							<span
+								class="text-[11px] text-gray-500 dark:text-gray-500 truncate max-w-[10rem] leading-tight"
+							>
+								{$user.email}
+							</span>
+						{/if}
+					</span>
+				</button>
+			</UserMenu>
+		</div>
+	{/if}
 </nav>
