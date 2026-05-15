@@ -4,6 +4,7 @@ import Home from '$lib/components/icons/Home.svelte';
 import Sparkles from '$lib/components/icons/Sparkles.svelte';
 import Note from '$lib/components/icons/Note.svelte';
 import Cube from '$lib/components/icons/Cube.svelte';
+import DocumentCheck from '$lib/components/icons/DocumentCheck.svelte';
 import UserGroup from '$lib/components/icons/UserGroup.svelte';
 
 export type RailIconComponent = ComponentType<SvelteComponent<{ className?: string; strokeWidth?: string }>>;
@@ -78,6 +79,21 @@ export const railItems: RailItem[] = [
 			!!user?.permissions?.workspace?.knowledge ||
 			!!user?.permissions?.workspace?.prompts ||
 			!!user?.permissions?.workspace?.tools
+	},
+	{
+		// Policy Review — second Hub tool. Launches the standalone
+		// FastAPI service at http://localhost:8100/ui/ in an iframe
+		// hosted by src/routes/(app)/policy-review/+page.svelte. The
+		// tool itself trips embed mode (via the ?embed=1 in the iframe
+		// src AND via window.parent !== window.self) so its own
+		// GlobalRail and switch-tool button are suppressed. Trust-
+		// localhost for now; tighten `visible` when Hub auth lands.
+		id: 'policy-review',
+		label: 'Policy Review',
+		href: '/policy-review',
+		icon: DocumentCheck,
+		segments: ['policy-review'],
+		visible: () => true
 	},
 	{
 		id: 'admin',
