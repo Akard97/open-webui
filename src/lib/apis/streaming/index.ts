@@ -10,6 +10,11 @@ type TextStreamUpdate = {
 	selectedModelId?: any;
 	error?: any;
 	usage?: ResponseUsage;
+	// Osool: live pipeline status line (StatusHistory.svelte). Backends that
+	// support it emit `{"status": {description, done, hidden?}}` SSE frames
+	// interleaved with the normal OpenAI chat.completion.chunk frames.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	status?: any;
 };
 
 type ResponseUsage = {
@@ -82,6 +87,11 @@ async function* openAIStreamToIterator(
 				continue;
 			}
 
+			if (parsedData.status) {
+				yield { done: false, value: '', status: parsedData.status };
+				continue;
+			}
+
 			yield {
 				done: false,
 				value: parsedData.choices?.[0]?.delta?.content ?? ''
@@ -116,6 +126,10 @@ async function* streamLargeDeltasAsRandomChunks(
 			continue;
 		}
 		if (textStreamUpdate.usage) {
+			yield textStreamUpdate;
+			continue;
+		}
+		if (textStreamUpdate.status) {
 			yield textStreamUpdate;
 			continue;
 		}

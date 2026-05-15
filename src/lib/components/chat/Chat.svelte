@@ -2737,11 +2737,26 @@
 					Boolean($settings?.splitLargeChunks ?? false)
 				);
 				for await (const update of textStream) {
-					const { value, done, sources, error, usage } = update;
+					const { value, done, sources, error, usage, status } = update;
 					if (error || done) {
 						generating = false;
 						generationController = null;
 						break;
+					}
+
+					// Osool: inline live pipeline status events into statusHistory,
+					// same channel the WebSocket pipeline-function path uses. The
+					// StatusHistory.svelte component renders the latest entry as a
+					// small shimmering line and hides the whole block when the
+					// latest entry has `hidden: true`.
+					if (status) {
+						if (mergedResponse.statusHistory) {
+							mergedResponse.statusHistory.push(status);
+						} else {
+							mergedResponse.statusHistory = [status];
+						}
+						history.messages[messageId] = message;
+						continue;
 					}
 
 					if (mergedResponse.content == '' && value == '\n') {
