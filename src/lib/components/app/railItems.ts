@@ -81,13 +81,10 @@ export const railItems: RailItem[] = [
 			!!user?.permissions?.workspace?.tools
 	},
 	{
-		// Policy Review — second Hub tool. Launches the standalone
-		// FastAPI service at http://localhost:8100/ui/ in an iframe
-		// hosted by src/routes/(app)/policy-review/+page.svelte. The
-		// tool itself trips embed mode (via the ?embed=1 in the iframe
-		// src AND via window.parent !== window.self) so its own
-		// GlobalRail and switch-tool button are suppressed. Trust-
-		// localhost for now; tighten `visible` when Hub auth lands.
+		// Policy Review — placeholder slot. The original tool was removed
+		// pending a rebuild; the route currently renders a black placeholder
+		// (see src/routes/(app)/policy-review/+page.svelte). Keep this entry
+		// so the rail slot stays reserved for the rebuilt tool.
 		id: 'policy-review',
 		label: 'Policy Review',
 		href: '/policy-review',
