@@ -63,6 +63,15 @@
 .pr-root a { color: var(--primary); text-decoration: none; }
 .pr-root button { font-family: inherit; cursor: pointer; }
 
+/* Everything below is scoped to descendants of .pr-root. Generic class
+ * names from the design (.app, .sidebar, .modal, .section, .item, .row,
+ * .open, .active, …) would otherwise collide with OWUI's own classes
+ * and break the chat shell as soon as Vite injects this stylesheet
+ * (SvelteKit prefetches the route on rail-link hover, so the leak
+ * happened even without navigating to /policy-review). @scope keeps
+ * every rule below confined to .pr-root subtrees. */
+@scope (.pr-root) {
+
 /* ── shell ───────────────────────────────────────────── */
 .app { display: grid; grid-template-columns: 260px 1fr; height: 100vh; overflow: hidden; }
 
@@ -1586,3 +1595,5 @@
 .canvas::-webkit-scrollbar-thumb, .review-main::-webkit-scrollbar-thumb { border-color: var(--white); }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-300); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+} /* end @scope (.pr-root) */
