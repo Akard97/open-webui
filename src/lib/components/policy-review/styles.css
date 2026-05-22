@@ -1426,6 +1426,21 @@
 }
 .pl-popup-foot .grow { flex: 1; }
 
+/* ── RTL hardening ───────────────────────────────────────────── */
+:dir(rtl) .pl-chev { transform: scaleX(-1) translateX(-3px); }
+:dir(rtl) .pl-row:hover .pl-chev { transform: scaleX(-1) translateX(0); }
+:dir(rtl) .pl-popup-related-row .arr { transform: scaleX(-1); }
+
+/* Search kbd hint stays LTR even in RTL */
+:dir(rtl) .pl-search .kbd { direction: ltr; unicode-bidi: isolate; }
+
+/* Title block on RTL: reverse so Arabic anchors to the visual end */
+:dir(rtl) .pl-title-block { flex-direction: row-reverse; }
+
+/* Recently-updated card meta — reverse so the date anchors at the start
+   of the line (= visual right in RTL) */
+:dir(rtl) .pl-rc .meta { flex-direction: row-reverse; }
+
 /* ── Topbar sync badge ───────────────────────────────────────── */
 .pl-topbar-sync {
   display: inline-flex;
