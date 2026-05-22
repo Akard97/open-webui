@@ -56,6 +56,10 @@ export const picked: Writable<{ sectionId: string; n: number } | null> = writabl
 export const drawerOpen: Writable<boolean> = writable(false);
 export const oeModalOpen: Writable<boolean> = writable(false);
 
+// Policy Library — selected policy + popup open state.
+export const policyPopupOpen: Writable<boolean> = writable(false);
+export const selectedPolicy: Writable<import('./types').LibraryPolicy | null> = writable(null);
+
 if (browser) {
 	const persist = () => {
 		const snapshot: PersistedState = {
@@ -133,4 +137,17 @@ export function simulateOEDecision(status: 'approved' | 'returned' | 'rejected')
 
 export function resetOE(): void {
 	oeState.set({ status: 'idle', sentAt: null, decidedAt: null, note: '' });
+}
+
+// ─── Policy Library popup helpers ──────────────────────────────────────────
+
+export function openPolicyPopup(policy: import('./types').LibraryPolicy): void {
+	selectedPolicy.set(policy);
+	policyPopupOpen.set(true);
+}
+
+export function closePolicyPopup(): void {
+	policyPopupOpen.set(false);
+	// Keep selectedPolicy set so the close animation has content to render
+	// against; the next openPolicyPopup() overwrites it.
 }
