@@ -79,6 +79,13 @@ export interface LibraryPolicy {
 	nextReview: string;
 	updatedDays: number | null;
 	current?: boolean;
+
+	// Library-redesign additions. All optional so the workflow-side stores
+	// (which still use this shape) keep working.
+	summary?: string | null;
+	outline?: string[] | null;
+	effectiveDate?: string | null;
+	related?: string[]; // codes of related policies (same function)
 }
 
 export type Stage = 'upload' | 'scanning' | 'review';
