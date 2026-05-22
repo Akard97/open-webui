@@ -12,6 +12,7 @@
 	import ReviewView from './views/ReviewView.svelte';
 	import ItemDrawer from './views/ItemDrawer.svelte';
 	import OEModal from './views/OEModal.svelte';
+	import PolicyPopup from './views/PolicyPopup.svelte';
 	import { view, stage, sections, drawerOpen, picked } from './lib/store';
 
 	function handleKey(e: KeyboardEvent) {
@@ -60,4 +61,5 @@
 
 	<ItemDrawer />
 	<OEModal />
+	<PolicyPopup />
 </div>
