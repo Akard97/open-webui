@@ -2,6 +2,7 @@
 	// Policy Library — bilingual reference library of approved policies.
 	// See docs/superpowers/specs/2026-05-21-all-policies-redesign-design.md.
 
+	import { onMount } from 'svelte';
 	import { POLICIES, FN_META, TODAY } from '../lib/mocks';
 	import type { LibraryPolicy } from '../lib/types';
 	import { openPolicyPopup } from '../lib/store';
@@ -15,6 +16,14 @@
 	// Resting-state filters
 	let query = $state('');
 	let fn = $state<'all' | string>('all');
+
+	// Loading state — mocks are synchronous but the real catalog will be
+	// async. Simulated 250ms delay so the skeleton is exercised in dev.
+	let loading = $state(true);
+	onMount(() => {
+		const t = setTimeout(() => (loading = false), 250);
+		return () => clearTimeout(t);
+	});
 
 	// Library universe = approved policies only
 	const approvedAll: LibraryPolicy[] = POLICIES.filter((p) => p.status === 'approved');
@@ -114,6 +123,36 @@
 				</div>
 			</div>
 		</header>
+
+		{#if loading}
+			<!-- Skeleton -->
+			<div class="pl-recent" aria-hidden="true">
+				<div class="pl-recent-h">
+					<span style="background: var(--ink-100); width: 120px; height: 10px; border-radius: 3px;"></span>
+					<span class="line"></span>
+				</div>
+				<div class="pl-recent-cards">
+					{#each [0, 1, 2, 3] as i (i)}
+						<div class="pl-rc pl-skel-card"></div>
+					{/each}
+				</div>
+			</div>
+			<div class="pl-controls">
+				<div class="pl-search pl-skel-bar"></div>
+			</div>
+			{#each [0, 1, 2] as i (i)}
+				<section class="pl-sec">
+					<header class="pl-sec-h">
+						<div class="pl-mark pl-skel-mark" style="border-color: var(--ink-200);"></div>
+						<div class="pl-skel-title"></div>
+						<div class="pl-skel-count"></div>
+					</header>
+					{#each [0, 1, 2] as j (j)}
+						<div class="pl-skel-row"></div>
+					{/each}
+				</section>
+			{/each}
+		{:else}
 
 		<!-- Recently updated strip -->
 		<section class="pl-recent" aria-labelledby="pl-recent-h">
@@ -235,5 +274,6 @@
 				{/each}
 			</section>
 		{/each}
+		{/if}
 	</div>
 </div>

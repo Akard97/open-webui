@@ -1426,6 +1426,30 @@
 }
 .pl-popup-foot .grow { flex: 1; }
 
+/* ── Loading skeleton ────────────────────────────────────────── */
+.pl-skel-card {
+  height: 88px;
+  background: var(--ink-50);
+  border-color: var(--ink-100) !important;
+  pointer-events: none;
+}
+.pl-skel-bar {
+  background: var(--ink-50) !important;
+  border-color: var(--ink-100) !important;
+}
+.pl-skel-mark { background: var(--ink-50); }
+.pl-skel-title { height: 14px; width: 200px; background: var(--ink-100); border-radius: 4px; }
+.pl-skel-count { height: 16px; width: 60px; background: var(--ink-100); border-radius: 4px; }
+.pl-skel-row { height: 44px; margin: 4px 0; background: var(--bg-soft); border-radius: 6px; }
+
+@keyframes pl-skel-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+.pl-skel-card, .pl-skel-title, .pl-skel-count, .pl-skel-row, .pl-skel-mark, .pl-skel-bar {
+  animation: pl-skel-pulse 1.4s ease-in-out infinite;
+}
+
 /* ── RTL hardening ───────────────────────────────────────────── */
 :dir(rtl) .pl-chev { transform: scaleX(-1) translateX(-3px); }
 :dir(rtl) .pl-row:hover .pl-chev { transform: scaleX(-1) translateX(0); }
