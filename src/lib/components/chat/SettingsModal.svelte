@@ -433,12 +433,10 @@
 			keywords: [
 				'about app',
 				'about me',
-				'about open webui',
 				'about page',
 				'about us',
 				'aboutapp',
 				'aboutme',
-				'aboutopenwebui',
 				'aboutpage',
 				'aboutus',
 				'check for updates',

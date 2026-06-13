@@ -562,26 +562,7 @@
 
 				<!-- {$i18n.t('Help')} -->
 
-				{#if $user?.role === 'admin'}
-					<!-- Releases -->
-					<a
-						href="https://github.com/open-webui/open-webui/releases"
-						target="_blank"
-						draggable="false"
-						class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
-						id="chat-share-button"
-						on:click={() => {
-							show = false;
-						}}
-					>
-						<div class=" self-center mr-3">
-							<Map className="size-5" />
-						</div>
-						<div class=" self-center truncate">{$i18n.t('Releases')}</div>
-					</a>
-				{/if}
-
-				<button
+<button
 					class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
 					type="button"
 					id="chat-share-button"

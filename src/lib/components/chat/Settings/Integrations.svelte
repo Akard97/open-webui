@@ -127,13 +127,6 @@
 						</div>
 					</div>
 
-					<div class="text-xs text-gray-600 dark:text-gray-300 mb-2">
-						<a
-							class="underline"
-							href="https://github.com/open-webui/openapi-servers"
-							target="_blank">{$i18n.t('Learn more about OpenAPI tool servers.')} ↗</a
-						>
-					</div>
 				</div>
 
 				<hr class="border-gray-100/50 dark:border-gray-850/50 my-4" />
@@ -148,14 +141,6 @@
 							{$i18n.t(
 								'Connect to Open Terminal instances to browse files and use them as always-on tools. Only one can be active at a time.'
 							)}
-						</div>
-
-						<div class="text-xs text-gray-600 dark:text-gray-300 mt-1">
-							<a
-								class="underline"
-								href="https://github.com/open-webui/open-terminal"
-								target="_blank">{$i18n.t('Learn more about Open Terminal')} ↗</a
-							>
 						</div>
 					</div>
 				</div>
