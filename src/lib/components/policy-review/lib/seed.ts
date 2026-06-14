@@ -5,10 +5,33 @@
 import type {
 	PolicyMeta,
 	Theme,
-	Section,
 	LibraryPolicy,
-	PolicyStatus
+	PolicyStatus,
+	ChecklistVersion,
+	ChecklistItemDef,
+	Section,
+	Review,
+	ItemResult,
+	VerdictBands
 } from './types';
+
+interface RawItem {
+	n: number;
+	text: string;
+	code: string;
+	result: ItemResult['result'];
+	comment?: string;
+	ref?: { section: string; quote: string } | null;
+	confidence?: number;
+}
+interface RawSection {
+	theme: string;
+	id: string;
+	title: string;
+	codes: string;
+	intent: string;
+	items: RawItem[];
+}
 
 // ─── Active in-flight policy ───────────────────────────────────────────────
 
@@ -36,7 +59,7 @@ export const THEMES: Theme[] = [
 
 // ─── Sections + checklist items (mocked AI verdicts) ───────────────────────
 
-export const SECTIONS: Section[] = [
+const RAW_SECTIONS: RawSection[] = [
 	// ── T1 ──
 	{
 		theme: 'T1',
@@ -1165,3 +1188,157 @@ export const FN_DIST: Array<{ id: string; count: number; avg: number }> = [
 ];
 
 export const TODAY = new Date('2026-05-20');
+
+// ─── Versioning + builders ──────────────────────────────────────────────────
+
+export const VERDICT_BANDS: VerdictBands = { approved: 85, conditional: 70 };
+
+export const ACTIVE_VERSION_ID = 'v2.0';
+
+function defItem(raw: RawItem, sectionId: string): ChecklistItemDef {
+	return {
+		id: `${sectionId}-${raw.n}`,
+		n: raw.n,
+		text: raw.text.replace(' [H]', '').trim(),
+		codes: raw.code,
+		assessment: raw.result === 'human' ? 'human' : 'auto'
+	};
+}
+
+function defSection(raw: RawSection): Section {
+	return {
+		id: raw.id,
+		theme: raw.theme,
+		title: raw.title,
+		codes: raw.codes,
+		intent: raw.intent,
+		items: raw.items.map((it) => defItem(it, raw.id))
+	};
+}
+
+// The active, published checklist definition (no answers).
+export function buildActiveVersion(): ChecklistVersion {
+	return {
+		id: ACTIVE_VERSION_ID,
+		label: 'v2.0',
+		status: 'active',
+		publishedAt: 'Jan 12, 2026',
+		publishedBy: 'Organizational Excellence',
+		changeSummary: 'PRP Master Checklist v2.0 — initial managed version.',
+		themes: structuredClone(THEMES),
+		sections: RAW_SECTIONS.map(defSection),
+		verdictBands: { ...VERDICT_BANDS }
+	};
+}
+
+// Answers for the rich in-progress review, keyed by item id.
+function richResults(): Record<string, ItemResult> {
+	const out: Record<string, ItemResult> = {};
+	RAW_SECTIONS.forEach((sec) =>
+		sec.items.forEach((it) => {
+			out[`${sec.id}-${it.n}`] = {
+				result: it.result,
+				comment: it.comment,
+				ref: it.ref ?? null,
+				confidence: it.confidence
+			};
+		})
+	);
+	return out;
+}
+
+const RICH_STRENGTHS = [
+	'Comprehensive RACI with explicit segregation of duties (§4)',
+	'Strong escalation and approval flow with named final authority',
+	'Complete dependency mapping in References (§11)'
+];
+
+// A library entry → a PolicyMeta for a seeded review.
+function metaFor(code: string, reviewer: string): PolicyMeta {
+	const p = POLICIES.find((x) => x.code === code)!;
+	return {
+		name: p.title,
+		code: p.code,
+		version: `v${p.version}`,
+		owner: p.owner,
+		reviewer,
+		reviewDate: 'May 17, 2026',
+		pages: p.pages,
+		filename: `${p.title.replace(/\s+/g, '_')}_${p.version}.pdf`
+	};
+}
+
+// Mutate a clone of the rich results so seeded extras have varied scores.
+function tweak(results: Record<string, ItemResult>, flips: string[]): Record<string, ItemResult> {
+	const clone = structuredClone(results);
+	flips.forEach((id) => {
+		if (clone[id]) clone[id] = { ...clone[id], result: 'non-compliant', comment: 'Seeded gap.' };
+	});
+	// Resolve any human items so seeded extras are submittable.
+	Object.keys(clone).forEach((id) => {
+		if (clone[id].result === 'human') clone[id] = { ...clone[id], result: 'compliant', reviewed: true };
+	});
+	return clone;
+}
+
+export function buildSeedReviews(): Review[] {
+	const base = richResults();
+	const submittable = tweak(base, []); // human items resolved, no extra flips
+	return [
+		{
+			id: 'rev-active',
+			policyMeta: POLICY_META,
+			checklistVersionId: ACTIVE_VERSION_ID,
+			results: base,
+			status: 'draft',
+			approval: { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
+			strengths: RICH_STRENGTHS,
+			createdBy: 'Ahmad Al-Sayegh',
+			createdAt: 'May 17, 2026'
+		},
+		{
+			id: 'rev-pending-1',
+			policyMeta: metaFor('OSOOL-FIN-POL-002', 'Omar Al-Khalifa'),
+			checklistVersionId: ACTIVE_VERSION_ID,
+			results: submittable,
+			status: 'pending',
+			approval: { status: 'pending', sentAt: 'May 18, 09:20', decidedAt: null, decidedBy: null, note: 'Ready for issuance review.' },
+			strengths: RICH_STRENGTHS,
+			createdBy: 'Omar Al-Khalifa',
+			createdAt: 'May 16, 2026'
+		},
+		{
+			id: 'rev-pending-2',
+			policyMeta: metaFor('OSOOL-IT-POL-005', 'Dalia Al-Ameri'),
+			checklistVersionId: ACTIVE_VERSION_ID,
+			results: tweak(base, ['PRP3-3', 'PRP8-4']),
+			status: 'pending',
+			approval: { status: 'pending', sentAt: 'May 18, 14:05', decidedAt: null, decidedBy: null, note: 'Two minor gaps flagged with CAP.' },
+			strengths: RICH_STRENGTHS,
+			createdBy: 'Dalia Al-Ameri',
+			createdAt: 'May 15, 2026'
+		},
+		{
+			id: 'rev-approved-1',
+			policyMeta: metaFor('OSOOL-GOV-POL-014', 'Faisal Al-Jubeir'),
+			checklistVersionId: ACTIVE_VERSION_ID,
+			results: submittable,
+			status: 'approved',
+			approval: { status: 'approved', sentAt: 'May 10, 10:00', decidedAt: 'May 12, 11:30', decidedBy: 'Head of OE', note: 'Approved for issuance and published to the policy library.' },
+			strengths: RICH_STRENGTHS,
+			createdBy: 'Faisal Al-Jubeir',
+			createdAt: 'May 08, 2026'
+		},
+		{
+			id: 'rev-rejected-1',
+			policyMeta: metaFor('OSOOL-HR-POL-005', 'Mohammed Al-Aqeel'),
+			checklistVersionId: ACTIVE_VERSION_ID,
+			results: tweak(base, ['PRP1-3', 'PRP6-7', 'PRP11-3', 'PRP11-4']),
+			status: 'rejected',
+			approval: { status: 'rejected', sentAt: 'May 11, 16:40', decidedAt: 'May 13, 09:15', decidedBy: 'Head of OE', note: 'Rejected — resolve the four governance gaps and resubmit.' },
+			strengths: RICH_STRENGTHS,
+			createdBy: 'Mohammed Al-Aqeel',
+			createdAt: 'May 09, 2026'
+		}
+	];
+}
