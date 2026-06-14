@@ -10,6 +10,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import { view, resetReview, stage, canUseChecker, canApprove } from '../lib/store';
 	import { user } from '$lib/stores';
+	import { policyRoleLabel } from '../lib/roles';
 
 	function go(target: 'all-policies' | 'new-review') {
 		if (target === 'new-review') {
@@ -143,7 +144,7 @@
 		<div style="display:flex; flex-direction:column; line-height:1.2">
 			<span style="font-size:13px; font-weight:500">{$user?.name ?? 'Ahmad'}</span>
 			<span style="font-size:11px; color:var(--ink-400)">
-				Organizational Excellence{$canApprove ? ' · Approver' : $canUseChecker ? ' · Reviewer' : ''}
+				{policyRoleLabel($canApprove, $canUseChecker)}
 			</span>
 		</div>
 	</div>
