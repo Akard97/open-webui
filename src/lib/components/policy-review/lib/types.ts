@@ -1,13 +1,62 @@
 // Domain model for the Policy Review tool.
-// Mirrors the PRP Master Checklist v2.0 data shape consumed by all views.
+// Two aggregate roots: a versioned checklist DEFINITION, and per-policy REVIEWS
+// that snapshot a checklist version and hold the answers.
 
-export type ItemResult = 'compliant' | 'non-compliant' | 'human' | 'pending';
+// ─── Checklist definition (versioned) ──────────────────────────────────────
 
-export interface ChecklistItem {
-	n: number;
-	text: string;
-	code: string;
-	result: ItemResult;
+export type Assessment = 'auto' | 'human';
+
+export interface ChecklistItemDef {
+	id: string; // stable, e.g. 'PRP1-3'
+	n: number; // display number within the PRP group
+	text: string; // requirement text (no ' [H]' suffix)
+	codes: string; // e.g. 'OEC, ISO'
+	assessment: Assessment; // 'human' => routed to a person, AI leaves it blank
+}
+
+export interface Section {
+	// A PRP group.
+	id: string; // 'PRP1'..'PRP29'
+	theme: string; // 'T1'..'T6'
+	title: string;
+	codes: string; // e.g. 'ISO Cl.4.1, 4.2 · OEC · OM'
+	intent: string;
+	items: ChecklistItemDef[];
+}
+
+export interface Theme {
+	id: string; // 'T1'..'T6'
+	name: string;
+	weight: number; // percent
+	gate: boolean;
+	threshold?: number; // gate threshold, default 85
+}
+
+export interface VerdictBands {
+	approved: number; // default 85
+	conditional: number; // default 70
+}
+
+export type ChecklistStatus = 'active' | 'draft' | 'archived';
+
+export interface ChecklistVersion {
+	id: string; // 'v2.0'
+	label: string; // 'v2.0'
+	status: ChecklistStatus;
+	publishedAt: string | null;
+	publishedBy: string | null;
+	changeSummary: string;
+	themes: Theme[];
+	sections: Section[];
+	verdictBands: VerdictBands;
+}
+
+// ─── Review (per policy) ───────────────────────────────────────────────────
+
+export type ItemVerdict = 'compliant' | 'non-compliant' | 'human' | 'pending';
+
+export interface ItemResult {
+	result: ItemVerdict;
 	comment?: string;
 	ref?: { section: string; quote: string } | null;
 	confidence?: number;
@@ -15,21 +64,16 @@ export interface ChecklistItem {
 	edited?: boolean;
 }
 
-export interface Section {
-	theme: string; // 'T1'..'T6'
-	id: string; // 'PRP1'..'PRP29'
-	title: string;
-	codes: string;
-	intent: string;
-	items: ChecklistItem[];
-}
+export type ReviewStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
-export interface Theme {
-	id: string;
-	name: string;
-	weight: number;
-	gate: boolean;
-	threshold?: number;
+// Internal OE approval lifecycle (maker-checker). No external body.
+export type ApprovalStatus = 'idle' | 'pending' | 'approved' | 'rejected';
+export interface ApprovalState {
+	status: ApprovalStatus;
+	sentAt: string | null;
+	decidedAt: string | null;
+	decidedBy: string | null;
+	note: string;
 }
 
 export interface PolicyMeta {
@@ -43,6 +87,18 @@ export interface PolicyMeta {
 	filename: string;
 }
 
+export interface Review {
+	id: string;
+	policyMeta: PolicyMeta;
+	checklistVersionId: string; // snapshot taken when the review was created
+	results: Record<string, ItemResult>; // keyed by ChecklistItemDef.id
+	status: ReviewStatus;
+	approval: ApprovalState;
+	strengths: string[];
+	createdBy: string;
+	createdAt: string;
+}
+
 export type VerdictKey = 'draft' | 'approved' | 'conditional' | 'rejected';
 export interface Verdict {
 	key: VerdictKey;
@@ -50,16 +106,7 @@ export interface Verdict {
 	reason: string;
 }
 
-// Internal OE approval lifecycle: an OE reviewer submits a completed review,
-// then an OE approver approves & publishes (or rejects). No external body.
-export type ApprovalStatus = 'idle' | 'pending' | 'approved' | 'rejected';
-export interface ApprovalState {
-	status: ApprovalStatus;
-	sentAt: string | null;
-	decidedAt: string | null;
-	decidedBy: string | null;
-	note: string;
-}
+// ─── Library ────────────────────────────────────────────────────────────────
 
 export type PolicyStatus =
 	| 'approved'
@@ -82,14 +129,12 @@ export interface LibraryPolicy {
 	nextReview: string;
 	updatedDays: number | null;
 	current?: boolean;
-
-	// Library-redesign additions. All optional so the workflow-side stores
-	// (which still use this shape) keep working.
 	summary?: string | null;
 	outline?: string[] | null;
 	effectiveDate?: string | null;
-	related?: string[]; // codes of related policies (same function)
+	related?: string[];
 }
 
+// Transient view/stage keys (unchanged in Plan 1; expanded in Plan 2).
 export type Stage = 'upload' | 'scanning' | 'review';
 export type ViewKey = 'all-policies' | 'new-review';
