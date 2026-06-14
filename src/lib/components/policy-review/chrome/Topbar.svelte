@@ -11,14 +11,6 @@
 		view.set('new-review');
 	}
 
-	// Mock — sync state. In a later phase this reads a real store backed by
-	// the ingestion pipeline (sources: Etimad, SharePoint, Drive).
-	const syncedMinutesAgo = 14;
-	const stale = syncedMinutesAgo > 60 * 24;
-	const syncLabel =
-		syncedMinutesAgo < 60
-			? `Synced ${syncedMinutesAgo}m ago`
-			: `Synced ${Math.round(syncedMinutesAgo / 60)}h ago`;
 </script>
 
 <div class="topbar">
@@ -40,16 +32,6 @@
 	</div>
 
 	<div class="tb-actions">
-		<span
-			class="pl-topbar-sync"
-			class:stale
-			title={stale
-				? 'Last sync over 24h ago — see runbook'
-				: 'Sources: Etimad · SharePoint · Drive'}
-		>
-			<span class="dot" aria-hidden="true"></span>
-			{syncLabel}
-		</span>
 		{#if $canUseChecker && $view === 'new-review' && $stage === 'review'}
 			<button class="btn btn-sm" onclick={startNewReview} type="button">
 				<Icon name="refresh" size={12} /> New review
