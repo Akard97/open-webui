@@ -59,7 +59,9 @@
 		if (key !== prevKey) {
 			prevKey = key;
 			if (def) {
-				draftResult = answer.result;
+				// 'pending' isn't an overridable verdict — default the editor to
+				// 'human' so saving never writes an unresolved verdict back.
+				draftResult = answer.result === 'pending' ? 'human' : answer.result;
 				draftComment = answer.comment ?? '';
 				draftRefSection = answer.ref?.section ?? '';
 				draftRefQuote = answer.ref?.quote ?? '';

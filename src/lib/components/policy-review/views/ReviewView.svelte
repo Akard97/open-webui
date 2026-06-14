@@ -14,8 +14,7 @@
 		picked,
 		drawerOpen,
 		submitModalOpen,
-		canUseChecker,
-		updateItemResult
+		canUseChecker
 	} from '../lib/store';
 
 	type Filter = 'all' | 'issues' | 'human' | 'compliant';
