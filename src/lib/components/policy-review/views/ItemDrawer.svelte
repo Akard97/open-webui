@@ -1,21 +1,21 @@
 <script lang="ts">
 	// Item drawer — verdict, comment, reference, re-review, manual edit.
-	// Port of drawer.jsx from the PRP-2 design handoff.
 
 	import Icon from '../ui/Icon.svelte';
 	import StatusCircle from '../ui/StatusCircle.svelte';
 	import {
-		sections,
+		activeVersion,
+		activeReview,
 		picked,
 		drawerOpen,
-		updateItem,
+		updateItemResult,
 		markReviewed
 	} from '../lib/store';
-	import type { ChecklistItem, ItemResult, Section } from '../lib/types';
+	import type { ChecklistItemDef, ItemVerdict, ItemResult, Section } from '../lib/types';
 
 	type Mode = 'view' | 'edit' | 'thinking';
 
-	const RESULT_OPTIONS: { value: ItemResult; label: string }[] = [
+	const RESULT_OPTIONS: { value: ItemVerdict; label: string }[] = [
 		{ value: 'compliant', label: 'Compliant' },
 		{ value: 'non-compliant', label: 'Non-Compliant' },
 		{ value: 'human', label: 'Needs Human Verification' }
@@ -31,7 +31,7 @@
 
 	let mode = $state<Mode>('view');
 	let thinkStep = $state(0);
-	let draftResult = $state<ItemResult>('compliant');
+	let draftResult = $state<ItemVerdict>('compliant');
 	let draftComment = $state('');
 	let draftRefSection = $state('');
 	let draftRefQuote = $state('');
@@ -39,41 +39,44 @@
 	let section = $derived.by<Section | null>(() => {
 		const p = $picked;
 		if (!p) return null;
-		return $sections.find((s) => s.id === p.sectionId) ?? null;
+		return $activeVersion?.sections.find((s) => s.id === p.sectionId) ?? null;
 	});
 
-	let item = $derived.by<ChecklistItem | null>(() => {
+	let def = $derived.by<ChecklistItemDef | null>(() => {
 		const p = $picked;
 		if (!p || !section) return null;
 		return section.items.find((x) => x.n === p.n) ?? null;
 	});
 
-	// Reset drawer state whenever the picked item changes.
+	let answer = $derived<ItemResult>(
+		def && $activeReview ? ($activeReview.results[def.id] ?? { result: 'pending' }) : { result: 'pending' }
+	);
+	let verdict = $derived<ItemVerdict>(answer.result);
+
 	let prevKey = '';
 	$effect(() => {
-		const key = item ? `${section?.id}-${item.n}` : '';
+		const key = def ? def.id : '';
 		if (key !== prevKey) {
 			prevKey = key;
-			if (item) {
-				draftResult = item.result;
-				draftComment = item.comment ?? '';
-				draftRefSection = item.ref?.section ?? '';
-				draftRefQuote = item.ref?.quote ?? '';
+			if (def) {
+				draftResult = answer.result;
+				draftComment = answer.comment ?? '';
+				draftRefSection = answer.ref?.section ?? '';
+				draftRefQuote = answer.ref?.quote ?? '';
 				mode = 'view';
 				thinkStep = 0;
 			}
 		}
 	});
 
-	// Deep-review animation.
 	$effect(() => {
 		if (mode !== 'thinking') return;
-		if (!section || !item) return;
+		if (!def || !$activeReview) return;
 		if (thinkStep >= DEEP_REVIEW_STEPS.length) {
-			const sid = section.id;
-			const n = item.n;
+			const rid = $activeReview.id;
+			const iid = def.id;
 			const t = setTimeout(() => {
-				markReviewed(sid, n);
+				markReviewed(rid, iid);
 				mode = 'view';
 			}, 800);
 			return () => clearTimeout(t);
@@ -89,8 +92,8 @@
 	}
 
 	function saveEdit() {
-		if (!section || !item) return;
-		updateItem(section.id, item.n, {
+		if (!def || !$activeReview) return;
+		updateItemResult($activeReview.id, def.id, {
 			result: draftResult,
 			comment: draftComment,
 			ref: draftRefQuote ? { section: draftRefSection, quote: draftRefQuote } : null,
@@ -99,7 +102,7 @@
 		mode = 'view';
 	}
 
-	function verdictCls(r: ItemResult | undefined): string {
+	function verdictCls(r: ItemVerdict | undefined): string {
 		if (r === 'compliant') return 'ok';
 		if (r === 'non-compliant') return 'bad';
 		if (r === 'human') return 'warn';
@@ -107,7 +110,7 @@
 	}
 </script>
 
-{#if !item || !section}
+{#if !def || !section}
 	<div class="drawer-overlay" class:open={$drawerOpen} onclick={close} role="presentation"></div>
 	<div class="drawer" class:open={$drawerOpen}></div>
 {:else}
@@ -115,23 +118,23 @@
 	<aside class="drawer" class:open={$drawerOpen}>
 		<div class="drawer-head">
 			<div style="min-width:0; flex:1">
-				<div class="crumb">{section.theme} · {section.id} · Item {item.n}</div>
-				<h2>{item.text.replace(' [H]', '')}</h2>
+				<div class="crumb">{section.theme} · {section.id} · Item {def.n}</div>
+				<h2>{def.text}</h2>
 				<div style="display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap">
 					<span style="font-family:var(--mono); font-size:11px; color:var(--ink-400)">
-						{item.code}
+						{def.codes}
 					</span>
-					{#if item.confidence != null && item.result !== 'human'}
+					{#if answer.confidence != null && verdict !== 'human'}
 						<span style="font-family:var(--mono); font-size:11px; color:var(--ink-500)">
-							· confidence {Math.round(item.confidence * 100)}%
+							· confidence {Math.round(answer.confidence * 100)}%
 						</span>
 					{/if}
-					{#if item.reviewed}
+					{#if answer.reviewed}
 						<span class="minibadge" style="background:var(--primary-50); color:var(--primary)">
 							<Icon name="sparkle" size={10} /> Deep-reviewed
 						</span>
 					{/if}
-					{#if item.edited}
+					{#if answer.edited}
 						<span class="minibadge" style="background:var(--ink-100); color:var(--ink-600)">
 							Edited by reviewer
 						</span>
@@ -156,17 +159,17 @@
 			{/if}
 
 			{#if mode === 'view'}
-				<div class="verdict-row {verdictCls(item.result)}">
+				<div class="verdict-row {verdictCls(verdict)}">
 					<div class="left">
-						<StatusCircle result={item.result} size={32} />
+						<StatusCircle result={verdict} size={32} />
 						<div>
-							{#if item.result === 'compliant'}
+							{#if verdict === 'compliant'}
 								Compliant
 								<div class="sub">Met</div>
-							{:else if item.result === 'non-compliant'}
+							{:else if verdict === 'non-compliant'}
 								Non-Compliant
 								<div class="sub">Not met</div>
-							{:else if item.result === 'human'}
+							{:else if verdict === 'human'}
 								Needs Human Verification
 								<div class="sub">Routed to reviewer</div>
 							{:else}
@@ -182,8 +185,8 @@
 				<div class="drawer-section">
 					<h5>AI Comment</h5>
 					<div class="comment-box">
-						{#if item.comment}
-							{item.comment}
+						{#if answer.comment}
+							{answer.comment}
 						{:else}
 							<em style="color:var(--ink-400)">No comment.</em>
 						{/if}
@@ -192,16 +195,16 @@
 
 				<div class="drawer-section">
 					<h5>Reference from Policy</h5>
-					{#if item.ref}
+					{#if answer.ref}
 						<div class="ref-card">
-							<div class="src"><Icon name="book" size={11} /> {item.ref.section}</div>
-							<blockquote>"{item.ref.quote}"</blockquote>
+							<div class="src"><Icon name="book" size={11} /> {answer.ref.section}</div>
+							<blockquote>"{answer.ref.quote}"</blockquote>
 						</div>
 					{:else}
 						<div class="comment-box" style="color:var(--ink-500); font-style:italic">
-							{#if item.result === 'human'}
+							{#if verdict === 'human'}
 								Not applicable — this item requires human verification.
-							{:else if item.result === 'non-compliant'}
+							{:else if verdict === 'non-compliant'}
 								No supporting reference — the policy is missing this provision.
 							{:else}
 								No reference cited.

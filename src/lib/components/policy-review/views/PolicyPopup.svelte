@@ -3,7 +3,7 @@
 	// Renders metadata, LLM summary, section outline, and related policies.
 
 	import { onDestroy } from 'svelte';
-	import { POLICIES, FN_META } from '../lib/mocks';
+	import { POLICIES, FN_META } from '../lib/seed';
 	import { policyPopupOpen, selectedPolicy, openPolicyPopup, closePolicyPopup } from '../lib/store';
 	import type { LibraryPolicy } from '../lib/types';
 

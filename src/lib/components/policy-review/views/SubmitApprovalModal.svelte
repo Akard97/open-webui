@@ -3,8 +3,7 @@
 	// OE approver, with an optional note. Internal to OE (maker-checker).
 
 	import Icon from '../ui/Icon.svelte';
-	import { POLICY_META } from '../lib/mocks';
-	import { submitModalOpen, submitForApproval } from '../lib/store';
+	import { submitModalOpen, submitForApproval, activeReview } from '../lib/store';
 
 	let note = $state('Reviewer override notes attached for the approver.');
 
@@ -13,7 +12,8 @@
 	}
 
 	function submit() {
-		submitForApproval(note);
+		if (!$activeReview) return;
+		submitForApproval($activeReview.id, note);
 		close();
 	}
 </script>
@@ -43,7 +43,7 @@
 						<label for="approval-reviewer">Reviewer</label>
 						<input
 							id="approval-reviewer"
-							value={POLICY_META.reviewer}
+							value={$activeReview?.policyMeta?.reviewer ?? ''}
 							readonly
 							style="background:var(--bg-soft)"
 						/>

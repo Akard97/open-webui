@@ -7,15 +7,15 @@
 	import StatusCircle from '../ui/StatusCircle.svelte';
 	import ApprovalBanner from './ApprovalBanner.svelte';
 	import { computeScores } from '../lib/scoring';
-	import { THEMES, POLICY_META } from '../lib/mocks';
-	import type { Section, ChecklistItem } from '../lib/types';
+	import type { Section, ChecklistItemDef, ItemResult } from '../lib/types';
 	import {
-		sections,
+		activeReview,
+		activeVersion,
 		picked,
 		drawerOpen,
-		approval,
 		submitModalOpen,
-		canUseChecker
+		canUseChecker,
+		updateItemResult
 	} from '../lib/store';
 
 	type Filter = 'all' | 'issues' | 'human' | 'compliant';
@@ -27,33 +27,47 @@
 		openMap = { ...openMap, [id]: v };
 	}
 
-	let scoreResult = $derived(computeScores($sections, THEMES));
+	let version = $derived($activeVersion);
+	let sectionsList = $derived(version?.sections ?? []);
+	let themesList = $derived(version?.themes ?? []);
+	let results = $derived($activeReview?.results ?? {});
+	let meta = $derived($activeReview?.policyMeta);
+	let approval = $derived($activeReview?.approval ?? null);
+	let strengths = $derived($activeReview?.strengths ?? []);
+	let locked = $derived(
+		$activeReview ? $activeReview.status !== 'draft' && $activeReview.status !== 'rejected' : false
+	);
+	function rOf(sec: Section, it: ChecklistItemDef): ItemResult {
+		return results[it.id] ?? { result: 'pending' };
+	}
+	let scoreResult = $derived(version ? computeScores(version, results) : null);
 
 	let counts = $derived.by(() => {
 		const c: Record<string, number> = {};
-		$sections.forEach((sec) =>
+		sectionsList.forEach((sec) =>
 			sec.items.forEach((it) => {
-				c[it.result] = (c[it.result] || 0) + 1;
+				const r = rOf(sec, it).result;
+				c[r] = (c[r] || 0) + 1;
 			})
 		);
 		return c;
 	});
 
 	let totalItems = $derived(
-		$sections.reduce((a, sec) => a + sec.items.length, 0)
+		sectionsList.reduce((a, sec) => a + sec.items.length, 0)
 	);
 
 	// Top gaps: non-compliant items, T1/T2 first.
 	let topGaps = $derived.by(() => {
 		const gaps: { ref: string; title: string; theme: string; comment?: string }[] = [];
-		$sections.forEach((sec) =>
+		sectionsList.forEach((sec) =>
 			sec.items.forEach((it) => {
-				if (it.result === 'non-compliant') {
+				if (rOf(sec, it).result === 'non-compliant') {
 					gaps.push({
 						ref: `${sec.id}.${it.n}`,
-						title: it.text.replace(' [H]', ''),
+						title: it.text,
 						theme: sec.theme,
-						comment: it.comment
+						comment: rOf(sec, it).comment
 					});
 				}
 			})
@@ -63,33 +77,28 @@
 		return gaps.slice(0, 5);
 	});
 
-	const strengths = [
-		'Comprehensive RACI with explicit segregation of duties (§4)',
-		'Strong escalation and approval flow with named final authority',
-		'Complete dependency mapping in References (§11)'
-	];
-
 	let byTheme = $derived.by(() => {
 		const out: Record<string, Section[]> = {};
-		THEMES.forEach((t) => (out[t.id] = []));
-		$sections.forEach((s) => out[s.theme]?.push(s));
+		themesList.forEach((t) => (out[t.id] = []));
+		sectionsList.forEach((s) => out[s.theme]?.push(s));
 		return out;
 	});
 
-	function itemMatchesFilter(it: ChecklistItem): boolean {
+	function itemMatchesFilter(sec: Section, it: ChecklistItemDef): boolean {
+		const r = rOf(sec, it).result;
 		if (filter === 'all') return true;
-		if (filter === 'issues') return it.result === 'non-compliant';
-		if (filter === 'human') return it.result === 'human';
-		if (filter === 'compliant') return it.result === 'compliant';
+		if (filter === 'issues') return r === 'non-compliant';
+		if (filter === 'human') return r === 'human';
+		if (filter === 'compliant') return r === 'compliant';
 		return true;
 	}
 
-	function pickItem(sec: Section, it: ChecklistItem) {
+	function pickItem(sec: Section, it: ChecklistItemDef) {
 		picked.set({ sectionId: sec.id, n: it.n });
 		drawerOpen.set(true);
 	}
 
-	function selectedKey(sec: Section, it: ChecklistItem): boolean {
+	function selectedKey(sec: Section, it: ChecklistItemDef): boolean {
 		const p = $picked;
 		return !!p && p.sectionId === sec.id && p.n === it.n;
 	}
@@ -97,26 +106,27 @@
 	function sectionCounts(sec: Section): Record<string, number> {
 		return sec.items.reduce(
 			(a, it) => {
-				a[it.result] = (a[it.result] || 0) + 1;
+				const r = rOf(sec, it).result;
+				a[r] = (a[r] || 0) + 1;
 				return a;
 			},
 			{} as Record<string, number>
 		);
 	}
 
-	function sectionVisibleItems(sec: Section): ChecklistItem[] {
-		return sec.items.filter(itemMatchesFilter);
+	function sectionVisibleItems(sec: Section): ChecklistItemDef[] {
+		return sec.items.filter((it) => itemMatchesFilter(sec, it));
 	}
 
 	function themeHasVisible(themeId: string): Section[] {
 		return (byTheme[themeId] ?? []).filter((sec) =>
-			sec.items.some(itemMatchesFilter)
+			sec.items.some((it) => itemMatchesFilter(sec, it))
 		);
 	}
 
 	function collapseAll() {
 		const m: Record<string, boolean> = {};
-		$sections.forEach((s) => (m[s.id] = false));
+		sectionsList.forEach((s) => (m[s.id] = false));
 		openMap = m;
 	}
 	function expandAll() {
@@ -131,23 +141,25 @@
 <div class="review">
 	<div class="review-main">
 		<!-- Approval banner -->
-		{#if $approval.status !== 'idle'}
+		{#if approval && approval.status !== 'idle'}
 			<ApprovalBanner />
 		{/if}
 
 		<!-- Policy header -->
 		<div class="policy-header">
 			<div style="min-width:0; flex:1">
-				<h1 class="policy-title">{POLICY_META.name}</h1>
+				<h1 class="policy-title">{meta?.name}</h1>
 				<div class="policy-tags">
-					<span>{POLICY_META.code}</span><span class="dot">·</span>
-					<span>{POLICY_META.version}</span><span class="dot">·</span>
-					<span>{POLICY_META.pages} pages</span><span class="dot">·</span>
-					<span>Reviewed {POLICY_META.reviewDate}</span><span class="dot">·</span>
-					<span>Reviewer: {POLICY_META.reviewer}</span>
+					<span>{meta?.code}</span><span class="dot">·</span>
+					<span>{meta?.version}</span><span class="dot">·</span>
+					<span>{meta?.pages} pages</span><span class="dot">·</span>
+					<span>Reviewed {meta?.reviewDate}</span><span class="dot">·</span>
+					<span>Reviewer: {meta?.reviewer}</span>
 				</div>
 			</div>
-			<VerdictBadge verdict={scoreResult.verdict} />
+			{#if scoreResult}
+				<VerdictBadge verdict={scoreResult.verdict} />
+			{/if}
 		</div>
 
 		<!-- Filters -->
@@ -197,10 +209,10 @@
 		</div>
 
 		<!-- Themes -->
-		{#each THEMES as theme (theme.id)}
+		{#each themesList as theme (theme.id)}
 			{@const visibleSecs = themeHasVisible(theme.id)}
 			{#if visibleSecs.length > 0}
-				{@const themeData = scoreResult.themeRows.find((t) => t.id === theme.id)}
+				{@const themeData = scoreResult?.themeRows.find((t) => t.id === theme.id)}
 				{#if themeData}
 					<div class="theme">
 						<div class="theme-head">
@@ -262,6 +274,7 @@
 									{#if isOpen}
 										<div class="sec-body">
 											{#each items as it (it.n)}
+												{@const ans = rOf(sec, it)}
 												<button
 													class="item-row"
 													class:selected={selectedKey(sec, it)}
@@ -270,21 +283,21 @@
 												>
 													<div class="item-num">{sec.id.replace('PRP', '')}.{it.n}</div>
 													<div class="item-status">
-														<StatusCircle result={it.result} />
+														<StatusCircle result={ans.result} />
 													</div>
 													<div class="item-text">
-														{it.text.replace(' [H]', '')}
+														{it.text}
 														<div class="meta">
-															<span>{it.code}</span>
-															{#if it.confidence != null && it.result !== 'human'}
+															<span>{it.codes}</span>
+															{#if ans.confidence != null && ans.result !== 'human'}
 																<span class="conf">
-																	confidence {Math.round(it.confidence * 100)}%
+																	confidence {Math.round(ans.confidence * 100)}%
 																</span>
 															{/if}
-															{#if it.reviewed}
+															{#if ans.reviewed}
 																<span style="color:var(--primary)">· deep-reviewed</span>
 															{/if}
-															{#if it.edited}
+															{#if ans.edited}
 																<span style="color:var(--ink-500)">· edited</span>
 															{/if}
 														</div>
@@ -305,72 +318,74 @@
 
 	<!-- Side rail -->
 	<aside class="review-side">
-		<div class="side-card">
-			<h4>Decision</h4>
-			<div class="score-block">
-				<div class="num">{scoreResult.overall}<span class="pct">%</span></div>
-				<div class="lbl">weighted score</div>
-				<div style="margin-top:14px">
-					<VerdictBadge verdict={scoreResult.verdict} />
-				</div>
-			</div>
-			<div class="decision-summary">
-				<div class="row">
-					<span class="l">Mandatory gates</span>
-					<span class="r" style="color: {scoreResult.gatesPass ? 'var(--ok)' : 'var(--bad)'}">
-						{scoreResult.gatesPass ? 'Both pass' : 'Not passing'}
-					</span>
-				</div>
-				<div class="row"><span class="l">Threshold for issue</span><span class="r">≥ 85%</span></div>
-				<div class="row">
-					<span class="l">Items pending human</span>
-					<span class="r">{counts.human || 0}</span>
-				</div>
-			</div>
-			<div style="margin-top:14px; display:grid; gap:8px">
-				{#if $canUseChecker}
-					<button
-						class="btn btn-primary"
-						onclick={openSubmit}
-						disabled={scoreResult.humanItemsRemain || $approval.status === 'pending'}
-						style="justify-content:center"
-						type="button"
-					>
-						<Icon name="send" size={13} />
-						{$approval.status === 'pending' ? 'Submitted for approval' : 'Submit for Approval'}
-					</button>
-				{/if}
-				{#if scoreResult.humanItemsRemain}
-					<div style="font-size:11.5px; color:var(--ink-500); text-align:center">
-						Resolve {counts.human} human-review item{counts.human === 1 ? '' : 's'} before submitting for approval
+		{#if scoreResult}
+			<div class="side-card">
+				<h4>Decision</h4>
+				<div class="score-block">
+					<div class="num">{scoreResult.overall}<span class="pct">%</span></div>
+					<div class="lbl">weighted score</div>
+					<div style="margin-top:14px">
+						<VerdictBadge verdict={scoreResult.verdict} />
 					</div>
-				{/if}
+				</div>
+				<div class="decision-summary">
+					<div class="row">
+						<span class="l">Mandatory gates</span>
+						<span class="r" style="color: {scoreResult.gatesPass ? 'var(--ok)' : 'var(--bad)'}">
+							{scoreResult.gatesPass ? 'Both pass' : 'Not passing'}
+						</span>
+					</div>
+					<div class="row"><span class="l">Threshold for issue</span><span class="r">≥ 85%</span></div>
+					<div class="row">
+						<span class="l">Items pending human</span>
+						<span class="r">{counts.human || 0}</span>
+					</div>
+				</div>
+				<div style="margin-top:14px; display:grid; gap:8px">
+					{#if $canUseChecker && !locked}
+						<button
+							class="btn btn-primary"
+							onclick={openSubmit}
+							disabled={scoreResult.humanItemsRemain || approval?.status === 'pending'}
+							style="justify-content:center"
+							type="button"
+						>
+							<Icon name="send" size={13} />
+							{approval?.status === 'pending' ? 'Submitted for approval' : 'Submit for Approval'}
+						</button>
+					{/if}
+					{#if scoreResult.humanItemsRemain}
+						<div style="font-size:11.5px; color:var(--ink-500); text-align:center">
+							Resolve {counts.human} human-review item{counts.human === 1 ? '' : 's'} before submitting for approval
+						</div>
+					{/if}
+				</div>
 			</div>
-		</div>
 
-		<div class="side-card">
-			<h4>Score by Theme</h4>
-			<div style="display:grid; gap:12px">
-				{#each scoreResult.themeRows as t (t.id)}
-					{@const isFail = t.gate && t.pct < (t.threshold || 85) && t.total > 0}
-					{@const isWarn = t.pct < 70 && !isFail && t.total > 0}
-					{@const cls = isFail ? 'fail' : isWarn ? 'warn' : ''}
-					<div>
-						<div class="theme-score-row">
-							<span class="id">{t.id}</span>
-							<span class="name">
-								<span class="nm">{t.name}</span>
-								{#if t.gate}<span class="gate-mini">GATE</span>{/if}
-							</span>
-							<span class="val {cls}">{t.pct}%</span>
+			<div class="side-card">
+				<h4>Score by Theme</h4>
+				<div style="display:grid; gap:12px">
+					{#each scoreResult.themeRows as t (t.id)}
+						{@const isFail = t.gate && t.pct < (t.threshold || 85) && t.total > 0}
+						{@const isWarn = t.pct < 70 && !isFail && t.total > 0}
+						{@const cls = isFail ? 'fail' : isWarn ? 'warn' : ''}
+						<div>
+							<div class="theme-score-row">
+								<span class="id">{t.id}</span>
+								<span class="name">
+									<span class="nm">{t.name}</span>
+									{#if t.gate}<span class="gate-mini">GATE</span>{/if}
+								</span>
+								<span class="val {cls}">{t.pct}%</span>
+							</div>
+							<div class="theme-score-bar">
+								<div class="fill {cls}" style="width: {t.pct}%"></div>
+							</div>
 						</div>
-						<div class="theme-score-bar">
-							<div class="fill {cls}" style="width: {t.pct}%"></div>
-						</div>
-					</div>
-				{/each}
+					{/each}
+				</div>
 			</div>
-		</div>
+		{/if}
 
 		<div class="side-card">
 			<h4>Top Strengths</h4>

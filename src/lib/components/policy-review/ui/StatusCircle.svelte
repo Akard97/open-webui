@@ -1,8 +1,8 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
-	import type { ItemResult } from '../lib/types';
+	import type { ItemVerdict } from '../lib/types';
 
-	let { result, size = 18 }: { result: ItemResult; size?: number } = $props();
+	let { result, size = 18 }: { result: ItemVerdict; size?: number } = $props();
 </script>
 
 {#if result === 'compliant'}

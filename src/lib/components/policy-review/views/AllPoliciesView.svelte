@@ -3,7 +3,7 @@
 	// See docs/superpowers/specs/2026-05-21-all-policies-redesign-design.md.
 
 	import { onMount } from 'svelte';
-	import { POLICIES, FN_META, TODAY } from '../lib/mocks';
+	import { POLICIES, FN_META, TODAY } from '../lib/seed';
 	import type { LibraryPolicy } from '../lib/types';
 	import { openPolicyPopup } from '../lib/store';
 	import {

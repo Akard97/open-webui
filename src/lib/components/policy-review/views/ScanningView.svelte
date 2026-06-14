@@ -5,17 +5,21 @@
 	// Port of scanning.jsx from the PRP-2 design handoff.
 
 	import { onDestroy, untrack } from 'svelte';
+	import { get } from 'svelte/store';
 	import Icon from '../ui/Icon.svelte';
-	import { SECTIONS, THEMES, POLICY_META } from '../lib/mocks';
-	import type { ItemResult } from '../lib/types';
-	import { stage } from '../lib/store';
+	import type { ItemVerdict } from '../lib/types';
+	import { stage, activeVersion, activeReview } from '../lib/store';
+
+	const version = get(activeVersion);
+	const review = get(activeReview);
+	const meta = review?.policyMeta;
 
 	type FlatItem = {
 		key: string;
 		prp: string;
 		n: number;
 		text: string;
-		result: ItemResult;
+		result: ItemVerdict;
 		theme: string;
 	};
 
@@ -23,14 +27,15 @@
 
 	const items: FlatItem[] = (() => {
 		const all: FlatItem[] = [];
-		SECTIONS.forEach((sec) => {
+		(version?.sections ?? []).forEach((sec) => {
 			sec.items.forEach((it) => {
+				const key = `${sec.id}-${it.n}`;
 				all.push({
-					key: `${sec.id}-${it.n}`,
+					key,
 					prp: sec.id,
 					n: it.n,
 					text: it.text,
-					result: it.result,
+					result: review?.results[key]?.result ?? 'pending',
 					theme: sec.theme
 				});
 			});
@@ -44,7 +49,7 @@
 			if (!map.has(it.theme)) map.set(it.theme, []);
 			map.get(it.theme)!.push(it);
 		});
-		const themeMeta = Object.fromEntries(THEMES.map((t) => [t.id, t]));
+		const themeMeta = Object.fromEntries((version?.themes ?? []).map((t) => [t.id, t]));
 		return [...map.entries()].map(([id, list]) => ({
 			id,
 			name: themeMeta[id]?.name ?? id,
@@ -200,8 +205,8 @@
 	<div class="scan-left">
 		<div class="scan-doc">
 			<div class="doc-icon"><Icon name="fileText" size={20} /></div>
-			<div class="doc-name">{POLICY_META.name}</div>
-			<div class="doc-meta">{POLICY_META.code} · {POLICY_META.version}</div>
+			<div class="doc-name">{meta?.name}</div>
+			<div class="doc-meta">{meta?.code} · {meta?.version}</div>
 			<div class="scan-progress">
 				<div class="label">
 					<span>Reviewing</span>

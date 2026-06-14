@@ -13,7 +13,7 @@
 	import ItemDrawer from './views/ItemDrawer.svelte';
 	import SubmitApprovalModal from './views/SubmitApprovalModal.svelte';
 	import PolicyPopup from './views/PolicyPopup.svelte';
-	import { view, stage, sections, drawerOpen, picked, canUseChecker } from './lib/store';
+	import { view, stage, activeVersion, drawerOpen, picked, canUseChecker } from './lib/store';
 
 	// Users without checker access only get the Library; snap them back if a stale persisted
 	// view/stage would otherwise drop them into the checker workflow.
@@ -29,7 +29,7 @@
 		if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
 			e.preventDefault();
 			const flat: { sectionId: string; n: number }[] = [];
-			untrack(() => $sections).forEach((sec) =>
+			untrack(() => $activeVersion)?.sections.forEach((sec) =>
 				sec.items.forEach((it) => flat.push({ sectionId: sec.id, n: it.n }))
 			);
 			const idx = flat.findIndex((f) => f.sectionId === p.sectionId && f.n === p.n);

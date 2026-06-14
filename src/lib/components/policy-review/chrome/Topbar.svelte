@@ -4,7 +4,7 @@
 
 	import Icon from '../ui/Icon.svelte';
 	import { view, stage, resetReview, canUseChecker } from '../lib/store';
-	import { POLICY_META } from '../lib/mocks';
+	import { POLICY_META } from '../lib/seed';
 
 	function startNewReview() {
 		resetReview();
