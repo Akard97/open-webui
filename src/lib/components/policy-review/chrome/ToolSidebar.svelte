@@ -30,24 +30,6 @@
 			.toUpperCase();
 	}
 
-	const recent = [
-		{ ico: '📘', label: 'Digital City Asset Disposal', meta: 'In Review', active: true },
-		{ ico: '📘', label: 'Ishbilia Compound Valuation', meta: 'Approved' },
-		{ ico: '📘', label: 'Selling Digital City Assets', meta: 'Approved' },
-		{ ico: '📘', label: 'Abraj Altawiniah Information', meta: 'Draft' },
-		{ ico: '📘', label: 'Osool Disposal & Valuation', meta: 'Approved' },
-		{ ico: '📘', label: 'Digital City Disposal Process', meta: 'Rejected' }
-	];
-
-	const archived = [
-		{ ico: '📕', label: 'FY24 Procurement Policy', meta: 'Q4' },
-		{ ico: '📕', label: 'Vendor Onboarding v3', meta: 'Q3' },
-		{ ico: '📕', label: 'Capital Allocation Framework', meta: 'Q3' }
-	];
-
-	function pillClass(meta: string): string {
-		return `pill-${meta.toLowerCase().replace(/\s/g, '')}`;
-	}
 </script>
 
 <aside class="sidebar">
@@ -107,26 +89,6 @@
 				<Icon name="alert" size={15} /> Exceptions
 			</button>
 		{/if}
-	</div>
-
-	<div class="sb-heading">Recent reviews</div>
-	<div class="sb-chats">
-		{#each recent as c, i (i)}
-			<div class="sb-chat" class:active={c.active}>
-				<span class="ico">{c.ico}</span>
-				<span class="label">{c.label}</span>
-				<span class="pill {pillClass(c.meta)}">{c.meta}</span>
-			</div>
-		{/each}
-
-		<div class="sb-heading" style="padding-left: 8px">Archived</div>
-		{#each archived as c, i (`a${i}`)}
-			<div class="sb-chat">
-				<span class="ico">{c.ico}</span>
-				<span class="label">{c.label}</span>
-				<span class="meta">{c.meta}</span>
-			</div>
-		{/each}
 	</div>
 
 	<div class="sb-foot-links">
