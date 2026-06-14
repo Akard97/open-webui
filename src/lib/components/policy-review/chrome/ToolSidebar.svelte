@@ -8,7 +8,7 @@
 	// not yet hydrated (e.g. during SSR).
 
 	import Icon from '../ui/Icon.svelte';
-	import { view, resetReview, stage, canUseChecker, canApprove } from '../lib/store';
+	import { view, resetReview, canUseChecker, canApprove } from '../lib/store';
 	import { user } from '$lib/stores';
 	import { policyRoleLabel } from '../lib/roles';
 
