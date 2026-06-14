@@ -1555,3 +1555,15 @@ git commit -m "test(policy-review): point remaining imports at seed; green suite
 - **Type consistency:** `itemId = "${sectionId}-${n}"` used in seed, scoring, store, ItemDrawer; `updateItemResult(reviewId, itemId, patch)`, `submitForApproval(reviewId, note)`, `approveAndPublish(reviewId, note?)`, `rejectPolicy(reviewId, note?)` signatures match across store + overlays.
 - **No placeholders:** every code step shows full code or an exact mechanical edit list.
 - **Dangling imports check:** every file that imported `./mocks` is reassigned — `ReviewView` (Task 9), `ItemDrawer`/`SubmitApprovalModal`/`PolicyReviewApp` (Task 10), `ScanningView`/`Topbar`/`PolicyPopup`/`AllPoliciesView` (Task 10 Step 5b), `store`/`scoring.test` (rewritten in Tasks 7–8), `library.test` (Task 11 Step 1). `SECTIONS` is no longer exported, so `ScanningView` is rewired to `$activeVersion.sections`.
+
+---
+
+## Status: COMPLETE (executed 2026-06-14, branch `osool`)
+
+All 11 tasks landed across commits `e1756e543` → `0f96e257b`. Verification: **41/41** policy-review tests pass (6 suites); **zero** policy-review type errors under `svelte-check`; the `/policy-review` route boots and compiles cleanly under Vite (HTTP 200, no transform errors). Reviewed at the data layer, the Svelte layer, and a final cross-cutting pass.
+
+### Carry-over into Plan 2 / Plan 3 (found in review, deferred by charter)
+1. **Topbar breadcrumb** (`chrome/Topbar.svelte`) still reads the static `POLICY_META.name` from seed. Plan 2 (multi-review nav) must switch it to `$activeReview?.policyMeta.name ?? POLICY_META.name`. Correct today (one seeded active review).
+2. **Submit-blocked message** (`ReviewView.svelte`) says "Resolve N human-review items" but `humanItemsRemain` also blocks on `pending` items (`counts.pending` isn't surfaced). Plan 2 should unify the blocking copy to count human + pending.
+3. **`myReviews`** filters by `createdBy === $user.name`; seeded `createdBy` uses fixed names, so it reads empty for real logged-in users until the backend assigns real authorship. Plan 2's "My reviews" view should account for this (or reseed `rev-active.createdBy` to the current user on creation).
+4. **`policyRoleLabel`** (`lib/roles.ts`) has no `canAdmin` case — a pure `policy_admin` user shows as "Viewer" in the footer. Plan 2/3 should add an Admin label when the lean role-aware sidebar + admin entry land.
