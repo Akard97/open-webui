@@ -1,18 +1,18 @@
 // Score + verdict calculation for the Policy Review tool.
-// Port of scoring.js from the PRP-2 design handoff.
 //
 // Per-theme score = compliant / (compliant + non-compliant).
-// `human` items are held aside until resolved.
-// T1 + T2 are mandatory gates (threshold 85). Overall is the weight-weighted
-// average of theme scores; verdict applies the gate + overall rules.
+// `human` and missing/`pending` items are held aside (not scored, but
+// they block a final verdict). Gate themes must clear their threshold.
+// Overall is the weight-weighted average of theme scores.
 
-import type { Section, Theme, Verdict } from './types';
+import type { ChecklistVersion, ItemResult, Theme, Verdict } from './types';
 
 interface ThemeBucket {
 	total: number;
 	yes: number;
 	no: number;
 	human: number;
+	pending: number;
 	items: number;
 }
 
@@ -26,25 +26,32 @@ export interface ScoreResult {
 	humanItemsRemain: boolean;
 }
 
-export function computeScores(sections: Section[], themes: Theme[]): ScoreResult {
+export function computeScores(
+	version: ChecklistVersion,
+	results: Record<string, ItemResult>
+): ScoreResult {
+	const { themes, sections, verdictBands } = version;
 	const byTheme: Record<string, ThemeBucket> = {};
 	themes.forEach((t) => {
-		byTheme[t.id] = { total: 0, yes: 0, no: 0, human: 0, items: 0 };
+		byTheme[t.id] = { total: 0, yes: 0, no: 0, human: 0, pending: 0, items: 0 };
 	});
 
 	sections.forEach((sec) => {
-		sec.items.forEach((it) => {
-			const t = byTheme[sec.theme];
-			if (!t) return;
-			t.items += 1;
-			if (it.result === 'compliant') {
-				t.yes += 1;
-				t.total += 1;
-			} else if (it.result === 'non-compliant') {
-				t.no += 1;
-				t.total += 1;
-			} else if (it.result === 'human') {
-				t.human += 1;
+		const bucket = byTheme[sec.theme];
+		if (!bucket) return;
+		sec.items.forEach((item) => {
+			bucket.items += 1;
+			const result = results[item.id]?.result ?? 'pending';
+			if (result === 'compliant') {
+				bucket.yes += 1;
+				bucket.total += 1;
+			} else if (result === 'non-compliant') {
+				bucket.no += 1;
+				bucket.total += 1;
+			} else if (result === 'human') {
+				bucket.human += 1;
+			} else {
+				bucket.pending += 1;
 			}
 		});
 	});
@@ -66,14 +73,14 @@ export function computeScores(sections: Section[], themes: Theme[]): ScoreResult
 	const overall = weightTotal > 0 ? Math.round(weighted / weightTotal) : 0;
 
 	const gatesPass = themeRows.filter((t) => t.gate).every((t) => t.pct >= (t.threshold || 85));
-	const humanItemsRemain = themeRows.some((t) => t.human > 0);
+	const humanItemsRemain = themeRows.some((t) => t.human > 0 || t.pending > 0);
 
 	let verdict: Verdict;
 	if (humanItemsRemain) {
-		verdict = { key: 'draft', label: 'Pending review', reason: 'Awaiting human-judgement items' };
-	} else if (overall >= 85 && gatesPass) {
+		verdict = { key: 'draft', label: 'Pending review', reason: 'Awaiting unresolved items' };
+	} else if (overall >= verdictBands.approved && gatesPass) {
 		verdict = { key: 'approved', label: 'Approved', reason: 'Meets all requirements' };
-	} else if (overall >= 70 && gatesPass) {
+	} else if (overall >= verdictBands.conditional && gatesPass) {
 		verdict = {
 			key: 'conditional',
 			label: 'Conditionally Approved',
