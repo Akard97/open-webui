@@ -50,11 +50,14 @@ export interface Verdict {
 	reason: string;
 }
 
-export type OEStatus = 'idle' | 'pending' | 'approved' | 'returned' | 'rejected';
-export interface OEState {
-	status: OEStatus;
+// Internal OE approval lifecycle: an OE reviewer submits a completed review,
+// then an OE approver approves & publishes (or rejects). No external body.
+export type ApprovalStatus = 'idle' | 'pending' | 'approved' | 'rejected';
+export interface ApprovalState {
+	status: ApprovalStatus;
 	sentAt: string | null;
 	decidedAt: string | null;
+	decidedBy: string | null;
 	note: string;
 }
 

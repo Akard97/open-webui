@@ -5,7 +5,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import VerdictBadge from '../ui/VerdictBadge.svelte';
 	import StatusCircle from '../ui/StatusCircle.svelte';
-	import OEBanner from './OEBanner.svelte';
+	import ApprovalBanner from './ApprovalBanner.svelte';
 	import { computeScores } from '../lib/scoring';
 	import { THEMES, POLICY_META } from '../lib/mocks';
 	import type { Section, ChecklistItem } from '../lib/types';
@@ -13,8 +13,9 @@
 		sections,
 		picked,
 		drawerOpen,
-		oeState,
-		oeModalOpen
+		approval,
+		submitModalOpen,
+		canUseChecker
 	} from '../lib/store';
 
 	type Filter = 'all' | 'issues' | 'human' | 'compliant';
@@ -122,16 +123,16 @@
 		openMap = {};
 	}
 
-	function openOE() {
-		oeModalOpen.set(true);
+	function openSubmit() {
+		submitModalOpen.set(true);
 	}
 </script>
 
 <div class="review">
 	<div class="review-main">
-		<!-- OE Banner -->
-		{#if $oeState.status !== 'idle'}
-			<OEBanner />
+		<!-- Approval banner -->
+		{#if $approval.status !== 'idle'}
+			<ApprovalBanner />
 		{/if}
 
 		<!-- Policy header -->
@@ -327,19 +328,21 @@
 				</div>
 			</div>
 			<div style="margin-top:14px; display:grid; gap:8px">
-				<button
-					class="btn btn-primary"
-					onclick={openOE}
-					disabled={scoreResult.humanItemsRemain || $oeState.status === 'pending'}
-					style="justify-content:center"
-					type="button"
-				>
-					<Icon name="send" size={13} />
-					{$oeState.status === 'pending' ? 'Submitted to OE' : 'Send to OE for Approval'}
-				</button>
+				{#if $canUseChecker}
+					<button
+						class="btn btn-primary"
+						onclick={openSubmit}
+						disabled={scoreResult.humanItemsRemain || $approval.status === 'pending'}
+						style="justify-content:center"
+						type="button"
+					>
+						<Icon name="send" size={13} />
+						{$approval.status === 'pending' ? 'Submitted for approval' : 'Submit for Approval'}
+					</button>
+				{/if}
 				{#if scoreResult.humanItemsRemain}
 					<div style="font-size:11.5px; color:var(--ink-500); text-align:center">
-						Resolve {counts.human} human-review item{counts.human === 1 ? '' : 's'} before submission
+						Resolve {counts.human} human-review item{counts.human === 1 ? '' : 's'} before submitting for approval
 					</div>
 				{/if}
 			</div>

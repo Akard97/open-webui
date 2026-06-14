@@ -8,7 +8,7 @@
 	// not yet hydrated (e.g. during SSR).
 
 	import Icon from '../ui/Icon.svelte';
-	import { view, resetReview, stage } from '../lib/store';
+	import { view, resetReview, stage, canUseChecker, canApprove } from '../lib/store';
 	import { user } from '$lib/stores';
 
 	function go(target: 'all-policies' | 'new-review') {
@@ -61,14 +61,16 @@
 	</div>
 
 	<div class="sb-section">
-		<button
-			class="sb-link"
-			class:active={$view === 'new-review'}
-			onclick={() => go('new-review')}
-			type="button"
-		>
-			<Icon name="fileText" size={15} /> New Review
-		</button>
+		{#if $canUseChecker}
+			<button
+				class="sb-link"
+				class:active={$view === 'new-review'}
+				onclick={() => go('new-review')}
+				type="button"
+			>
+				<Icon name="fileText" size={15} /> New Review
+			</button>
+		{/if}
 		<button class="sb-link" type="button">
 			<Icon name="search" size={15} /> Search policies
 		</button>
@@ -90,16 +92,20 @@
 		<button class="sb-link" type="button">
 			<Icon name="refresh" size={15} /> In Review <span class="sb-count">7</span>
 		</button>
-		<button class="sb-link" type="button">
-			<Icon name="check" size={15} /> Approvals
-			<span class="sb-count sb-count-accent">3</span>
-		</button>
-		<button class="sb-link" type="button">
-			<Icon name="shield" size={15} /> Compliance Checker
-		</button>
-		<button class="sb-link" type="button">
-			<Icon name="alert" size={15} /> Exceptions
-		</button>
+		{#if $canApprove}
+			<button class="sb-link" type="button">
+				<Icon name="check" size={15} /> Approvals
+				<span class="sb-count sb-count-accent">3</span>
+			</button>
+		{/if}
+		{#if $canUseChecker}
+			<button class="sb-link" type="button">
+				<Icon name="shield" size={15} /> Compliance Checker
+			</button>
+			<button class="sb-link" type="button">
+				<Icon name="alert" size={15} /> Exceptions
+			</button>
+		{/if}
 	</div>
 
 	<div class="sb-heading">Recent reviews</div>
@@ -137,7 +143,7 @@
 		<div style="display:flex; flex-direction:column; line-height:1.2">
 			<span style="font-size:13px; font-weight:500">{$user?.name ?? 'Ahmad'}</span>
 			<span style="font-size:11px; color:var(--ink-400)">
-				{$user?.role ? `Policy Reviewer · ${$user.role}` : 'Policy Reviewer'}
+				Organizational Excellence{$canApprove ? ' · Approver' : $canUseChecker ? ' · Reviewer' : ''}
 			</span>
 		</div>
 	</div>

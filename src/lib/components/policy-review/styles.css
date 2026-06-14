@@ -719,7 +719,7 @@
 .gap-item .n { font-family: var(--mono); font-size: 11px; color: var(--bad); font-weight: 500; padding-top: 1px; }
 .gap-item.strength .n { color: var(--ok); }
 
-/* Send-to-OE button refinement */
+/* Submit-for-approval button refinement */
 .review-side .btn-primary { padding: 10px 14px; font-weight: 500; }
 
 /* ── drawer ─────────────────────────────────────────── */
@@ -779,7 +779,7 @@
 .thinking li { font-size: 12.5px; color: var(--ink-700); padding: 3px 0; opacity: 0; animation: think 0.4s ease forwards; }
 @keyframes think { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ── OE modal ────────────────────────────────────────── */
+/* ── approval / submit modal ──────────────────────────── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(11,20,24,0.5); z-index: 100; display: grid; place-items: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .modal-overlay.open { opacity: 1; pointer-events: auto; }
 .modal { background: white; border-radius: var(--radius-lg); width: 520px; max-width: 100%; box-shadow: var(--shadow-lg); transform: scale(0.96); transition: transform .2s; overflow: hidden; }
@@ -790,25 +790,23 @@
 .modal-body { padding: 18px 24px; }
 .modal-foot { padding: 14px 24px; background: var(--bg-soft); display: flex; justify-content: flex-end; gap: 9px; border-top: 1px solid var(--ink-100); }
 
-.oe-banner {
+.approval-banner {
   margin: 0 0 18px;
   padding: 16px 18px;
   border-radius: var(--radius-lg);
   border: 1px solid;
   display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center;
 }
-.oe-banner.pending  { border-color: var(--info); background: var(--info-bg); }
-.oe-banner.approved { border-color: #B6D8C2; background: var(--ok-bg); }
-.oe-banner.rejected { border-color: #F0CCCC; background: var(--bad-bg); }
-.oe-banner.returned { border-color: #EDD9A4; background: var(--warn-bg); }
-.oe-banner .icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: white; }
-.oe-banner.pending  .icon { background: var(--info); }
-.oe-banner.approved .icon { background: var(--ok); }
-.oe-banner.rejected .icon { background: var(--bad); }
-.oe-banner.returned .icon { background: var(--warn); }
-.oe-banner .title { font-weight: 600; font-size: 14px; color: var(--ink-900); }
-.oe-banner .sub { font-size: 12.5px; color: var(--ink-700); margin-top: 2px; }
-.oe-banner .note { font-size: 12.5px; color: var(--ink-700); margin-top: 6px; padding: 8px 10px; background: rgba(255,255,255,0.6); border-radius: 6px; font-style: italic; }
+.approval-banner.pending  { border-color: var(--info); background: var(--info-bg); }
+.approval-banner.approved { border-color: #B6D8C2; background: var(--ok-bg); }
+.approval-banner.rejected { border-color: #F0CCCC; background: var(--bad-bg); }
+.approval-banner .icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: white; }
+.approval-banner.pending  .icon { background: var(--info); }
+.approval-banner.approved .icon { background: var(--ok); }
+.approval-banner.rejected .icon { background: var(--bad); }
+.approval-banner .title { font-weight: 600; font-size: 14px; color: var(--ink-900); }
+.approval-banner .sub { font-size: 12.5px; color: var(--ink-700); margin-top: 2px; }
+.approval-banner .note { font-size: 12.5px; color: var(--ink-700); margin-top: 6px; padding: 8px 10px; background: rgba(255,255,255,0.6); border-radius: 6px; font-style: italic; }
 
 /* ── helpers ─────────────────────────────────────────── */
 .kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--ink-100); color: var(--ink-600); }

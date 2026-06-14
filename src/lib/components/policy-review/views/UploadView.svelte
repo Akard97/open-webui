@@ -157,7 +157,7 @@
 			<div class="ft-body">
 				<span class="std-chip">ISO 9001:2015</span>
 				<span class="std-chip">Osool Metapolicy</span>
-				<span class="std-chip">OE Checklist</span>
+				<span class="std-chip">PRP Checklist</span>
 			</div>
 		</div>
 		<div class="ft-card">

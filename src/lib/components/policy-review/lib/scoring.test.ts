@@ -20,7 +20,7 @@ const one = (theme: string, result: ChecklistItem['result']): Section => ({
 });
 
 describe('computeScores', () => {
-	it('marks Pending Reviewer when any human item is open', () => {
+	it('marks Pending review when any human item is open', () => {
 		const r = computeScores([one('T1', 'human')], THEMES);
 		expect(r.verdict.key).toBe('draft');
 		expect(r.humanItemsRemain).toBe(true);

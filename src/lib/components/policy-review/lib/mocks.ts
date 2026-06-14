@@ -1069,7 +1069,7 @@ export const FN_META: Record<string, { name: string }> = {
 export const STATUS_META: Record<PolicyStatus, { label: string; tone: string }> = {
 	approved: { label: 'Approved', tone: 'ok' },
 	'in-review': { label: 'In review', tone: 'warn' },
-	pending: { label: 'Pending OE', tone: 'info' },
+	pending: { label: 'Pending approval', tone: 'info' },
 	draft: { label: 'Draft', tone: 'muted' },
 	rejected: { label: 'Rejected', tone: 'bad' },
 	expiring: { label: 'Expiring', tone: 'warn' },
@@ -1143,7 +1143,7 @@ export const POLICIES: LibraryPolicy[] = [
 export const STATUS_DIST: Array<{ id: PolicyStatus | 'draft'; label: string; count: number; tone: string }> = [
 	{ id: 'approved', label: 'Approved', count: 102, tone: 'ok' },
 	{ id: 'in-review', label: 'In review', count: 7, tone: 'warn' },
-	{ id: 'pending', label: 'Pending OE', count: 3, tone: 'info' },
+	{ id: 'pending', label: 'Pending approval', count: 3, tone: 'info' },
 	{ id: 'draft', label: 'Drafts', count: 14, tone: 'muted' },
 	{ id: 'expiring', label: 'Expiring', count: 12, tone: 'warn' },
 	{ id: 'overdue', label: 'Overdue', count: 4, tone: 'bad' }

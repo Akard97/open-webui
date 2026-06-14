@@ -81,10 +81,10 @@ export const railItems: RailItem[] = [
 			!!user?.permissions?.workspace?.tools
 	},
 	{
-		// Policy Review — placeholder slot. The original tool was removed
-		// pending a rebuild; the route currently renders a black placeholder
-		// (see src/routes/(app)/policy-review/+page.svelte). Keep this entry
-		// so the rail slot stays reserved for the rebuilt tool.
+		// Policy Review tool. Intentionally visible to everyone: all users can
+		// browse the policy Library. The checker workflow (upload, scan, review,
+		// approve) is gated inside the tool by the `features.policy_checker`
+		// permission (see policy-review/lib/store.ts `canUseChecker`).
 		id: 'policy-review',
 		label: 'Policy Review',
 		href: '/policy-review',

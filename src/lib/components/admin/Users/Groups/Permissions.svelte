@@ -954,6 +954,50 @@
 		</div>
 
 		<div class="flex flex-col w-full">
+			<Tooltip
+				className="flex w-full justify-between my-1"
+				content={$i18n.t(
+					'Allows members of this group to upload, check, and approve policies in the Policy Review tool. Everyone can still browse the policy library.'
+				)}
+				placement="top-start"
+			>
+				<div class=" self-center text-xs font-medium">
+					{$i18n.t('Policy Checker')}
+				</div>
+				<Switch bind:state={permissions.features.policy_checker} />
+			</Tooltip>
+			{#if defaultPermissions?.features?.policy_checker && !permissions.features.policy_checker}
+				<div>
+					<div class="text-xs text-gray-500">
+						{$i18n.t('This is a default user permission and will remain enabled.')}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<div class="flex flex-col w-full">
+			<Tooltip
+				className="flex w-full justify-between my-1"
+				content={$i18n.t(
+					'Allows members of this group to approve and publish (or reject) policies that OE reviewers submit in the Policy Review tool.'
+				)}
+				placement="top-start"
+			>
+				<div class=" self-center text-xs font-medium">
+					{$i18n.t('Policy Approver')}
+				</div>
+				<Switch bind:state={permissions.features.policy_approver} />
+			</Tooltip>
+			{#if defaultPermissions?.features?.policy_approver && !permissions.features.policy_approver}
+				<div>
+					<div class="text-xs text-gray-500">
+						{$i18n.t('This is a default user permission and will remain enabled.')}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<div class="flex flex-col w-full">
 			<div class="flex w-full justify-between my-1">
 				<div class=" self-center text-xs font-medium">
 					{$i18n.t('Calendar')}

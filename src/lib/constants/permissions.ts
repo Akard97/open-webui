@@ -64,7 +64,9 @@ export const DEFAULT_PERMISSIONS = {
 		code_interpreter: true,
 		memories: true,
 		automations: false,
-		calendar: true
+		calendar: true,
+		policy_checker: false,
+		policy_approver: false
 	},
 	settings: {
 		interface: true

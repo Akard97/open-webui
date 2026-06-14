@@ -4,7 +4,7 @@
 	//   bulk       — theme-by-theme, items finish in parallel
 	// Port of scanning.jsx from the PRP-2 design handoff.
 
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { SECTIONS, THEMES, POLICY_META } from '../lib/mocks';
 	import type { ItemResult } from '../lib/types';
@@ -105,8 +105,12 @@
 			return () => clearTimeout(t);
 		}
 		const theme = themeGroups[bulkThemeIdx];
+		// Read the accumulated statuses via untrack(): this effect's real
+		// dependencies are `mode` and `bulkThemeIdx`. Tracking the bulkStatus
+		// read here would make the effect depend on state it also writes,
+		// self-invalidating into effect_update_depth_exceeded.
 		bulkStatus = {
-			...bulkStatus,
+			...untrack(() => bulkStatus),
 			...Object.fromEntries(theme.items.map((it) => [it.key, 'running' as const]))
 		};
 		const finishes = theme.items.map((it, i) => ({

@@ -70,7 +70,7 @@ export function computeScores(sections: Section[], themes: Theme[]): ScoreResult
 
 	let verdict: Verdict;
 	if (humanItemsRemain) {
-		verdict = { key: 'draft', label: 'Pending Reviewer', reason: 'Awaiting human-judgement items' };
+		verdict = { key: 'draft', label: 'Pending review', reason: 'Awaiting human-judgement items' };
 	} else if (overall >= 85 && gatesPass) {
 		verdict = { key: 'approved', label: 'Approved', reason: 'Meets all requirements' };
 	} else if (overall >= 70 && gatesPass) {

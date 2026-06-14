@@ -3,7 +3,7 @@
 	// Port of the topbar block from the design's app.jsx.
 
 	import Icon from '../ui/Icon.svelte';
-	import { view, stage, resetReview } from '../lib/store';
+	import { view, stage, resetReview, canUseChecker } from '../lib/store';
 	import { POLICY_META } from '../lib/mocks';
 
 	function startNewReview() {
@@ -50,7 +50,7 @@
 			<span class="dot" aria-hidden="true"></span>
 			{syncLabel}
 		</span>
-		{#if $view === 'new-review' && $stage === 'review'}
+		{#if $canUseChecker && $view === 'new-review' && $stage === 'review'}
 			<button class="btn btn-sm" onclick={startNewReview} type="button">
 				<Icon name="refresh" size={12} /> New review
 			</button>

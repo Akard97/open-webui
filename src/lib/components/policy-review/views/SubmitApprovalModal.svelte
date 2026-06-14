@@ -1,60 +1,58 @@
 <script lang="ts">
-	// OE submission modal — collects a cover note and submits the review.
-	// Port of OEModal from the design's oe.jsx.
+	// Submit-for-approval modal — an OE reviewer hands the completed review to an
+	// OE approver, with an optional note. Internal to OE (maker-checker).
 
 	import Icon from '../ui/Icon.svelte';
 	import { POLICY_META } from '../lib/mocks';
-	import { oeModalOpen, submitToOE } from '../lib/store';
+	import { submitModalOpen, submitForApproval } from '../lib/store';
 
-	let note = $state(
-		'Submitting v1.3 of the Digital City Asset Disposal Policy for OE approval. Reviewer override notes attached.'
-	);
+	let note = $state('Reviewer override notes attached for the approver.');
 
 	function close() {
-		oeModalOpen.set(false);
+		submitModalOpen.set(false);
 	}
 
 	function submit() {
-		submitToOE(note);
+		submitForApproval(note);
 		close();
 	}
 </script>
 
 <div
 	class="modal-overlay"
-	class:open={$oeModalOpen}
+	class:open={$submitModalOpen}
 	onclick={close}
 	role="presentation"
 >
 	<div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
 		<div class="modal-head">
-			<h3>Send to Organizational Excellence</h3>
+			<h3>Submit for Approval</h3>
 			<p>
-				The OE department will receive the full PRP review with all reviewer overrides and decide
-				to approve, reject, or return for revision.
+				The OE approver will receive the full PRP review with all reviewer overrides and decide
+				to approve &amp; publish or reject.
 			</p>
 		</div>
 		<div class="modal-body">
 			<div class="editor-grid">
 				<div>
-					<label for="oe-note">Cover note (optional)</label>
-					<textarea id="oe-note" bind:value={note}></textarea>
+					<label for="approval-note">Note to approver (optional)</label>
+					<textarea id="approval-note" bind:value={note}></textarea>
 				</div>
 				<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
 					<div>
-						<label for="oe-reviewer">Reviewer</label>
+						<label for="approval-reviewer">Reviewer</label>
 						<input
-							id="oe-reviewer"
+							id="approval-reviewer"
 							value={POLICY_META.reviewer}
 							readonly
 							style="background:var(--bg-soft)"
 						/>
 					</div>
 					<div>
-						<label for="oe-recipient">Recipient</label>
+						<label for="approval-approver">Approver</label>
 						<input
-							id="oe-recipient"
-							value="OE Department — Policy Governance"
+							id="approval-approver"
+							value="Organizational Excellence — Approver"
 							readonly
 							style="background:var(--bg-soft)"
 						/>
@@ -65,7 +63,7 @@
 		<div class="modal-foot">
 			<button class="btn" onclick={close} type="button">Cancel</button>
 			<button class="btn btn-primary" onclick={submit} type="button">
-				<Icon name="send" size={13} /> Submit for approval
+				<Icon name="send" size={13} /> Submit for Approval
 			</button>
 		</div>
 	</div>

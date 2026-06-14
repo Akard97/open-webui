@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Top-level Policy Review composition. Mirrors app.jsx from the
 	// design handoff: ToolSidebar + Topbar + active view, plus the
-	// item drawer and OE submission modal as fixed overlays.
+	// item drawer and submit-for-approval modal as fixed overlays.
 
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import ToolSidebar from './chrome/ToolSidebar.svelte';
@@ -11,9 +11,13 @@
 	import ScanningView from './views/ScanningView.svelte';
 	import ReviewView from './views/ReviewView.svelte';
 	import ItemDrawer from './views/ItemDrawer.svelte';
-	import OEModal from './views/OEModal.svelte';
+	import SubmitApprovalModal from './views/SubmitApprovalModal.svelte';
 	import PolicyPopup from './views/PolicyPopup.svelte';
-	import { view, stage, sections, drawerOpen, picked } from './lib/store';
+	import { view, stage, sections, drawerOpen, picked, canUseChecker } from './lib/store';
+
+	// Users without checker access only get the Library; snap them back if a stale persisted
+	// view/stage would otherwise drop them into the checker workflow.
+	$: if (!$canUseChecker && $view !== 'all-policies') view.set('all-policies');
 
 	function handleKey(e: KeyboardEvent) {
 		const p = untrack(() => $picked);
@@ -60,6 +64,6 @@
 	</main>
 
 	<ItemDrawer />
-	<OEModal />
+	<SubmitApprovalModal />
 	<PolicyPopup />
 </div>
