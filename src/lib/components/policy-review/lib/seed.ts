@@ -1,5 +1,7 @@
-// Mocked PRP Master Checklist v2.0 data + Osool policy library snapshot.
-// Verbatim port of the PRP-2 design handoff (data.js + all-policies.jsx).
+// Seed data for the Policy Review tool: the hand-authored PRP Master Checklist
+// v2.0 (RAW_SECTIONS, with inline mock answers) + the Osool policy library
+// snapshot, plus builders that derive the versioned checklist DEFINITION
+// (buildActiveVersion) and the seeded REVIEWS (buildSeedReviews) from it.
 // Used by every view until the real backend ships.
 
 import type {
@@ -1199,7 +1201,7 @@ function defItem(raw: RawItem, sectionId: string): ChecklistItemDef {
 	return {
 		id: `${sectionId}-${raw.n}`,
 		n: raw.n,
-		text: raw.text.replace(' [H]', '').trim(),
+		text: raw.text.replace(/\s*\[H\]\s*$/, '').trim(),
 		codes: raw.code,
 		assessment: raw.result === 'human' ? 'human' : 'auto'
 	};
