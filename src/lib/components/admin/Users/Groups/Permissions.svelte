@@ -998,6 +998,28 @@
 		</div>
 
 		<div class="flex flex-col w-full">
+			<Tooltip
+				className="flex w-full justify-between my-1"
+				content={$i18n.t(
+					'Allows members of this group to manage the Policy Review checklist, scoring, and standards in the tool admin page.'
+				)}
+				placement="top-start"
+			>
+				<div class=" self-center text-xs font-medium">
+					{$i18n.t('Policy Admin')}
+				</div>
+				<Switch bind:state={permissions.features.policy_admin} />
+			</Tooltip>
+			{#if defaultPermissions?.features?.policy_admin && !permissions.features.policy_admin}
+				<div>
+					<div class="text-xs text-gray-500">
+						{$i18n.t('This is a default user permission and will remain enabled.')}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<div class="flex flex-col w-full">
 			<div class="flex w-full justify-between my-1">
 				<div class=" self-center text-xs font-medium">
 					{$i18n.t('Calendar')}
