@@ -8,7 +8,7 @@ describe('buildActiveVersion', () => {
 		expect(v.themes).toHaveLength(6);
 		const items = v.sections.flatMap((s) => s.items);
 		expect(items).toHaveLength(70);
-		expect((items[0] as Record<string, unknown>).result).toBeUndefined();
+		expect((items[0] as unknown as Record<string, unknown>).result).toBeUndefined();
 	});
 
 	it('flags [H] items as human assessment and strips the suffix', () => {

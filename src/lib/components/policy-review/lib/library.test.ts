@@ -8,7 +8,7 @@ import {
 	closePolicyPopup
 } from './store';
 import { isFresh, filterPolicies, groupByFunctionDesc, recentlyUpdated } from './library';
-import { POLICIES, FN_META } from './mocks';
+import { POLICIES, FN_META } from './seed';
 
 describe('LibraryPolicy extension', () => {
 	it('accepts the new optional library fields', () => {
