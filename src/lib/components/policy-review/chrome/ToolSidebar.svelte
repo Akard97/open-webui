@@ -1,22 +1,20 @@
 <script lang="ts">
-	// Policy Review tool's own internal sidebar. Lives between OWUI's global
-	// rail (selects which tool) and the tool's main canvas. Port of
-	// sidebar.jsx from the PRP-2 design handoff.
-	//
-	// Reads the OWUI `user` store so the avatar + role line are consistent
-	// across the Hub. Falls back to design placeholders if the user store is
-	// not yet hydrated (e.g. during SSR).
+	// Lean, role-aware tool sidebar. Every visible item routes to a working view.
+	// The Admin entry is intentionally absent — it ships with the admin page (Plan 3).
 
 	import Icon from '../ui/Icon.svelte';
-	import { view, resetReview, canUseChecker, canApprove } from '../lib/store';
+	import {
+		view,
+		canUseChecker,
+		canApprove,
+		myReviews,
+		approvalQueue,
+		goNewReview
+	} from '../lib/store';
 	import { user } from '$lib/stores';
 	import { policyRoleLabel } from '../lib/roles';
 
-	function go(target: 'all-policies' | 'new-review') {
-		if (target === 'new-review') {
-			// Starting a new review resets stage to upload + clears in-flight data.
-			resetReview();
-		}
+	function go(target: 'overview' | 'library' | 'my-reviews' | 'approvals') {
 		view.set(target);
 	}
 
@@ -29,7 +27,6 @@
 			.join('')
 			.toUpperCase();
 	}
-
 </script>
 
 <aside class="sidebar">
@@ -44,58 +41,51 @@
 	</div>
 
 	<div class="sb-section">
-		{#if $canUseChecker}
+		<button class="sb-link" class:active={$view === 'overview'} onclick={() => go('overview')} type="button">
+			<Icon name="grid" size={15} /> Overview
+		</button>
+		<button class="sb-link" class:active={$view === 'library'} onclick={() => go('library')} type="button">
+			<Icon name="book" size={15} /> Policy library
+		</button>
+	</div>
+
+	{#if $canUseChecker}
+		<div class="sb-heading">Reviewing</div>
+		<div class="sb-section" style="padding-top: 0">
 			<button
 				class="sb-link"
 				class:active={$view === 'new-review'}
-				onclick={() => go('new-review')}
+				onclick={goNewReview}
 				type="button"
 			>
-				<Icon name="fileText" size={15} /> New Review
+				<Icon name="fileText" size={15} /> New review
 			</button>
-		{/if}
-		<button class="sb-link" type="button">
-			<Icon name="search" size={15} /> Search policies
-		</button>
-	</div>
+			<button
+				class="sb-link"
+				class:active={$view === 'my-reviews'}
+				onclick={() => go('my-reviews')}
+				type="button"
+			>
+				<Icon name="refresh" size={15} /> My reviews
+				{#if $myReviews.length}<span class="sb-count">{$myReviews.length}</span>{/if}
+			</button>
+		</div>
+	{/if}
 
-	<div class="sb-heading">Workspace</div>
-	<div class="sb-section" style="padding-top: 0">
-		<button class="sb-link" type="button">
-			<Icon name="grid" size={15} /> Dashboard
-		</button>
-		<button
-			class="sb-link"
-			class:active={$view === 'all-policies'}
-			onclick={() => go('all-policies')}
-			type="button"
-		>
-			<Icon name="book" size={15} /> All Policies <span class="sb-count">142</span>
-		</button>
-		<button class="sb-link" type="button">
-			<Icon name="refresh" size={15} /> In Review <span class="sb-count">7</span>
-		</button>
-		{#if $canApprove}
-			<button class="sb-link" type="button">
-				<Icon name="check" size={15} /> Approvals
-				<span class="sb-count sb-count-accent">3</span>
+	{#if $canApprove}
+		<div class="sb-heading">Approvals</div>
+		<div class="sb-section" style="padding-top: 0">
+			<button
+				class="sb-link"
+				class:active={$view === 'approvals'}
+				onclick={() => go('approvals')}
+				type="button"
+			>
+				<Icon name="check" size={15} /> Approval queue
+				{#if $approvalQueue.length}<span class="sb-count sb-count-accent">{$approvalQueue.length}</span>{/if}
 			</button>
-		{/if}
-		{#if $canUseChecker}
-			<button class="sb-link" type="button">
-				<Icon name="shield" size={15} /> Compliance Checker
-			</button>
-			<button class="sb-link" type="button">
-				<Icon name="alert" size={15} /> Exceptions
-			</button>
-		{/if}
-	</div>
-
-	<div class="sb-foot-links">
-		<button class="sb-link" type="button"><Icon name="folder" size={15} /> Templates</button>
-		<button class="sb-link" type="button"><Icon name="clock" size={15} /> Audit log</button>
-		<button class="sb-link" type="button"><Icon name="sliders" size={15} /> Settings</button>
-	</div>
+		</div>
+	{/if}
 
 	<div class="sb-bottom">
 		{#if $user?.profile_image_url}
@@ -113,7 +103,6 @@
 </aside>
 
 <style>
-	/* Make sb-link buttons match the design's div-based version. */
 	.sb-link {
 		background: none;
 		border: 0;
