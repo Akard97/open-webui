@@ -3,8 +3,10 @@
 	// Port of the topbar block from the design's app.jsx.
 
 	import Icon from '../ui/Icon.svelte';
-	import { view, stage, resetReview, canUseChecker } from '../lib/store';
+	import { view, stage, resetReview, canUseChecker, activeReview } from '../lib/store';
 	import { POLICY_META } from '../lib/seed';
+
+	let meta = $derived($activeReview?.policyMeta ?? POLICY_META);
 
 	function startNewReview() {
 		resetReview();
@@ -26,7 +28,7 @@
 			{:else if $stage === 'upload'}
 				Policy Review
 			{:else}
-				{POLICY_META.name}
+				{meta.name}
 			{/if}
 		</span>
 	</div>

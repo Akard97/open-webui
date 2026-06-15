@@ -3,9 +3,9 @@
 	// See docs/superpowers/specs/2026-05-21-all-policies-redesign-design.md.
 
 	import { onMount } from 'svelte';
-	import { POLICIES, FN_META, TODAY } from '../lib/seed';
+	import { FN_META, TODAY } from '../lib/seed';
 	import type { LibraryPolicy } from '../lib/types';
-	import { openPolicyPopup } from '../lib/store';
+	import { openPolicyPopup, publishedPolicies } from '../lib/store';
 	import {
 		isFresh,
 		filterPolicies,
@@ -26,15 +26,15 @@
 	});
 
 	// Library universe = approved policies only
-	const approvedAll: LibraryPolicy[] = POLICIES.filter((p) => p.status === 'approved');
+	let approvedAll = $derived($publishedPolicies.filter((p) => p.status === 'approved'));
 
 	const filtered = $derived(filterPolicies(approvedAll, { query, fn }));
 	const groups = $derived(groupByFunctionDesc(filtered, FN_META));
 	const recent = $derived(recentlyUpdated(approvedAll, 4, 30));
 
-	const totalApproved = approvedAll.length;
+	let totalApproved = $derived(approvedAll.length);
 	const totalFunctions = Object.keys(FN_META).length;
-	const updatedThisMonth = approvedAll.filter((p) => (p.updatedDays ?? 9999) <= 30).length;
+	let updatedThisMonth = $derived(approvedAll.filter((p) => (p.updatedDays ?? 9999) <= 30).length);
 
 	const fmtUpdated = (d: number | null | undefined): string => {
 		if (d == null) return '—';

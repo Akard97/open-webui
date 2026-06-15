@@ -8,7 +8,7 @@
 	import { get } from 'svelte/store';
 	import Icon from '../ui/Icon.svelte';
 	import type { ItemVerdict } from '../lib/types';
-	import { stage, activeVersion, activeReview } from '../lib/store';
+	import { stage, view, activeVersion, activeReview } from '../lib/store';
 
 	const version = get(activeVersion);
 	const review = get(activeReview);
@@ -72,6 +72,7 @@
 
 	function done() {
 		stage.set('review');
+		view.set('review');
 	}
 
 	// Reset whenever mode/runKey changes.

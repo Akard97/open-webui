@@ -7,7 +7,7 @@
 	// will own that when it lands.
 
 	import Icon from '../ui/Icon.svelte';
-	import { stage } from '../lib/store';
+	import { stage, activeVersion } from '../lib/store';
 
 	let dragging = $state(false);
 
@@ -15,15 +15,19 @@
 		stage.set('scanning');
 	}
 
-	const themes = [
-		{ id: 'GOV', name: 'Governance & Ownership', count: 14, gate: false, hue: 200 },
-		{ id: 'SCO', name: 'Scope & Applicability', count: 9, gate: true, hue: 30 },
-		{ id: 'PRO', name: 'Procedural Clarity', count: 16, gate: false, hue: 165 },
-		{ id: 'CTR', name: 'Controls & Approvals', count: 12, gate: true, hue: 0 },
-		{ id: 'RSK', name: 'Risk & Compliance', count: 11, gate: false, hue: 280 },
-		{ id: 'REV', name: 'Revision & Lifecycle', count: 8, gate: false, hue: 130 }
-	];
-	const total = themes.reduce((a, t) => a + t.count, 0);
+	const HUES = [200, 30, 165, 0, 280, 130];
+	let themes = $derived(
+		($activeVersion?.themes ?? []).map((t, i) => ({
+			id: t.id,
+			name: t.name,
+			count: ($activeVersion?.sections ?? [])
+				.filter((s) => s.theme === t.id)
+				.reduce((a, s) => a + s.items.length, 0),
+			gate: t.gate,
+			hue: HUES[i % HUES.length]
+		}))
+	);
+	let total = $derived(themes.reduce((a, t) => a + t.count, 0));
 
 	function onDragOver(e: DragEvent) {
 		e.preventDefault();

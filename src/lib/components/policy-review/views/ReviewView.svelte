@@ -56,6 +56,8 @@
 		sectionsList.reduce((a, sec) => a + sec.items.length, 0)
 	);
 
+	let openCount = $derived((counts.human || 0) + (counts.pending || 0));
+
 	// Top gaps: non-compliant items, T1/T2 first.
 	let topGaps = $derived.by(() => {
 		const gaps: { ref: string; title: string; theme: string; comment?: string }[] = [];
@@ -353,9 +355,9 @@
 							{approval?.status === 'pending' ? 'Submitted for approval' : 'Submit for Approval'}
 						</button>
 					{/if}
-					{#if scoreResult.humanItemsRemain}
+					{#if openCount > 0}
 						<div style="font-size:11.5px; color:var(--ink-500); text-align:center">
-							Resolve {counts.human} human-review item{counts.human === 1 ? '' : 's'} before submitting for approval
+							Resolve {openCount} open item{openCount === 1 ? '' : 's'} before submitting for approval
 						</div>
 					{/if}
 				</div>
