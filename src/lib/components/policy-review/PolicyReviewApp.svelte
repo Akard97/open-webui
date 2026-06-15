@@ -10,14 +10,28 @@
 	import UploadView from './views/UploadView.svelte';
 	import ScanningView from './views/ScanningView.svelte';
 	import ReviewView from './views/ReviewView.svelte';
+	import OverviewView from './views/OverviewView.svelte';
+	import MyReviewsView from './views/MyReviewsView.svelte';
+	import ApprovalQueueView from './views/ApprovalQueueView.svelte';
 	import ItemDrawer from './views/ItemDrawer.svelte';
 	import SubmitApprovalModal from './views/SubmitApprovalModal.svelte';
 	import PolicyPopup from './views/PolicyPopup.svelte';
-	import { view, stage, activeVersion, drawerOpen, picked, canUseChecker } from './lib/store';
+	import {
+		view,
+		stage,
+		activeVersion,
+		activeReview,
+		drawerOpen,
+		picked,
+		canUseChecker,
+		canApprove
+	} from './lib/store';
 
-	// Users without checker access only get the Library; snap them back if a stale persisted
-	// view/stage would otherwise drop them into the checker workflow.
-	$: if (!$canUseChecker && $view !== 'all-policies') view.set('all-policies');
+	// Snap users away from views their permissions don't allow, or a review view
+	// with nothing selected. Library + Overview are open to everyone.
+	$: if (($view === 'new-review' || $view === 'my-reviews') && !$canUseChecker) view.set('overview');
+	$: if ($view === 'approvals' && !$canApprove) view.set('overview');
+	$: if ($view === 'review' && !$activeReview) view.set('overview');
 
 	function handleKey(e: KeyboardEvent) {
 		const p = untrack(() => $picked);
@@ -51,12 +65,20 @@
 	<main class="main">
 		<Topbar />
 		<div class="canvas">
-			{#if $view === 'all-policies'}
+			{#if $view === 'overview'}
+				<OverviewView />
+			{:else if $view === 'library'}
 				<AllPoliciesView />
-			{:else if $stage === 'upload'}
-				<UploadView />
-			{:else if $stage === 'scanning'}
-				<ScanningView />
+			{:else if $view === 'my-reviews'}
+				<MyReviewsView />
+			{:else if $view === 'approvals'}
+				<ApprovalQueueView />
+			{:else if $view === 'new-review'}
+				{#if $stage === 'upload'}
+					<UploadView />
+				{:else}
+					<ScanningView />
+				{/if}
 			{:else}
 				<ReviewView />
 			{/if}

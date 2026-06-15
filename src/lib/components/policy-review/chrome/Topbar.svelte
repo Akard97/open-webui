@@ -21,7 +21,7 @@
 		<span class="crumb">Osool AI</span>
 		<Icon name="chevR" size={12} />
 		<span class="name">
-			{#if $view === 'all-policies'}
+			{#if $view === 'library'}
 				All policies
 			{:else if $stage === 'upload'}
 				Policy Review
