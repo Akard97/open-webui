@@ -121,7 +121,7 @@
 	.ct-tid { font-family: var(--mono); font-size: 12px; color: var(--ink-500); }
 	.ct-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500; border: 1px solid transparent; border-radius: 6px; padding: 3px 6px; background: none; }
 	.ct-name:focus { border-color: var(--ink-200); background: #fff; outline: none; }
-	.ct-gate { font-size: 10px; color: var(--bad); background: var(--primary-50); padding: 2px 6px; border-radius: 5px; }
+	.ct-gate { font-size: 10px; color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); padding: 2px 6px; border-radius: 5px; }
 	.ct-meta { font-size: 11.5px; color: var(--ink-400); }
 	.ct-del { background: none; border: 0; color: var(--ink-400); cursor: pointer; display: flex; padding: 3px; }
 	.ct-del:hover { color: var(--bad); }
