@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.internal.db import get_async_session
+from open_webui.utils.auth import get_verified_user
+from open_webui.utils.access_control import has_permission
+from open_webui.utils.policy_review.scoring import compute_scores
 from open_webui.models.policy_review import (
     PolicyChecklistVersions,
     PolicyReviews,
@@ -19,36 +22,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ──────────────────────────── lazy auth / access helpers ────────────────────
-# Deferred so importing this module does NOT trigger open_webui.config at
-# collection time (config queries the DB synchronously; test DBs may not have
-# that table yet).  Tests monkeypatch `has_permission` and override
-# `get_verified_user` on the dependency directly.
-
-
-async def get_verified_user(request: Request = None):  # pragma: no cover
-    """Thin async shim — resolved lazily so tests can override via dependency_overrides."""
-    from open_webui.utils.auth import get_verified_user as _real
-    # This function is never actually called in production: FastAPI resolves
-    # `get_verified_user` from open_webui.utils.auth directly via the app-level
-    # wiring in main.py.  In tests, dependency_overrides replaces this exact
-    # function object, so the body never executes in tests either.
-    return await _real(request)  # type: ignore[arg-type]
-
-
-async def has_permission(user_id, key, user_permissions, db=None):
-    """Thin async shim — resolved lazily; monkeypatched by tests."""
-    from open_webui.utils.access_control import has_permission as _hp
-    return await _hp(user_id, key, user_permissions, db=db)
-
-
-async def _compute_scores(*args, **kwargs):
-    """Thin shim for compute_scores — resolved lazily."""
-    from open_webui.utils.policy_review.scoring import compute_scores as _fn
-    return _fn(*args, **kwargs)
-
-
-# ──────────────────────────── permission guard ────────────────────────────
+# ──────────────────────────── helpers ────────────────────────────
 
 
 async def _require(request: Request, user, key: str, db: AsyncSession) -> None:
@@ -68,9 +42,7 @@ class ChecklistDataForm(BaseModel):
 
 @router.get('/checklist/active')
 async def get_active_checklist(
-    request: Request,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     active = await PolicyChecklistVersions.get_active(db=db)
     if not active:
@@ -80,9 +52,7 @@ async def get_active_checklist(
 
 @router.get('/checklist/versions')
 async def list_checklist_versions(
-    request: Request,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     return await PolicyChecklistVersions.list_versions(db=db)
@@ -90,10 +60,7 @@ async def list_checklist_versions(
 
 @router.get('/checklist/versions/{version_id}')
 async def get_checklist_version(
-    request: Request,
-    version_id: str,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, version_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     version = await PolicyChecklistVersions.get_by_id(version_id, db=db)
@@ -104,9 +71,7 @@ async def get_checklist_version(
 
 @router.get('/checklist/draft')
 async def get_checklist_draft(
-    request: Request,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     return await PolicyChecklistVersions.get_draft(db=db)
@@ -114,9 +79,7 @@ async def get_checklist_draft(
 
 @router.post('/checklist/draft')
 async def start_checklist_draft(
-    request: Request,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     draft = await PolicyChecklistVersions.start_draft(db=db)
@@ -127,10 +90,7 @@ async def start_checklist_draft(
 
 @router.put('/checklist/draft')
 async def save_checklist_draft(
-    request: Request,
-    form: ChecklistDataForm,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, form: ChecklistDataForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     saved = await PolicyChecklistVersions.save_draft(form.data, db=db)
@@ -141,9 +101,7 @@ async def save_checklist_draft(
 
 @router.delete('/checklist/draft')
 async def discard_checklist_draft(
-    request: Request,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     await PolicyChecklistVersions.discard_draft(db=db)
@@ -172,9 +130,7 @@ def _validate_checklist_data(data: dict) -> list[str]:
 
 @router.post('/checklist/draft/publish')
 async def publish_checklist_draft(
-    request: Request,
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require(request, user, 'policy_admin', db)
     draft = await PolicyChecklistVersions.get_draft(db=db)

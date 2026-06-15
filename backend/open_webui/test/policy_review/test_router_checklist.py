@@ -7,7 +7,7 @@ from httpx import ASGITransport
 from fastapi import FastAPI
 
 import open_webui.routers.policy_review as pr_router
-from open_webui.routers.policy_review import get_verified_user
+from open_webui.utils.auth import get_verified_user
 from open_webui.models.policy_review import PolicyChecklistVersions
 
 ACTIVE_DATA = {'changeSummary': 'init', 'themes': [{'id': 'T1', 'name': 'T1', 'weight': 100, 'gate': True, 'threshold': 85}], 'sections': [{'id': 'S1', 'theme': 'T1', 'items': [{'id': 'S1-1'}]}], 'verdictBands': {'approved': 85, 'conditional': 70}, 'standards': []}
