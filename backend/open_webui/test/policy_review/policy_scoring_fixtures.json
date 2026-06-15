@@ -1,0 +1,78 @@
+[
+  {
+    "name": "approved",
+    "definition": {
+      "themes": [
+        {"id": "T1", "name": "T1", "weight": 50, "gate": true, "threshold": 85},
+        {"id": "T2", "name": "T2", "weight": 50, "gate": false, "threshold": 85}
+      ],
+      "sections": [
+        {"id": "S1", "theme": "T1", "items": [{"id": "S1-1"}, {"id": "S1-2"}]},
+        {"id": "S2", "theme": "T2", "items": [{"id": "S2-1"}, {"id": "S2-2"}]}
+      ],
+      "verdictBands": {"approved": 85, "conditional": 70}
+    },
+    "results": {
+      "S1-1": {"result": "compliant"}, "S1-2": {"result": "compliant"},
+      "S2-1": {"result": "compliant"}, "S2-2": {"result": "compliant"}
+    },
+    "expected": {"overall": 100, "gatesPass": true, "humanItemsRemain": false, "verdictKey": "approved"}
+  },
+  {
+    "name": "gate-fail-rejected",
+    "definition": {
+      "themes": [
+        {"id": "T1", "name": "T1", "weight": 50, "gate": true, "threshold": 85},
+        {"id": "T2", "name": "T2", "weight": 50, "gate": false, "threshold": 85}
+      ],
+      "sections": [
+        {"id": "S1", "theme": "T1", "items": [{"id": "S1-1"}, {"id": "S1-2"}]},
+        {"id": "S2", "theme": "T2", "items": [{"id": "S2-1"}, {"id": "S2-2"}]}
+      ],
+      "verdictBands": {"approved": 85, "conditional": 70}
+    },
+    "results": {
+      "S1-1": {"result": "compliant"}, "S1-2": {"result": "non-compliant"},
+      "S2-1": {"result": "compliant"}, "S2-2": {"result": "compliant"}
+    },
+    "expected": {"overall": 75, "gatesPass": false, "humanItemsRemain": false, "verdictKey": "rejected"}
+  },
+  {
+    "name": "human-remains-draft",
+    "definition": {
+      "themes": [
+        {"id": "T1", "name": "T1", "weight": 50, "gate": true, "threshold": 85},
+        {"id": "T2", "name": "T2", "weight": 50, "gate": false, "threshold": 85}
+      ],
+      "sections": [
+        {"id": "S1", "theme": "T1", "items": [{"id": "S1-1"}, {"id": "S1-2"}]},
+        {"id": "S2", "theme": "T2", "items": [{"id": "S2-1"}, {"id": "S2-2"}]}
+      ],
+      "verdictBands": {"approved": 85, "conditional": 70}
+    },
+    "results": {
+      "S1-1": {"result": "compliant"}, "S1-2": {"result": "human"},
+      "S2-1": {"result": "compliant"}, "S2-2": {"result": "pending"}
+    },
+    "expected": {"overall": 100, "gatesPass": true, "humanItemsRemain": true, "verdictKey": "draft"}
+  },
+  {
+    "name": "conditional",
+    "definition": {
+      "themes": [
+        {"id": "T1", "name": "T1", "weight": 50, "gate": true, "threshold": 70},
+        {"id": "T2", "name": "T2", "weight": 50, "gate": false, "threshold": 85}
+      ],
+      "sections": [
+        {"id": "S1", "theme": "T1", "items": [{"id": "S1-1"}, {"id": "S1-2"}, {"id": "S1-3"}, {"id": "S1-4"}]},
+        {"id": "S2", "theme": "T2", "items": [{"id": "S2-1"}, {"id": "S2-2"}, {"id": "S2-3"}, {"id": "S2-4"}]}
+      ],
+      "verdictBands": {"approved": 85, "conditional": 70}
+    },
+    "results": {
+      "S1-1": {"result": "compliant"}, "S1-2": {"result": "compliant"}, "S1-3": {"result": "compliant"}, "S1-4": {"result": "non-compliant"},
+      "S2-1": {"result": "compliant"}, "S2-2": {"result": "compliant"}, "S2-3": {"result": "compliant"}, "S2-4": {"result": "non-compliant"}
+    },
+    "expected": {"overall": 75, "gatesPass": true, "humanItemsRemain": false, "verdictKey": "conditional"}
+  }
+]
