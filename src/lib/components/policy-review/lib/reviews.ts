@@ -17,6 +17,8 @@ export function versionFor(
 	review: Review,
 	versions: ChecklistVersion[]
 ): ChecklistVersion | undefined {
+	// Prefer the review's own pinned snapshot — never re-grade against a newer active version.
+	if (review.checklistSnapshot) return review.checklistSnapshot;
 	return (
 		versions.find((v) => v.id === review.checklistVersionId) ??
 		versions.find((v) => v.status === 'active') ??

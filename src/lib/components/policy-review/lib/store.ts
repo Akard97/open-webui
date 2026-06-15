@@ -1,15 +1,8 @@
-// Writable stores backing the Policy Review tool.
-// Two aggregate roots: the versioned checklist definition and per-policy reviews.
-// localStorage persistence keeps in-flight work across refreshes.
+// API-backed stores for the Policy Review tool (Phase 1 backend).
+// Public store/mutator names are unchanged so views need no edits.
 
 import { writable, get, derived, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import {
-	buildActiveVersion,
-	buildSeedReviews,
-	POLICIES
-} from './seed';
-import { cloneAsDraft, publishDraft as publishDraftPure, validateDraft } from './checklist';
 import type {
 	ChecklistVersion,
 	ItemResult,
@@ -19,279 +12,170 @@ import type {
 	ViewKey
 } from './types';
 import { user } from '$lib/stores';
+import * as api from './api';
 
-const STORAGE_KEY = 'osool.policyReview.v3';
-
-interface PersistedState {
-	versions: ChecklistVersion[];
-	draft: ChecklistVersion | null;
-	reviews: Review[];
-	activeReviewId: string | null;
-	stage: Stage;
-	view: ViewKey;
+function token(): string {
+	return browser ? localStorage.token : '';
 }
 
-function freshInitial(): PersistedState {
-	const reviews = buildSeedReviews();
+// Map a backend review (snake_case + snapshot) to the frontend Review shape.
+function mapReview(r: any): Review {
 	return {
-		versions: [buildActiveVersion()],
-		draft: null,
-		reviews,
-		activeReviewId: reviews[0]?.id ?? null,
-		stage: 'review',
-		view: 'overview'
+		id: r.id,
+		policyMeta: r.policy_meta,
+		checklistVersionId: r.checklist_version_id,
+		checklistSnapshot: r.checklist_snapshot
+			? ({ ...r.checklist_snapshot, id: r.checklist_version_id, status: 'archived' } as ChecklistVersion)
+			: undefined,
+		results: r.results ?? {},
+		status: r.status,
+		approval: r.approval ?? { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
+		strengths: r.strengths ?? [],
+		createdBy: r.created_by_name,
+		createdAt: r.created_at ? String(r.created_at) : ''
 	};
 }
 
-function loadInitial(): PersistedState {
-	if (!browser) return freshInitial();
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (raw) {
-			const parsed = JSON.parse(raw) as Partial<PersistedState>;
-			const fresh = freshInitial();
-			return {
-				versions: parsed.versions ?? fresh.versions,
-				draft: parsed.draft ?? null,
-				reviews: parsed.reviews ?? fresh.reviews,
-				activeReviewId: parsed.activeReviewId ?? fresh.activeReviewId,
-				stage: parsed.stage ?? 'review',
-				view: (
-					['overview', 'library', 'new-review', 'my-reviews', 'approvals', 'review', 'admin'] as const
-				).includes(parsed.view as ViewKey)
-					? (parsed.view as ViewKey)
-					: 'overview',
-			};
-		}
-	} catch {
-		// Corrupt storage — fall back to fresh state.
-	}
-	return freshInitial();
+function mapVersion(v: any): ChecklistVersion {
+	const d = v.data ?? {};
+	return {
+		id: v.id,
+		label: v.label,
+		status: v.status,
+		publishedAt: v.published_at ? String(v.published_at) : null,
+		publishedBy: v.published_by_name ?? null,
+		changeSummary: d.changeSummary ?? '',
+		themes: d.themes ?? [],
+		sections: d.sections ?? [],
+		verdictBands: d.verdictBands ?? { approved: 85, conditional: 70 },
+		standards: d.standards ?? []
+	};
 }
 
-const initial = loadInitial();
+// ── Stores ──
+export const checklistVersions: Writable<ChecklistVersion[]> = writable([]);
+export const checklistDraft: Writable<ChecklistVersion | null> = writable(null);
+export const reviews: Writable<Review[]> = writable([]);
+export const activeReviewId: Writable<string | null> = writable(null);
+export const stage: Writable<Stage> = writable('upload');
+export const view: Writable<ViewKey> = writable('overview');
+export const libraryEntries: Writable<LibraryPolicy[]> = writable([]);
 
-export const checklistVersions: Writable<ChecklistVersion[]> = writable(initial.versions);
-export const checklistDraft: Writable<ChecklistVersion | null> = writable(initial.draft);
-export const reviews: Writable<Review[]> = writable(initial.reviews);
-export const activeReviewId: Writable<string | null> = writable(initial.activeReviewId);
-export const stage: Writable<Stage> = writable(initial.stage);
-export const view: Writable<ViewKey> = writable(initial.view);
-
-// ─── Derived: checklist + reviews ──────────────────────────────────────────
-
-export const activeVersion = derived(checklistVersions, ($v) => {
-	return $v.find((x) => x.status === 'active') ?? $v[0];
-});
-
-export const activeReview = derived([reviews, activeReviewId], ([$r, $id]) =>
-	$r.find((x) => x.id === $id) ?? null
-);
-
+// ── Derived ──
+export const activeVersion = derived(checklistVersions, ($v) => $v.find((x) => x.status === 'active') ?? $v[0]);
+export const activeReview = derived([reviews, activeReviewId], ([$r, $id]) => $r.find((x) => x.id === $id) ?? null);
 export const approvalQueue = derived(reviews, ($r) => $r.filter((x) => x.status === 'pending'));
+export const myReviews = derived([reviews, user], ([$r, $u]) => $r.filter((x) => x.createdBy === ($u?.name ?? '')));
+export const publishedPolicies = derived(libraryEntries, ($l) => $l);
 
-export const myReviews = derived([reviews, user], ([$r, $u]) =>
-	$r.filter((x) => x.createdBy === ($u?.name ?? ''))
-);
+// ── Access gates (unchanged) ──
+export const canUseChecker = derived(user, ($u) => $u?.role === 'admin' || ($u?.permissions?.features?.policy_checker ?? false));
+export const canApprove = derived(user, ($u) => $u?.role === 'admin' || ($u?.permissions?.features?.policy_approver ?? false));
+export const canAdmin = derived(user, ($u) => $u?.role === 'admin' || ($u?.permissions?.features?.policy_admin ?? false));
 
-// Published canon = seeded library + any review that reached approved.
-export const publishedPolicies = derived(reviews, ($r): LibraryPolicy[] => {
-	const approvedCodes = new Set($r.filter((x) => x.status === 'approved').map((x) => x.policyMeta.code));
-	const extra: LibraryPolicy[] = $r
-		.filter((x) => x.status === 'approved' && !POLICIES.some((p) => p.code === x.policyMeta.code))
-		.map((x) => ({
-			code: x.policyMeta.code,
-			title: x.policyMeta.name,
-			fn: x.policyMeta.code.split('-')[1] ?? 'GOV',
-			owner: x.policyMeta.owner,
-			version: x.policyMeta.version.replace(/^v/, ''),
-			status: 'approved',
-			score: null,
-			pages: x.policyMeta.pages,
-			nextReview: '—',
-			updatedDays: 0
-		}));
-	const merged = POLICIES.map((p) =>
-		approvedCodes.has(p.code) ? { ...p, status: 'approved' as const } : p
-	);
-	return [...merged, ...extra];
-});
-
-// ─── Access gates ──────────────────────────────────────────────────────────
-
-export const canUseChecker = derived(
-	user,
-	($u) => $u?.role === 'admin' || ($u?.permissions?.features?.policy_checker ?? false)
-);
-
-export const canApprove = derived(
-	user,
-	($u) => $u?.role === 'admin' || ($u?.permissions?.features?.policy_approver ?? false)
-);
-
-export const canAdmin = derived(
-	user,
-	($u) => $u?.role === 'admin' || ($u?.permissions?.features?.policy_admin ?? false)
-);
-
-// ─── Transient UI (not persisted) ──────────────────────────────────────────
-
+// ── Transient UI (not persisted) ──
 export const picked: Writable<{ sectionId: string; n: number } | null> = writable(null);
 export const drawerOpen: Writable<boolean> = writable(false);
 export const submitModalOpen: Writable<boolean> = writable(false);
 export const policyPopupOpen: Writable<boolean> = writable(false);
 export const selectedPolicy: Writable<LibraryPolicy | null> = writable(null);
 
-if (browser) {
-	const persist = () => {
-		const snapshot: PersistedState = {
-			versions: get(checklistVersions),
-			draft: get(checklistDraft),
-			reviews: get(reviews),
-			activeReviewId: get(activeReviewId),
-			stage: get(stage),
-			view: get(view)
-		};
-		try {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-		} catch {
-			// Quota errors etc. are non-fatal.
-		}
-	};
-	checklistVersions.subscribe(persist);
-	checklistDraft.subscribe(persist);
-	reviews.subscribe(persist);
-	activeReviewId.subscribe(persist);
-	stage.subscribe(persist);
-	view.subscribe(persist);
+// ── Loaders ──
+export async function loadChecklist(): Promise<void> {
+	const active = await api.getActiveChecklist(token());
+	checklistVersions.set([mapVersion(active)]);
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function stamp(): string {
-	return new Date().toLocaleString('en-GB', {
-		day: '2-digit',
-		month: 'short',
-		hour: '2-digit',
-		minute: '2-digit'
-	});
+export async function loadReviews(): Promise<void> {
+	const mine = (await api.getMyReviews(token()).catch(() => [])) ?? [];
+	let queue: any[] = [];
+	if (get(canApprove)) queue = (await api.getApprovalQueue(token()).catch(() => [])) ?? [];
+	const byId = new Map<string, Review>();
+	[...mine, ...queue].forEach((r) => byId.set(r.id, mapReview(r)));
+	reviews.set([...byId.values()]);
 }
 
-function patchReview(reviewId: string, fn: (r: Review) => Review): void {
-	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? fn(r) : r)));
+export async function loadLibrary(): Promise<void> {
+	const entries = (await api.getLibrary(token()).catch(() => [])) ?? [];
+	libraryEntries.set(entries.map((e: any) => e.data as LibraryPolicy));
 }
 
-// ─── Review mutators ─────────────────────────────────────────────────────────
+export async function loadAll(): Promise<void> {
+	await Promise.all([loadChecklist(), loadLibrary()]);
+	if (get(canUseChecker) || get(canApprove)) await loadReviews();
+}
 
-export function updateItemResult(reviewId: string, itemId: string, patch: Partial<ItemResult>): void {
-	patchReview(reviewId, (r) => ({
-		...r,
-		results: {
-			...r.results,
-			[itemId]: { ...(r.results[itemId] ?? { result: 'pending' }), ...patch }
-		}
-	}));
+// ── Review mutators ──
+export async function updateItemResult(reviewId: string, itemId: string, patch: Partial<ItemResult>): Promise<void> {
+	const updated = mapReview(await api.updateResultsApi(token(), reviewId, { [itemId]: patch }));
+	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
 }
 
 export function markReviewed(reviewId: string, itemId: string): void {
-	updateItemResult(reviewId, itemId, { reviewed: true, confidence: 0.99 });
+	void updateItemResult(reviewId, itemId, { reviewed: true, confidence: 0.99 });
 }
 
-// Reset the active review back to a fresh draft of the seeded "active" review.
-// (Plan 2 replaces this with real createReview() from an upload.)
-export function resetReview(): void {
-	const seeded = buildSeedReviews();
-	const me = get(user)?.name;
-	const fresh = me ? { ...seeded[0], createdBy: me } : seeded[0];
-	reviews.update((arr) => arr.map((r) => (r.id === 'rev-active' ? fresh : r)));
-	activeReviewId.set('rev-active');
-	stage.set('upload');
-}
-
-// Open an existing review in the workspace (used by My reviews + Approval queue).
 export function openReview(id: string): void {
 	activeReviewId.set(id);
 	view.set('review');
 }
 
-// Start the new-review wizard from a fresh draft.
 export function goNewReview(): void {
-	resetReview(); // fresh rev-active, stage = 'upload', activeReviewId = 'rev-active'
+	activeReviewId.set(null);
+	stage.set('upload');
 	view.set('new-review');
 }
 
-export function submitForApproval(reviewId: string, note: string): void {
-	patchReview(reviewId, (r) => ({
-		...r,
-		status: 'pending',
-		approval: { status: 'pending', sentAt: stamp(), decidedAt: null, decidedBy: null, note }
-	}));
+export async function createReview(policyMeta: Review['policyMeta'], strengths: string[] = []): Promise<Review> {
+	const created = mapReview(await api.createReviewApi(token(), policyMeta, strengths));
+	reviews.update((arr) => [created, ...arr]);
+	activeReviewId.set(created.id);
+	stage.set('review');
+	return created;
 }
 
-const DEFAULT_APPROVE_NOTE = 'Approved for issuance and published to the policy library.';
-const DEFAULT_REJECT_NOTE =
-	'Rejected — policy must be revised and re-reviewed before it can be resubmitted.';
-
-export function approveAndPublish(reviewId: string, note?: string): void {
-	const by = get(user)?.name ?? 'OE Approver';
-	patchReview(reviewId, (r) => ({
-		...r,
-		status: 'approved',
-		approval: {
-			...r.approval,
-			status: 'approved',
-			decidedAt: stamp(),
-			decidedBy: by,
-			note: note?.trim() || DEFAULT_APPROVE_NOTE
-		}
-	}));
+export async function submitForApproval(reviewId: string, _note: string): Promise<void> {
+	const updated = mapReview(await api.submitReviewApi(token(), reviewId));
+	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
 }
 
-export function rejectPolicy(reviewId: string, note?: string): void {
-	const by = get(user)?.name ?? 'OE Approver';
-	patchReview(reviewId, (r) => ({
-		...r,
-		status: 'rejected',
-		approval: {
-			...r.approval,
-			status: 'rejected',
-			decidedAt: stamp(),
-			decidedBy: by,
-			note: note?.trim() || DEFAULT_REJECT_NOTE
-		}
-	}));
+export async function approveAndPublish(reviewId: string, note?: string): Promise<void> {
+	const updated = mapReview(await api.approveReviewApi(token(), reviewId, note ?? ''));
+	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
+	await loadLibrary();
 }
 
-// ─── Checklist draft mutators (UI lands in Plan 3) ──────────────────────────
-
-export function startDraft(): void {
-	const active = get(activeVersion);
-	if (active) checklistDraft.set(cloneAsDraft(active));
+export async function rejectPolicy(reviewId: string, note?: string): Promise<void> {
+	const updated = mapReview(await api.rejectReviewApi(token(), reviewId, note ?? ''));
+	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
 }
 
-export function discardDraft(): void {
+// ── Checklist draft mutators ──
+export async function startDraft(): Promise<void> {
+	checklistDraft.set(mapVersion(await api.startChecklistDraft(token())));
+}
+
+export async function discardDraft(): Promise<void> {
+	await api.discardChecklistDraft(token());
 	checklistDraft.set(null);
 }
 
-export function publishDraft(): { ok: boolean; errors: string[] } {
-	const draft = get(checklistDraft);
-	if (!draft) return { ok: false, errors: ['No draft to publish.'] };
-	const validation = validateDraft(draft);
-	if (!validation.ok) return validation;
-	const by = get(user)?.name ?? 'Policy Admin';
-	const { versions } = publishDraftPure(get(checklistVersions), draft, by, stamp());
-	checklistVersions.set(versions);
-	checklistDraft.set(null);
-	return { ok: true, errors: [] };
+export async function publishDraft(): Promise<{ ok: boolean; errors: string[] }> {
+	try {
+		const published = mapVersion(await api.publishChecklistDraft(token()));
+		checklistVersions.update((arr) => [published, ...arr.map((v) => ({ ...v, status: 'archived' as const }))]);
+		checklistDraft.set(null);
+		return { ok: true, errors: [] };
+	} catch (e) {
+		return { ok: false, errors: [String(e)] };
+	}
 }
 
-// ─── Policy Library popup helpers ──────────────────────────────────────────
-
+// ── Library popup helpers (unchanged) ──
 export function openPolicyPopup(policy: LibraryPolicy): void {
 	selectedPolicy.set(policy);
 	policyPopupOpen.set(true);
 }
-
 export function closePolicyPopup(): void {
 	policyPopupOpen.set(false);
 }

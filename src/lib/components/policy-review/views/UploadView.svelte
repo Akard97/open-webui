@@ -1,18 +1,48 @@
 <script lang="ts">
-	// Upload stage — dropzone for the draft policy document.
-	// Port of upload.jsx from the PRP-2 design handoff.
-	//
-	// Mock behaviour: clicking the dropzone or "Choose policy file" advances
-	// the stage to "scanning". No real file processing — the real backend
-	// will own that when it lands.
+	// New-review entry screen. Collects policy metadata and creates a review
+	// against the active checklist via the backend API. There is no AI scan and
+	// no file parsing in Phase 1 — the dropzone is decorative only.
 
 	import Icon from '../ui/Icon.svelte';
-	import { stage, activeVersion } from '../lib/store';
+	import { activeVersion, createReview } from '../lib/store';
+	import type { PolicyMeta } from '../lib/types';
 
 	let dragging = $state(false);
+	let submitting = $state(false);
+	let error = $state('');
 
-	function start() {
-		stage.set('scanning');
+	// Metadata form state.
+	let name = $state('');
+	let code = $state('');
+	let version = $state('');
+	let owner = $state('');
+	let reviewer = $state('');
+	let reviewDate = $state('');
+	let pages = $state<number>(0);
+
+	let canSubmit = $derived(name.trim().length > 0 && code.trim().length > 0 && !submitting);
+
+	async function submit(e: Event) {
+		e.preventDefault();
+		if (!canSubmit) return;
+		submitting = true;
+		error = '';
+		const meta: PolicyMeta = {
+			name: name.trim(),
+			code: code.trim(),
+			version: version.trim(),
+			owner: owner.trim(),
+			reviewer: reviewer.trim(),
+			reviewDate: reviewDate,
+			pages: Number(pages) || 0,
+			filename: ''
+		};
+		try {
+			await createReview(meta); // navigates to the workspace via stage='review'
+		} catch (err) {
+			error = err instanceof Error ? err.message : String(err);
+			submitting = false;
+		}
 	}
 
 	const HUES = [200, 30, 165, 0, 280, 130];
@@ -39,7 +69,6 @@
 	function onDrop(e: DragEvent) {
 		e.preventDefault();
 		dragging = false;
-		start();
 	}
 </script>
 
@@ -54,11 +83,64 @@
 		</div>
 		<h1>Start a policy review</h1>
 		<p>
-			Upload a draft to validate it against the <b>PRP Master Checklist v2.0</b>. The AI returns a
-			verdict per item with comments and cited references; items requiring human judgement are
-			routed to you.
+			Register a draft to validate it against the <b>PRP Master Checklist v2.0</b>. Enter the policy
+			details below to open a review workspace; you'll assess each checklist item and route it for
+			approval.
 		</p>
 	</div>
+
+	<form class="meta-form upload-card" onsubmit={submit}>
+		<div class="mf-grid">
+			<label class="mf-field mf-span2">
+				<span class="mf-label">Policy name<i class="mf-req">*</i></span>
+				<input
+					class="mf-input"
+					bind:value={name}
+					placeholder="e.g. Information Security Policy"
+					required
+				/>
+			</label>
+			<label class="mf-field">
+				<span class="mf-label">Policy code<i class="mf-req">*</i></span>
+				<input class="mf-input" bind:value={code} placeholder="e.g. POL-SEC-001" required />
+			</label>
+			<label class="mf-field">
+				<span class="mf-label">Version</span>
+				<input class="mf-input" bind:value={version} placeholder="e.g. v1.0" />
+			</label>
+			<label class="mf-field">
+				<span class="mf-label">Owner</span>
+				<input class="mf-input" bind:value={owner} placeholder="Owning function" />
+			</label>
+			<label class="mf-field">
+				<span class="mf-label">Reviewer</span>
+				<input class="mf-input" bind:value={reviewer} placeholder="Assigned reviewer" />
+			</label>
+			<label class="mf-field">
+				<span class="mf-label">Review date</span>
+				<input class="mf-input" type="date" bind:value={reviewDate} />
+			</label>
+			<label class="mf-field">
+				<span class="mf-label">Pages</span>
+				<input class="mf-input" type="number" min="0" bind:value={pages} placeholder="0" />
+			</label>
+		</div>
+
+		{#if error}
+			<div class="mf-error">{error}</div>
+		{/if}
+
+		<div class="mf-actions">
+			<span class="mf-hint">Fields marked <i class="mf-req">*</i> are required.</span>
+			<button class="btn btn-primary" type="submit" disabled={!canSubmit}>
+				{#if submitting}
+					Creating review…
+				{:else}
+					<Icon name="check" size={14} /> Create review
+				{/if}
+			</button>
+		</div>
+	</form>
 
 	<div
 		class="dropzone upload-card"
@@ -66,10 +148,7 @@
 		ondragover={onDragOver}
 		ondragleave={onDragLeave}
 		ondrop={onDrop}
-		onclick={start}
-		onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && start()}
-		role="button"
-		tabindex="0"
+		role="presentation"
 	>
 		<div class="dz-doc" aria-hidden="true">
 			<div class="dz-doc-corner"></div>
@@ -81,23 +160,12 @@
 			</div>
 			<div class="dz-doc-badge"><Icon name="upload" size={14} stroke={2.2} /></div>
 		</div>
-		<h3>Drop a policy document here</h3>
-		<p>DOCX, PDF or Markdown · up to 25 MB</p>
-		<button
-			class="btn btn-primary"
-			onclick={(e) => {
-				e.stopPropagation();
-				start();
-			}}
-			type="button"
-		>
-			<Icon name="paperclip" size={14} /> Choose policy file
-		</button>
+		<h3>Document upload coming soon</h3>
+		<p>For now, register the policy using the form above.</p>
 		<div class="formats">
 			<span>.docx</span><i></i><span>.pdf</span><i></i><span>.md</span><i></i><span
 				>max 25&nbsp;MB</span
 			><i></i>
-			<span><Icon name="clock" size={11} stroke={2} /> avg 2m 40s</span>
 		</div>
 	</div>
 
@@ -180,3 +248,79 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	.meta-form {
+		padding: 22px 24px;
+		margin-bottom: 16px;
+		text-align: left;
+		display: block;
+	}
+	.mf-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 14px 16px;
+	}
+	.mf-span2 {
+		grid-column: 1 / -1;
+	}
+	.mf-field {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.mf-label {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink-600);
+		letter-spacing: 0.01em;
+	}
+	.mf-req {
+		color: #c0392b;
+		font-style: normal;
+		margin-left: 2px;
+	}
+	.mf-input {
+		width: 100%;
+		padding: 9px 11px;
+		font: inherit;
+		font-size: 13.5px;
+		color: var(--ink-900);
+		background: var(--bg);
+		border: 1px solid var(--ink-200);
+		border-radius: var(--radius-sm);
+		outline: none;
+		transition: border-color 0.12s, box-shadow 0.12s;
+	}
+	.mf-input:focus {
+		border-color: var(--primary-300);
+		box-shadow: 0 0 0 3px var(--primary-50);
+	}
+	.mf-input::placeholder {
+		color: var(--ink-400);
+	}
+	.mf-error {
+		margin-top: 14px;
+		padding: 9px 12px;
+		font-size: 13px;
+		color: #8a2a1f;
+		background: #fdecea;
+		border: 1px solid #f5c6c0;
+		border-radius: var(--radius-sm);
+	}
+	.mf-actions {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		margin-top: 18px;
+	}
+	.mf-hint {
+		font-size: 12.5px;
+		color: var(--ink-500);
+	}
+	.btn[disabled] {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+</style>

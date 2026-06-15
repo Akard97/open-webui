@@ -98,6 +98,7 @@ export interface Review {
 	id: string;
 	policyMeta: PolicyMeta;
 	checklistVersionId: string; // snapshot taken when the review was created
+	checklistSnapshot?: ChecklistVersion; // pinned copy returned by the backend
 	results: Record<string, ItemResult>; // keyed by ChecklistItemDef.id
 	status: ReviewStatus;
 	approval: ApprovalState;

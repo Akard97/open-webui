@@ -1,105 +1,162 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
+
+// The store is now backed by the backend API (Phase 1). The obsolete
+// localStorage mutators (resetReview + synchronous patch helpers) moved to
+// backend coverage; here we mock ./api and assert the store maps responses and
+// the pure navigation helpers behave.
+//
+// In the vitest node environment `browser` is false, so the store's token()
+// helper returns '' (it never reads localStorage). Assertions below expect ''.
+
+// Canned backend-shaped review (snake_case + snapshot). The mocked api
+// functions echo this so we can assert the store maps it into Review shape.
+function backendReview(over: Record<string, unknown> = {}) {
+	return {
+		id: 'rev-1',
+		policy_meta: {
+			name: 'Test Policy',
+			code: 'POL-1',
+			version: 'v1.0',
+			owner: 'OE',
+			reviewer: 'Rev',
+			reviewDate: '2026-01-01',
+			pages: 4,
+			filename: ''
+		},
+		checklist_version_id: 'v2.0',
+		results: {},
+		status: 'draft',
+		approval: { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
+		strengths: [],
+		created_by_name: 'Test Reviewer',
+		created_at: '2026-01-01T00:00:00Z',
+		...over
+	};
+}
+
+vi.mock('./api', () => ({
+	getActiveChecklist: vi.fn(),
+	getMyReviews: vi.fn(async () => []),
+	getApprovalQueue: vi.fn(async () => []),
+	getLibrary: vi.fn(async () => []),
+	createReviewApi: vi.fn(async () => backendReview()),
+	updateResultsApi: vi.fn(async (_t, id, results) =>
+		backendReview({ id, results: results as Record<string, unknown> })
+	),
+	submitReviewApi: vi.fn(async (_t, id) =>
+		backendReview({
+			id,
+			status: 'pending',
+			approval: { status: 'pending', sentAt: 'now', decidedAt: null, decidedBy: null, note: '' }
+		})
+	),
+	approveReviewApi: vi.fn(async (_t, id) => backendReview({ id, status: 'approved' })),
+	rejectReviewApi: vi.fn(async (_t, id) => backendReview({ id, status: 'rejected' })),
+	startChecklistDraft: vi.fn(),
+	publishChecklistDraft: vi.fn(),
+	discardChecklistDraft: vi.fn(async () => ({ success: true }))
+}));
+
 import {
 	reviews,
 	activeReviewId,
 	activeReview,
 	approvalQueue,
-	updateItemResult,
-	submitForApproval,
-	approveAndPublish,
-	rejectPolicy,
-	startDraft,
-	publishDraft,
-	checklistVersions,
-	checklistDraft,
 	view,
 	stage,
 	openReview,
 	goNewReview,
-	resetReview
+	createReview,
+	updateItemResult,
+	submitForApproval
 } from './store';
-import { buildSeedReviews, buildActiveVersion } from './seed';
-import { user } from '$lib/stores';
+import * as api from './api';
 
 beforeEach(() => {
-	reviews.set(buildSeedReviews());
-	activeReviewId.set('rev-active');
-	checklistVersions.set([]);
-	checklistDraft.set(null);
+	reviews.set([]);
+	activeReviewId.set(null);
+	view.set('overview');
+	stage.set('upload');
+	vi.clearAllMocks();
 });
 
-describe('review mutators', () => {
-	it('updateItemResult patches a single item result', () => {
-		updateItemResult('rev-active', 'PRP1-1', { result: 'non-compliant', edited: true });
-		expect(get(activeReview)!.results['PRP1-1'].result).toBe('non-compliant');
-		expect(get(activeReview)!.results['PRP1-1'].edited).toBe(true);
-	});
-
-	it('submitForApproval moves a review into the queue as pending', () => {
-		submitForApproval('rev-active', 'please review');
-		expect(get(activeReview)!.status).toBe('pending');
-		expect(get(approvalQueue).some((r) => r.id === 'rev-active')).toBe(true);
-	});
-
-	it('approveAndPublish marks approved and records a decider', () => {
-		submitForApproval('rev-active', 'x');
-		approveAndPublish('rev-active', 'looks good');
-		const r = get(reviews).find((x) => x.id === 'rev-active')!;
-		expect(r.status).toBe('approved');
-		expect(r.approval.decidedBy).toBeTruthy();
-	});
-
-	it('rejectPolicy marks rejected with a note', () => {
-		submitForApproval('rev-active', 'x');
-		rejectPolicy('rev-active', 'fix gaps');
-		expect(get(reviews).find((x) => x.id === 'rev-active')!.status).toBe('rejected');
-	});
-});
-
-describe('checklist draft lifecycle', () => {
-	it('publishDraft fails validation when weights are off', () => {
-		checklistVersions.set([buildActiveVersion()]);
-		startDraft();
-		const d = get(checklistDraft)!;
-		d.themes[0].weight += 10;
-		checklistDraft.set(d);
-		const r = publishDraft();
-		expect(r.ok).toBe(false);
-	});
-
-	it('publishDraft appends a new active version on success', () => {
-		checklistVersions.set([buildActiveVersion()]);
-		startDraft();
-		const r = publishDraft();
-		expect(r.ok).toBe(true);
-		const actives = get(checklistVersions).filter((v) => v.status === 'active');
-		expect(actives).toHaveLength(1);
-		expect(actives[0].label).toBe('v2.1');
-	});
-});
-
-describe('navigation helpers', () => {
+describe('navigation helpers (pure, sync)', () => {
 	it('openReview selects the review and routes to the workspace', () => {
 		openReview('rev-pending-1');
 		expect(get(activeReviewId)).toBe('rev-pending-1');
 		expect(get(view)).toBe('review');
 	});
 
-	it('goNewReview resets to a fresh upload wizard', () => {
+	it('goNewReview clears the selection and shows an empty upload screen', () => {
 		goNewReview();
 		expect(get(view)).toBe('new-review');
 		expect(get(stage)).toBe('upload');
-		expect(get(activeReviewId)).toBe('rev-active');
+		expect(get(activeReviewId)).toBe(null);
 	});
 });
 
-describe('resetReview author stamp', () => {
-	it('attributes the fresh review to the current user so it shows in My reviews', () => {
-		user.set({ name: 'Test Reviewer', role: 'user', permissions: { features: {} } } as never);
-		resetReview();
-		const active = get(reviews).find((r) => r.id === 'rev-active')!;
-		expect(active.createdBy).toBe('Test Reviewer');
-		user.set(null as never);
+describe('api-backed review mutators', () => {
+	it('createReview calls the api and adds the mapped review, advancing to review stage', async () => {
+		const created = await createReview({
+			name: 'Test Policy',
+			code: 'POL-1',
+			version: 'v1.0',
+			owner: 'OE',
+			reviewer: 'Rev',
+			reviewDate: '2026-01-01',
+			pages: 4,
+			filename: ''
+		});
+		expect(api.createReviewApi).toHaveBeenCalledOnce();
+		// Backend snake_case is mapped to the frontend Review shape.
+		expect(created.policyMeta.code).toBe('POL-1');
+		expect(created.createdBy).toBe('Test Reviewer');
+		expect(get(reviews).some((r) => r.id === created.id)).toBe(true);
+		expect(get(activeReviewId)).toBe(created.id);
+		expect(get(stage)).toBe('review');
+	});
+
+	it('updateItemResult calls the api and replaces the review from the mapped response', async () => {
+		reviews.set([
+			{
+				id: 'rev-1',
+				policyMeta: {} as never,
+				checklistVersionId: 'v2.0',
+				results: {},
+				status: 'draft',
+				approval: { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
+				strengths: [],
+				createdBy: 'Test Reviewer',
+				createdAt: ''
+			}
+		]);
+		await updateItemResult('rev-1', 'PRP1-1', { result: 'non-compliant', edited: true });
+		expect(api.updateResultsApi).toHaveBeenCalledWith('', 'rev-1', {
+			'PRP1-1': { result: 'non-compliant', edited: true }
+		});
+		const r = get(reviews).find((x) => x.id === 'rev-1')!;
+		expect(r.results['PRP1-1'].result).toBe('non-compliant');
+	});
+
+	it('submitForApproval calls the api and moves the review into the queue as pending', async () => {
+		reviews.set([
+			{
+				id: 'rev-1',
+				policyMeta: {} as never,
+				checklistVersionId: 'v2.0',
+				results: {},
+				status: 'draft',
+				approval: { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
+				strengths: [],
+				createdBy: 'Test Reviewer',
+				createdAt: ''
+			}
+		]);
+		activeReviewId.set('rev-1');
+		await submitForApproval('rev-1', 'please review');
+		expect(api.submitReviewApi).toHaveBeenCalledWith('', 'rev-1');
+		expect(get(activeReview)!.status).toBe('pending');
+		expect(get(approvalQueue).some((r) => r.id === 'rev-1')).toBe(true);
 	});
 });

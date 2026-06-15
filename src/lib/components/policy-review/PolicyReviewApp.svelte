@@ -26,7 +26,8 @@
 		picked,
 		canUseChecker,
 		canApprove,
-		canAdmin
+		canAdmin,
+		loadAll
 	} from './lib/store';
 
 	// Snap users away from views their permissions don't allow, or a review view
@@ -59,7 +60,10 @@
 		}
 	}
 
-	onMount(() => window.addEventListener('keydown', handleKey));
+	onMount(() => {
+		loadAll();
+		window.addEventListener('keydown', handleKey);
+	});
 	onDestroy(() => window.removeEventListener('keydown', handleKey));
 </script>
 

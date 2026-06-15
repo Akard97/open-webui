@@ -3,14 +3,13 @@
 	// Port of the topbar block from the design's app.jsx.
 
 	import Icon from '../ui/Icon.svelte';
-	import { view, stage, resetReview, canUseChecker, activeReview } from '../lib/store';
+	import { view, stage, goNewReview, canUseChecker, activeReview } from '../lib/store';
 	import { POLICY_META } from '../lib/seed';
 
 	let meta = $derived($activeReview?.policyMeta ?? POLICY_META);
 
 	function startNewReview() {
-		resetReview();
-		view.set('new-review');
+		goNewReview();
 	}
 
 </script>

@@ -36,14 +36,14 @@
 		flash('Draft saved');
 	}
 
-	function publish() {
+	async function publish() {
 		const v = validateDraft(draft);
 		if (!v.ok) {
 			errors = v.errors;
 			return;
 		}
 		checklistDraft.set($state.snapshot(draft) as ChecklistVersion);
-		const res = storePublish();
+		const res = await storePublish();
 		if (res.ok) {
 			errors = [];
 			draft = cloneAsDraft($activeVersion); // fresh draft off the freshly published version
