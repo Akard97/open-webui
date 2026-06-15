@@ -25,6 +25,12 @@
 - Modify: `src/lib/components/policy-review/lib/types.ts`
 - Modify: `src/lib/components/policy-review/lib/seed.ts`
 - Modify: `src/lib/components/policy-review/lib/seed.test.ts`
+- Modify: `src/lib/components/policy-review/lib/scoring.test.ts`
+- Modify: `src/lib/components/policy-review/lib/store.ts`
+
+> **Amendment (post-review fixes #1 & #3):**
+> - **#3 — make `Theme.threshold` required.** In `types.ts` change `threshold?: number;` → `threshold: number; // gate threshold (default 85)`. In `seed.ts` `THEMES`, add `threshold: 85` to T3–T6 (only T1/T2 carry it today). In `scoring.test.ts` add `threshold: 85` to the T3–T6 entries of its `THEMES` literal. Behavior-preserving — `scoring.ts` reads `threshold` only for `gate` themes via `t.threshold || 85` — and it lets ScoringTab (Task 7) bind `<input type="number" bind:value={t.threshold}>` to a non-optional `number`; an optional `number | undefined` would fail `svelte-check` against the number-input `number | null` bind type.
+> - **#1 — persist the admin view.** In `store.ts` `loadInitial()`, add `'admin'` to the whitelist array `['overview', 'library', 'new-review', 'my-reviews', 'approvals', 'review']` so a refresh while on the admin view restores it instead of bouncing to Overview.
 
 - [ ] **Step 1: Types**
 
@@ -76,12 +82,12 @@ In `seed.test.ts`, add to the `buildActiveVersion` describe block:
 - [ ] **Step 4: Run tests + type-check**
 
 Run: `npx vitest run src/lib/components/policy-review/lib/seed.test.ts` → PASS.
-Run: `npm run check` — `ChecklistVersion` now requires `standards`; any object literal building a `ChecklistVersion` without it will error. In source the only such literal is `buildActiveVersion` (fixed here). In tests, `scoring.test.ts` builds an inline `ChecklistVersion` via its `version()` helper — add `standards: []` to that literal. `reviews.test.ts` and `store.test.ts` obtain versions via `buildActiveVersion()`, so they need no change (but grep them for an inline `status: 'active'` literal just in case, and add `standards: []` if one exists). Re-run `npx vitest run src/lib/components/policy-review/lib/` to confirm all green.
+Run: `npm run check` — `ChecklistVersion` now requires `standards`; any object literal building a `ChecklistVersion` without it will error. In source the only such literal is `buildActiveVersion` (fixed here). In tests, `scoring.test.ts` builds an inline `ChecklistVersion` via its `version()` helper — add `standards: []` to that literal. `reviews.test.ts` and `store.test.ts` obtain versions via `buildActiveVersion()`, so they need no change (but grep them for an inline `status: 'active'` literal just in case, and add `standards: []` if one exists). **Also (amendment #3):** `Theme.threshold` is now required, so add `threshold: 85` to the T3–T6 entries of the `THEMES` literal in `scoring.test.ts` (and confirm `seed.ts` `THEMES` got the same). The `store.ts` whitelist change (amendment #1) needs no test. Re-run `npx vitest run src/lib/components/policy-review/lib/` to confirm all green.
 
 - [ ] **Step 5: Commit**
 ```bash
-git add src/lib/components/policy-review/lib/types.ts src/lib/components/policy-review/lib/seed.ts src/lib/components/policy-review/lib/seed.test.ts src/lib/components/policy-review/lib/scoring.test.ts
-git commit -m "feat(policy-review): add standards vocabulary to checklist version + ViewKey 'admin'"
+git add src/lib/components/policy-review/lib/types.ts src/lib/components/policy-review/lib/seed.ts src/lib/components/policy-review/lib/seed.test.ts src/lib/components/policy-review/lib/scoring.test.ts src/lib/components/policy-review/lib/store.ts
+git commit -m "feat(policy-review): standards vocabulary + ViewKey 'admin' (+ required threshold, persist admin view)"
 ```
 (If `reviews.test.ts`/`store.test.ts` did need a `standards: []`, include them in the `git add`.)
 
@@ -512,8 +518,14 @@ In `ui/Icon.svelte`, add a new branch before the final `{/if}` (after the `folde
 		draft.sections = draft.sections.filter((s) => s.id !== sectionId);
 	}
 	function addTheme() {
-		const n = draft.themes.length + 1;
-		draft.themes.push(blankTheme(`T${n}`));
+		// Amendment (fix #2): collision-proof id = one past the highest existing
+		// T-number. A length-based id collides after a theme is removed (e.g. drop
+		// T3 from T1–T6 → length 5 → "T6" duplicate), which crashes the keyed {#each}.
+		const maxN = draft.themes.reduce((m, t) => {
+			const n = Number(t.id.replace(/^T/, ''));
+			return Number.isFinite(n) ? Math.max(m, n) : m;
+		}, 0);
+		draft.themes.push(blankTheme(`T${maxN + 1}`));
 	}
 	function removeTheme(themeId: string) {
 		draft.themes = draft.themes.filter((t) => t.id !== themeId);
@@ -632,6 +644,8 @@ In `ui/Icon.svelte`, add a new branch before the final `{/if}` (after the `folde
 
 **Files:**
 - Create: `src/lib/components/policy-review/views/admin/ScoringTab.svelte`
+
+> **Amendment note (fix #3):** `Theme.threshold` was made required in Task 1, so `bind:value={t.threshold}` below binds a non-optional `number` and passes `svelte-check`. No change to the component code shown.
 
 - [ ] **Step 1: Create the component**
 ```svelte
