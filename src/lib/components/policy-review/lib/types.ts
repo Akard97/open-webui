@@ -137,4 +137,4 @@ export interface LibraryPolicy {
 
 // Transient view/stage keys (unchanged in Plan 1; expanded in Plan 2).
 export type Stage = 'upload' | 'scanning' | 'review';
-export type ViewKey = 'all-policies' | 'new-review';
+export type ViewKey = 'overview' | 'library' | 'new-review' | 'my-reviews' | 'approvals' | 'review';

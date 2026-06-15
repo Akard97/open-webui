@@ -39,7 +39,7 @@ function freshInitial(): PersistedState {
 		reviews,
 		activeReviewId: reviews[0]?.id ?? null,
 		stage: 'review',
-		view: 'all-policies'
+		view: 'overview'
 	};
 }
 
@@ -56,7 +56,11 @@ function loadInitial(): PersistedState {
 				reviews: parsed.reviews ?? fresh.reviews,
 				activeReviewId: parsed.activeReviewId ?? fresh.activeReviewId,
 				stage: parsed.stage ?? 'review',
-				view: parsed.view ?? 'all-policies'
+				view: (
+					['overview', 'library', 'new-review', 'my-reviews', 'approvals', 'review'] as const
+				).includes(parsed.view as ViewKey)
+					? (parsed.view as ViewKey)
+					: 'overview',
 			};
 		}
 	} catch {
@@ -200,6 +204,18 @@ export function resetReview(): void {
 	reviews.update((arr) => arr.map((r) => (r.id === 'rev-active' ? seeded[0] : r)));
 	activeReviewId.set('rev-active');
 	stage.set('upload');
+}
+
+// Open an existing review in the workspace (used by My reviews + Approval queue).
+export function openReview(id: string): void {
+	activeReviewId.set(id);
+	view.set('review');
+}
+
+// Start the new-review wizard from a fresh draft.
+export function goNewReview(): void {
+	resetReview(); // fresh rev-active, stage = 'upload', activeReviewId = 'rev-active'
+	view.set('new-review');
 }
 
 export function submitForApproval(reviewId: string, note: string): void {

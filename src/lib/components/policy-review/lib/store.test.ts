@@ -12,7 +12,11 @@ import {
 	startDraft,
 	publishDraft,
 	checklistVersions,
-	checklistDraft
+	checklistDraft,
+	view,
+	stage,
+	openReview,
+	goNewReview
 } from './store';
 import { buildSeedReviews, buildActiveVersion } from './seed';
 
@@ -70,5 +74,20 @@ describe('checklist draft lifecycle', () => {
 		const actives = get(checklistVersions).filter((v) => v.status === 'active');
 		expect(actives).toHaveLength(1);
 		expect(actives[0].label).toBe('v2.1');
+	});
+});
+
+describe('navigation helpers', () => {
+	it('openReview selects the review and routes to the workspace', () => {
+		openReview('rev-pending-1');
+		expect(get(activeReviewId)).toBe('rev-pending-1');
+		expect(get(view)).toBe('review');
+	});
+
+	it('goNewReview resets to a fresh upload wizard', () => {
+		goNewReview();
+		expect(get(view)).toBe('new-review');
+		expect(get(stage)).toBe('upload');
+		expect(get(activeReviewId)).toBe('rev-active');
 	});
 });
