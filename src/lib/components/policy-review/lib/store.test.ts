@@ -16,9 +16,11 @@ import {
 	view,
 	stage,
 	openReview,
-	goNewReview
+	goNewReview,
+	resetReview
 } from './store';
 import { buildSeedReviews, buildActiveVersion } from './seed';
+import { user } from '$lib/stores';
 
 beforeEach(() => {
 	reviews.set(buildSeedReviews());
@@ -89,5 +91,15 @@ describe('navigation helpers', () => {
 		expect(get(view)).toBe('new-review');
 		expect(get(stage)).toBe('upload');
 		expect(get(activeReviewId)).toBe('rev-active');
+	});
+});
+
+describe('resetReview author stamp', () => {
+	it('attributes the fresh review to the current user so it shows in My reviews', () => {
+		user.set({ name: 'Test Reviewer', role: 'user', permissions: { features: {} } } as never);
+		resetReview();
+		const active = get(reviews).find((r) => r.id === 'rev-active')!;
+		expect(active.createdBy).toBe('Test Reviewer');
+		user.set(null as never);
 	});
 });

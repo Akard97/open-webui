@@ -201,7 +201,9 @@ export function markReviewed(reviewId: string, itemId: string): void {
 // (Plan 2 replaces this with real createReview() from an upload.)
 export function resetReview(): void {
 	const seeded = buildSeedReviews();
-	reviews.update((arr) => arr.map((r) => (r.id === 'rev-active' ? seeded[0] : r)));
+	const me = get(user)?.name;
+	const fresh = me ? { ...seeded[0], createdBy: me } : seeded[0];
+	reviews.update((arr) => arr.map((r) => (r.id === 'rev-active' ? fresh : r)));
 	activeReviewId.set('rev-active');
 	stage.set('upload');
 }

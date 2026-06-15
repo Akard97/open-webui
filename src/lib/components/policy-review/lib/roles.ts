@@ -3,8 +3,13 @@
 // Excellence role; everyone else is a plain library viewer. Pure function so
 // the branching is unit-tested and the component template stays declarative.
 
-export function policyRoleLabel(canApprove: boolean, canUseChecker: boolean): string {
+export function policyRoleLabel(
+	canApprove: boolean,
+	canUseChecker: boolean,
+	canAdmin: boolean
+): string {
 	if (canApprove) return 'Organizational Excellence · Approver';
 	if (canUseChecker) return 'Organizational Excellence · Reviewer';
+	if (canAdmin) return 'Organizational Excellence · Admin';
 	return 'Viewer';
 }
