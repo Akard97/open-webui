@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -20,6 +21,11 @@ from open_webui.models.policy_review import (
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _audit_now() -> str:
+    # Human-readable stamp matching the frontend's display style; stored in `approval`.
+    return time.strftime('%d %b, %H:%M', time.gmtime())
 
 
 # ──────────────────────────── helpers ────────────────────────────
@@ -142,3 +148,179 @@ async def publish_checklist_draft(
     published = await PolicyChecklistVersions.publish_draft(by_id=user.id, by_name=user.name, db=db)
     await PolicyAudits.insert('checklist', published.id, 'checklist_published', user.id, user.name, {'label': published.label}, db=db)
     return published
+
+
+# ──────────────────────────── reviews ────────────────────────────
+
+
+class ReviewCreateForm(BaseModel):
+    policy_meta: dict
+    strengths: Optional[list] = None
+
+
+class ResultsForm(BaseModel):
+    results: dict
+
+
+class NoteForm(BaseModel):
+    note: Optional[str] = ''
+
+
+async def _load_owned_or_403(review_id: str, user, db, *, approver_ok: bool = False, request: Request = None):
+    review = await PolicyReviews.get_by_id(review_id, db=db)
+    if not review:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    is_owner = review.created_by_id is not None and review.created_by_id == user.id
+    if is_owner or user.role == 'admin':
+        return review
+    if approver_ok:
+        return review
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
+
+
+@router.post('/reviews')
+async def create_review(
+    request: Request, form: ReviewCreateForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_checker', db)
+    active = await PolicyChecklistVersions.get_active(db=db)
+    if not active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='No active checklist version.')
+    review = await PolicyReviews.insert_review(
+        created_by_id=user.id,
+        created_by_name=user.name,
+        policy_meta=form.policy_meta,
+        active_version=active,
+        strengths=form.strengths or [],
+        db=db,
+    )
+    await PolicyAudits.insert('review', review.id, 'created', user.id, user.name, None, db=db)
+    return review
+
+
+@router.get('/reviews/mine')
+async def list_my_reviews(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_checker', db)
+    return await PolicyReviews.list_by_creator(user.id, db=db)
+
+
+@router.get('/reviews/queue')
+async def list_approval_queue(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_approver', db)
+    return await PolicyReviews.list_by_status('pending', db=db)
+
+
+@router.get('/reviews/{review_id}')
+async def get_review(
+    request: Request, review_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    # Owner, admin, or any approver may read.
+    is_approver = user.role == 'admin' or await has_permission(
+        user.id, 'features.policy_approver', request.app.state.config.USER_PERMISSIONS, db=db
+    )
+    return await _load_owned_or_403(review_id, user, db, approver_ok=is_approver, request=request)
+
+
+@router.patch('/reviews/{review_id}/results')
+async def update_review_results(
+    request: Request, review_id: str, form: ResultsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_checker', db)
+    review = await _load_owned_or_403(review_id, user, db)
+    if review.status not in ('draft', 'rejected'):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Review is locked.')
+    merged = {**(review.results or {})}
+    for item_id, patch in form.results.items():
+        merged[item_id] = {**(merged.get(item_id) or {}), **patch}
+    fields = {'results': merged}
+    if review.status == 'rejected':
+        fields['status'] = 'draft'  # editing a returned review reopens it
+        await PolicyAudits.insert('review', review_id, 'reopened', user.id, user.name, None, db=db)
+    updated = await PolicyReviews.update_fields(review_id, fields, db=db)
+    await PolicyAudits.insert('review', review_id, 'updated', user.id, user.name, None, db=db)
+    return updated
+
+
+@router.post('/reviews/{review_id}/submit')
+async def submit_review(
+    request: Request, review_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_checker', db)
+    review = await _load_owned_or_403(review_id, user, db)
+    if review.status != 'draft':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only a draft can be submitted.')
+    score = compute_scores(review.checklist_snapshot or {}, review.results or {})
+    if score['humanItemsRemain']:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Resolve all items before submitting.')
+    approval = {**(review.approval or {}), 'status': 'pending', 'sentAt': _audit_now(), 'note': ''}
+    updated = await PolicyReviews.update_fields(review_id, {'status': 'pending', 'approval': approval}, db=db)
+    await PolicyAudits.insert('review', review_id, 'submitted', user.id, user.name, None, db=db)
+    return updated
+
+
+@router.post('/reviews/{review_id}/approve')
+async def approve_review(
+    request: Request, review_id: str, form: NoteForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_approver', db)
+    review = await PolicyReviews.get_by_id(review_id, db=db)
+    if not review:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    if review.status != 'pending':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only a pending review can be approved.')
+    score = compute_scores(review.checklist_snapshot or {}, review.results or {})
+    approval = {
+        **(review.approval or {}),
+        'status': 'approved',
+        'decidedAt': _audit_now(),
+        'decidedBy': user.name,
+        'note': (form.note or '').strip() or 'Approved for issuance and published to the policy library.',
+    }
+    updated = await PolicyReviews.update_fields(review_id, {'status': 'approved', 'approval': approval}, db=db)
+    # Upsert into the library.
+    meta = review.policy_meta or {}
+    fn = (meta.get('code', '').split('-')[1] if '-' in meta.get('code', '') else 'GOV')
+    library_data = {
+        'code': meta.get('code'),
+        'title': meta.get('name'),
+        'fn': fn,
+        'owner': meta.get('owner'),
+        'version': str(meta.get('version', '')).lstrip('v'),
+        'status': 'approved',
+        'score': score['overall'],
+        'pages': meta.get('pages'),
+        'nextReview': '—',
+        'updatedDays': 0,
+    }
+    await PolicyLibrary.upsert(code=meta.get('code'), data=library_data, source_review_id=review_id, db=db)
+    await PolicyAudits.insert('review', review_id, 'approved', user.id, user.name, {'score': score['overall']}, db=db)
+    await PolicyAudits.insert('review', review_id, 'published', user.id, user.name, {'code': meta.get('code')}, db=db)
+    return updated
+
+
+@router.post('/reviews/{review_id}/reject')
+async def reject_review(
+    request: Request, review_id: str, form: NoteForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require(request, user, 'policy_approver', db)
+    review = await PolicyReviews.get_by_id(review_id, db=db)
+    if not review:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    if review.status != 'pending':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only a pending review can be rejected.')
+    if not (form.note or '').strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='A rejection note is required.')
+    approval = {
+        **(review.approval or {}),
+        'status': 'rejected',
+        'decidedAt': _audit_now(),
+        'decidedBy': user.name,
+        'note': form.note.strip(),
+    }
+    updated = await PolicyReviews.update_fields(review_id, {'status': 'rejected', 'approval': approval}, db=db)
+    await PolicyAudits.insert('review', review_id, 'rejected', user.id, user.name, {'note': form.note.strip()}, db=db)
+    return updated

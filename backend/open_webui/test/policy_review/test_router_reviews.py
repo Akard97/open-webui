@@ -1,0 +1,129 @@
+import pytest
+import pytest_asyncio
+from types import SimpleNamespace
+
+import httpx
+from httpx import ASGITransport
+from fastapi import FastAPI
+
+import open_webui.routers.policy_review as pr_router
+from open_webui.utils.auth import get_verified_user
+from open_webui.models.policy_review import PolicyChecklistVersions, PolicyLibrary
+
+# One theme, one item -> compliant => fully resolved, score 100, gates pass.
+ACTIVE_DATA = {
+    'changeSummary': 'init',
+    'themes': [{'id': 'T1', 'name': 'T1', 'weight': 100, 'gate': True, 'threshold': 85}],
+    'sections': [{'id': 'S1', 'theme': 'T1', 'items': [{'id': 'S1-1', 'assessment': 'auto'}]}],
+    'verdictBands': {'approved': 85, 'conditional': 70},
+    'standards': [],
+}
+
+META = {'name': 'Test Policy', 'code': 'C-TEST', 'version': 'v1', 'owner': 'O', 'reviewer': 'R', 'reviewDate': 'd', 'pages': 1, 'filename': 'f.pdf'}
+
+
+class _AsyncReturn:
+    def __init__(self, value):
+        self.value = value
+
+    async def __call__(self, *args, **kwargs):
+        return self.value
+
+
+def _make_app(user):
+    app = FastAPI()
+    app.state.config = SimpleNamespace(USER_PERMISSIONS={})
+    app.include_router(pr_router.router, prefix='/api/v1/policy')
+    app.dependency_overrides[get_verified_user] = lambda: user
+    return app
+
+
+def _client(monkeypatch, *, user, allow=True):
+    monkeypatch.setattr(pr_router, 'has_permission', _AsyncReturn(allow))
+    return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user)), base_url='http://test')
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _seed_active():
+    await PolicyChecklistVersions.insert_version('v2.0', 'active', ACTIVE_DATA, None, 'OE')
+
+
+@pytest.mark.asyncio
+async def test_full_lifecycle_create_submit_approve_publishes(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+
+    # Create
+    async with _client(monkeypatch, user=reviewer) as c:
+        created = await c.post('/api/v1/policy/reviews', json={'policy_meta': META})
+        assert created.status_code == 200
+        rid = created.json()['id']
+        assert created.json()['status'] == 'draft'
+        assert created.json()['checklist_snapshot']['changeSummary'] == 'init'
+
+        # Submit blocked while item is pending
+        blocked = await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        assert blocked.status_code == 400
+
+        # Resolve the only item, then submit
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        ok = await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        assert ok.status_code == 200
+        assert ok.json()['status'] == 'pending'
+
+    # Approver sees it in the queue and approves
+    async with _client(monkeypatch, user=approver) as c:
+        queue = await c.get('/api/v1/policy/reviews/queue')
+        assert any(r['id'] == rid for r in queue.json())
+        approved = await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})
+        assert approved.status_code == 200
+        assert approved.json()['status'] == 'approved'
+
+    # Published into the library
+    entry = await PolicyLibrary.get_by_code('C-TEST')
+    assert entry is not None
+    assert entry.data['score'] == 100
+
+
+@pytest.mark.asyncio
+async def test_non_reviewer_cannot_create(monkeypatch):
+    user = SimpleNamespace(id='x', role='user', name='X', email='x@x.io')
+    async with _client(monkeypatch, user=user, allow=False) as c:
+        res = await c.post('/api/v1/policy/reviews', json={'policy_meta': META})
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_reject_requires_note_and_returns_to_owner(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+
+    async with _client(monkeypatch, user=approver) as c:
+        no_note = await c.post(f'/api/v1/policy/reviews/{rid}/reject', json={'note': ''})
+        assert no_note.status_code == 400
+        rejected = await c.post(f'/api/v1/policy/reviews/{rid}/reject', json={'note': 'fix it'})
+        assert rejected.status_code == 200
+        assert rejected.json()['status'] == 'rejected'
+
+    # Owner edits a rejected review -> reopens to draft
+    async with _client(monkeypatch, user=reviewer) as c:
+        reopened = await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'non-compliant'}}})
+        assert reopened.status_code == 200
+        assert reopened.json()['status'] == 'draft'
+
+
+@pytest.mark.asyncio
+async def test_cannot_edit_after_submit(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        # Now pending -> editing must be refused
+        res = await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'non-compliant'}}})
+    assert res.status_code == 403
