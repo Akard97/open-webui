@@ -744,6 +744,14 @@ async def lifespan(app: FastAPI):
     # Mark application as ready to accept traffic from a startup perspective.
     app.state.startup_complete = True
 
+    # Seed Policy Review canonical data on first run.
+    try:
+        from open_webui.internal.policy_review.seeder import seed_policy_review_data
+
+        await seed_policy_review_data()
+    except Exception as e:
+        log.exception(f'Policy Review seeding failed: {e}')
+
     yield
 
     # Shutdown: clean up shared resources
