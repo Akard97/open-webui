@@ -13,6 +13,7 @@
 	import OverviewView from './views/OverviewView.svelte';
 	import MyReviewsView from './views/MyReviewsView.svelte';
 	import ApprovalQueueView from './views/ApprovalQueueView.svelte';
+	import AdminApp from './views/admin/AdminApp.svelte';
 	import ItemDrawer from './views/ItemDrawer.svelte';
 	import SubmitApprovalModal from './views/SubmitApprovalModal.svelte';
 	import PolicyPopup from './views/PolicyPopup.svelte';
@@ -24,7 +25,8 @@
 		drawerOpen,
 		picked,
 		canUseChecker,
-		canApprove
+		canApprove,
+		canAdmin
 	} from './lib/store';
 
 	// Snap users away from views their permissions don't allow, or a review view
@@ -32,6 +34,7 @@
 	$: if (($view === 'new-review' || $view === 'my-reviews') && !$canUseChecker) view.set('overview');
 	$: if ($view === 'approvals' && !$canApprove) view.set('overview');
 	$: if ($view === 'review' && !$activeReview) view.set('overview');
+	$: if ($view === 'admin' && !$canAdmin) view.set('overview');
 
 	function handleKey(e: KeyboardEvent) {
 		const p = untrack(() => $picked);
@@ -79,6 +82,8 @@
 				{:else}
 					<ScanningView />
 				{/if}
+			{:else if $view === 'admin'}
+				<AdminApp />
 			{:else}
 				<ReviewView />
 			{/if}

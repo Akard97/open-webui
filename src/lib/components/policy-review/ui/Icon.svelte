@@ -151,5 +151,10 @@
 		<path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
 	{:else if name === 'folder'}
 		<path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+	{:else if name === 'trash'}
+		<polyline points="3 6 5 6 21 6" />
+		<path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+		<path d="M10 11v6M14 11v6" />
+		<path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
 	{/if}
 </svg>

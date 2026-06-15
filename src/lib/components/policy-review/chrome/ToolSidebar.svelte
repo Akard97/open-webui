@@ -1,12 +1,12 @@
 <script lang="ts">
 	// Lean, role-aware tool sidebar. Every visible item routes to a working view.
-	// The Admin entry is intentionally absent — it ships with the admin page (Plan 3).
 
 	import Icon from '../ui/Icon.svelte';
 	import {
 		view,
 		canUseChecker,
 		canApprove,
+		canAdmin,
 		myReviews,
 		approvalQueue,
 		goNewReview
@@ -14,7 +14,7 @@
 	import { user } from '$lib/stores';
 	import { policyRoleLabel } from '../lib/roles';
 
-	function go(target: 'overview' | 'library' | 'my-reviews' | 'approvals') {
+	function go(target: 'overview' | 'library' | 'my-reviews' | 'approvals' | 'admin') {
 		view.set(target);
 	}
 
@@ -87,6 +87,20 @@
 		</div>
 	{/if}
 
+	{#if $canAdmin}
+		<div class="sb-heading">Administration</div>
+		<div class="sb-section" style="padding-top: 0">
+			<button
+				class="sb-link"
+				class:active={$view === 'admin'}
+				onclick={() => go('admin')}
+				type="button"
+			>
+				<Icon name="sliders" size={15} /> Checklist admin
+			</button>
+		</div>
+	{/if}
+
 	<div class="sb-bottom">
 		{#if $user?.profile_image_url}
 			<img class="avatar" src={$user.profile_image_url} alt={$user?.name ?? ''} />
@@ -96,7 +110,7 @@
 		<div style="display:flex; flex-direction:column; line-height:1.2">
 			<span style="font-size:13px; font-weight:500">{$user?.name ?? 'Ahmad'}</span>
 			<span style="font-size:11px; color:var(--ink-400)">
-				{policyRoleLabel($canApprove, $canUseChecker)}
+				{policyRoleLabel($canApprove, $canUseChecker, $canAdmin)}
 			</span>
 		</div>
 	</div>
