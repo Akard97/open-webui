@@ -2,7 +2,7 @@
 	import Icon from '../../ui/Icon.svelte';
 	import type { ChecklistVersion } from '../../lib/types';
 
-	let { draft }: { draft: ChecklistVersion } = $props();
+	let { draft = $bindable() }: { draft: ChecklistVersion } = $props();
 
 	function add() {
 		draft.standards.push({ code: 'NEW', label: 'New standard', description: '' });

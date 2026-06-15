@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ChecklistVersion } from '../../lib/types';
 
-	let { draft }: { draft: ChecklistVersion } = $props();
+	let { draft = $bindable() }: { draft: ChecklistVersion } = $props();
 
 	let weightSum = $derived(draft.themes.reduce((a, t) => a + (Number(t.weight) || 0), 0));
 </script>

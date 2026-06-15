@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import Icon from '../../ui/Icon.svelte';
 	import {
 		activeVersion,
@@ -106,11 +105,11 @@
 
 	<div class="adm-body">
 		{#if tab === 'checklist'}
-			<ChecklistTab {draft} />
+			<ChecklistTab bind:draft />
 		{:else if tab === 'scoring'}
-			<ScoringTab {draft} />
+			<ScoringTab bind:draft />
 		{:else if tab === 'standards'}
-			<StandardsTab {draft} />
+			<StandardsTab bind:draft />
 		{:else}
 			<AccessTab />
 		{/if}

@@ -3,7 +3,7 @@
 	import type { ChecklistVersion } from '../../lib/types';
 	import { blankItem, blankSection, blankTheme, nextItemN } from '../../lib/checklist';
 
-	let { draft }: { draft: ChecklistVersion } = $props();
+	let { draft = $bindable() }: { draft: ChecklistVersion } = $props();
 
 	let open = $state<Record<string, boolean>>({});
 	function toggle(id: string) { open = { ...open, [id]: !(open[id] ?? true) }; }
