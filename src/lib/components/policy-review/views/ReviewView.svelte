@@ -367,7 +367,7 @@
 				<h4>Score by Theme</h4>
 				<div style="display:grid; gap:12px">
 					{#each scoreResult.themeRows as t (t.id)}
-						{@const isFail = t.gate && t.pct < (t.threshold || 85) && t.total > 0}
+						{@const isFail = t.gate && t.pct < t.threshold && t.total > 0}
 						{@const isWarn = t.pct < 70 && !isFail && t.total > 0}
 						{@const cls = isFail ? 'fail' : isWarn ? 'warn' : ''}
 						<div>

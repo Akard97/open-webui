@@ -72,7 +72,7 @@ export function computeScores(
 	});
 	const overall = weightTotal > 0 ? Math.round(weighted / weightTotal) : 0;
 
-	const gatesPass = themeRows.filter((t) => t.gate).every((t) => t.pct >= (t.threshold || 85));
+	const gatesPass = themeRows.filter((t) => t.gate).every((t) => t.pct >= t.threshold);
 	const humanItemsRemain = themeRows.some((t) => t.human > 0 || t.pending > 0);
 
 	let verdict: Verdict;

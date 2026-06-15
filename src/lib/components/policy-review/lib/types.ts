@@ -29,7 +29,7 @@ export interface Theme {
 	name: string;
 	weight: number; // percent
 	gate: boolean;
-	threshold: number; // gate threshold (default 85)
+	threshold: number; // gate pass threshold, percent
 }
 
 export interface VerdictBands {
