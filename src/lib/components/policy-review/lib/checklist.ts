@@ -1,7 +1,7 @@
 // Pure helpers for the checklist draft → publish lifecycle.
 // No store/IO here — the store wires these in.
 
-import type { ChecklistVersion } from './types';
+import type { ChecklistVersion, ChecklistItemDef, Section, Theme } from './types';
 
 export interface ValidationResult {
 	ok: boolean;
@@ -70,4 +70,27 @@ export function publishDraft(
 		publishedBy
 	};
 	return { versions: [...archived, published], published };
+}
+
+export function nextItemN(section: Section): number {
+	return section.items.reduce((max, it) => Math.max(max, it.n), 0) + 1;
+}
+
+export function blankItem(sectionId: string, n: number): ChecklistItemDef {
+	return { id: `${sectionId}-${n}`, n, text: 'New requirement', codes: '', assessment: 'auto' };
+}
+
+export function blankSection(themeId: string, id: string): Section {
+	return {
+		id,
+		theme: themeId,
+		title: 'New PRP group',
+		codes: '',
+		intent: 'Describe what this group assesses.',
+		items: [blankItem(id, 1)]
+	};
+}
+
+export function blankTheme(id: string): Theme {
+	return { id, name: 'New theme', weight: 0, gate: false, threshold: 85 };
 }

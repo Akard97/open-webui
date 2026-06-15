@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildActiveVersion } from './seed';
-import { cloneAsDraft, validateDraft, publishDraft, nextLabel } from './checklist';
+import { cloneAsDraft, validateDraft, publishDraft, nextLabel, blankItem, blankSection, blankTheme, nextItemN } from './checklist';
 
 describe('cloneAsDraft', () => {
 	it('clones an active version into an editable draft with status draft', () => {
@@ -52,5 +52,33 @@ describe('publishDraft', () => {
 		expect(published.publishedBy).toBe('Head of OE');
 		expect(versions.filter((v) => v.status === 'active')).toHaveLength(1);
 		expect(versions.find((v) => v.id === active.id)!.status).toBe('archived');
+	});
+});
+
+describe('draft-edit factories', () => {
+	it('nextItemN returns one past the highest item number', () => {
+		expect(nextItemN({ id: 'PRP1', theme: 'T1', title: 't', codes: 'c', intent: 'i', items: [
+			{ id: 'PRP1-1', n: 1, text: 'a', codes: '', assessment: 'auto' },
+			{ id: 'PRP1-4', n: 4, text: 'b', codes: '', assessment: 'auto' }
+		] })).toBe(5);
+		expect(nextItemN({ id: 'PRP9', theme: 'T1', title: 't', codes: 'c', intent: 'i', items: [] })).toBe(1);
+	});
+
+	it('blankItem builds a unique auto item id from section + number', () => {
+		const it = blankItem('PRP1', 5);
+		expect(it.id).toBe('PRP1-5');
+		expect(it.n).toBe(5);
+		expect(it.assessment).toBe('auto');
+	});
+
+	it('blankSection/blankTheme produce well-formed, empty-but-valid nodes', () => {
+		const s = blankSection('T3', 'PRP99');
+		expect(s.theme).toBe('T3');
+		expect(s.id).toBe('PRP99');
+		expect(s.items).toHaveLength(1); // starts with one blank item so it passes "no empty group"
+		const t = blankTheme('T7');
+		expect(t.id).toBe('T7');
+		expect(t.weight).toBe(0);
+		expect(t.gate).toBe(false);
 	});
 });
