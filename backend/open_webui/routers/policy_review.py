@@ -166,7 +166,7 @@ class NoteForm(BaseModel):
     note: Optional[str] = ''
 
 
-async def _load_owned_or_403(review_id: str, user, db, *, approver_ok: bool = False, request: Request = None):
+async def _load_owned_or_403(review_id: str, user, db, *, approver_ok: bool = False):
     review = await PolicyReviews.get_by_id(review_id, db=db)
     if not review:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
@@ -222,7 +222,7 @@ async def get_review(
     is_approver = user.role == 'admin' or await has_permission(
         user.id, 'features.policy_approver', request.app.state.config.USER_PERMISSIONS, db=db
     )
-    return await _load_owned_or_403(review_id, user, db, approver_ok=is_approver, request=request)
+    return await _load_owned_or_403(review_id, user, db, approver_ok=is_approver)
 
 
 @router.patch('/reviews/{review_id}/results')

@@ -127,3 +127,28 @@ async def test_cannot_edit_after_submit(monkeypatch):
         # Now pending -> editing must be refused
         res = await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'non-compliant'}}})
     assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_cannot_approve_non_pending_review(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    # Create but do NOT submit -> stays 'draft'.
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+    # Approving a non-pending (draft) review must be refused.
+    async with _client(monkeypatch, user=approver) as c:
+        res = await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_review_forbidden_for_non_owner_non_approver(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+    # A different user who is neither owner, admin, nor approver (permission denied) -> 403.
+    stranger = SimpleNamespace(id='str1', role='user', name='Stranger', email='s@x.io')
+    async with _client(monkeypatch, user=stranger, allow=False) as c:
+        res = await c.get(f'/api/v1/policy/reviews/{rid}')
+    assert res.status_code == 403
