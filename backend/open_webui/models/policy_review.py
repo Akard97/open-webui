@@ -1,3 +1,4 @@
+import re
 import time
 import uuid
 from typing import Any, Optional
@@ -15,8 +16,6 @@ def _now() -> int:
 
 def _next_label(label: str) -> str:
     # Mirror checklist.ts nextLabel: v2.0 -> v2.1
-    import re
-
     m = re.match(r'^v(\d+)\.(\d+)$', label or '')
     if not m:
         return f'{label}.1'
