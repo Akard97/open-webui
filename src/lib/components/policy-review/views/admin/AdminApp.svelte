@@ -4,7 +4,9 @@
 		activeVersion,
 		checklistDraft,
 		publishDraft as storePublish,
-		discardDraft
+		discardDraft,
+		saveDraft,
+		startDraft
 	} from '../../lib/store';
 	import { cloneAsDraft, validateDraft } from '../../lib/checklist';
 	import type { ChecklistVersion } from '../../lib/types';
@@ -30,8 +32,21 @@
 		setTimeout(() => (toast = ''), 2500);
 	}
 
-	function save() {
-		checklistDraft.set($state.snapshot(draft) as ChecklistVersion);
+	// Persist the working copy to the backend draft (creating one if needed).
+	async function persistDraft() {
+		if (!$checklistDraft) await startDraft(); // ensure a backend draft exists to write to
+		const snap = $state.snapshot(draft) as ChecklistVersion;
+		await saveDraft({
+			changeSummary: snap.changeSummary,
+			themes: snap.themes,
+			sections: snap.sections,
+			verdictBands: snap.verdictBands,
+			standards: snap.standards
+		});
+	}
+
+	async function save() {
+		await persistDraft();
 		errors = [];
 		flash('Draft saved');
 	}
@@ -42,7 +57,7 @@
 			errors = v.errors;
 			return;
 		}
-		checklistDraft.set($state.snapshot(draft) as ChecklistVersion);
+		await persistDraft();
 		const res = await storePublish();
 		if (res.ok) {
 			errors = [];

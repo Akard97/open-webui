@@ -103,6 +103,7 @@ export async function loadLibrary(): Promise<void> {
 export async function loadAll(): Promise<void> {
 	await Promise.all([loadChecklist(), loadLibrary()]);
 	if (get(canUseChecker) || get(canApprove)) await loadReviews();
+	if (get(canAdmin)) await loadDraft();
 }
 
 // ── Review mutators ──
@@ -151,6 +152,15 @@ export async function rejectPolicy(reviewId: string, note?: string): Promise<voi
 }
 
 // ── Checklist draft mutators ──
+export async function loadDraft(): Promise<void> {
+	const d = await api.getChecklistDraft(token()).catch(() => null);
+	checklistDraft.set(d ? mapVersion(d) : null);
+}
+
+export async function saveDraft(data: unknown): Promise<void> {
+	checklistDraft.set(mapVersion(await api.saveChecklistDraft(token(), data)));
+}
+
 export async function startDraft(): Promise<void> {
 	checklistDraft.set(mapVersion(await api.startChecklistDraft(token())));
 }
