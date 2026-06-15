@@ -324,3 +324,23 @@ async def reject_review(
     updated = await PolicyReviews.update_fields(review_id, {'status': 'rejected', 'approval': approval}, db=db)
     await PolicyAudits.insert('review', review_id, 'rejected', user.id, user.name, {'note': form.note.strip()}, db=db)
     return updated
+
+
+# ──────────────────────────── library ────────────────────────────
+
+
+@router.get('/library')
+async def list_library(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    return await PolicyLibrary.list_all(db=db)
+
+
+@router.get('/library/{code}')
+async def get_library_entry(
+    request: Request, code: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    entry = await PolicyLibrary.get_by_code(code, db=db)
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    return entry

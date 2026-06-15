@@ -88,6 +88,7 @@ from open_webui.routers import (
     channels,
     chats,
     notes,
+    policy_review,
     folders,
     configs,
     groups,
@@ -1444,6 +1445,7 @@ app.include_router(users.router, prefix='/api/v1/users', tags=['users'])
 app.include_router(channels.router, prefix='/api/v1/channels', tags=['channels'])
 app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
+app.include_router(policy_review.router, prefix='/api/v1/policy', tags=['policy'])
 
 
 app.include_router(models.router, prefix='/api/v1/models', tags=['models'])
