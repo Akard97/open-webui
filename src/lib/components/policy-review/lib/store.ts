@@ -32,7 +32,9 @@ function mapReview(r: any): Review {
 		approval: r.approval ?? { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
 		strengths: r.strengths ?? [],
 		createdBy: r.created_by_name,
-		createdAt: r.created_at ? String(r.created_at) : ''
+		createdAt: r.created_at
+			? new Date(r.created_at / 1e6).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+			: ''
 	};
 }
 
@@ -42,7 +44,9 @@ function mapVersion(v: any): ChecklistVersion {
 		id: v.id,
 		label: v.label,
 		status: v.status,
-		publishedAt: v.published_at ? String(v.published_at) : null,
+		publishedAt: v.published_at
+			? new Date(v.published_at / 1e6).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+			: null,
 		publishedBy: v.published_by_name ?? null,
 		changeSummary: d.changeSummary ?? '',
 		themes: d.themes ?? [],
@@ -158,7 +162,8 @@ export async function loadDraft(): Promise<void> {
 }
 
 export async function saveDraft(data: unknown): Promise<void> {
-	checklistDraft.set(mapVersion(await api.saveChecklistDraft(token(), data)));
+	const saved = await api.saveChecklistDraft(token(), data);
+	if (saved) checklistDraft.set(mapVersion(saved));
 }
 
 export async function startDraft(): Promise<void> {

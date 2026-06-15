@@ -68,8 +68,8 @@
 		}
 	}
 
-	function discard() {
-		discardDraft();
+	async function discard() {
+		await discardDraft();
 		draft = cloneAsDraft($activeVersion);
 		errors = [];
 		flash('Draft discarded');

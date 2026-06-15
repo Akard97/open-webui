@@ -6,15 +6,21 @@
 	import { submitModalOpen, submitForApproval, activeReview } from '../lib/store';
 
 	let note = $state('Reviewer override notes attached for the approver.');
+	let submitError = $state('');
 
 	function close() {
 		submitModalOpen.set(false);
 	}
 
-	function submit() {
+	async function submit() {
 		if (!$activeReview) return;
-		submitForApproval($activeReview.id, note);
-		close();
+		submitError = '';
+		try {
+			await submitForApproval($activeReview.id, note);
+			close();
+		} catch (e) {
+			submitError = String(e);
+		}
 	}
 </script>
 
@@ -60,6 +66,9 @@
 				</div>
 			</div>
 		</div>
+		{#if submitError}
+			<p class="modal-error">{submitError}</p>
+		{/if}
 		<div class="modal-foot">
 			<button class="btn" onclick={close} type="button">Cancel</button>
 			<button class="btn btn-primary" onclick={submit} type="button">

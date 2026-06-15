@@ -30,7 +30,7 @@ function backendReview(over: Record<string, unknown> = {}) {
 		approval: { status: 'idle', sentAt: null, decidedAt: null, decidedBy: null, note: '' },
 		strengths: [],
 		created_by_name: 'Test Reviewer',
-		created_at: '2026-01-01T00:00:00Z',
+		created_at: 1767225600000000000, // 2026-01-01T00:00:00Z in nanoseconds
 		...over
 	};
 }
@@ -112,6 +112,10 @@ describe('api-backed review mutators', () => {
 		// Backend snake_case is mapped to the frontend Review shape.
 		expect(created.policyMeta.code).toBe('POL-1');
 		expect(created.createdBy).toBe('Test Reviewer');
+		// ns timestamp must be formatted as a readable date, not a raw integer.
+		expect(created.createdAt).toBe(
+			new Date(1767225600000000000 / 1e6).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+		);
 		expect(get(reviews).some((r) => r.id === created.id)).toBe(true);
 		expect(get(activeReviewId)).toBe(created.id);
 		expect(get(stage)).toBe('review');
