@@ -24,6 +24,12 @@ describe('buildActiveVersion', () => {
 		expect(new Set(ids).size).toBe(ids.length);
 		expect(ids.every((id) => /^PRP\d+-\d+$/.test(id))).toBe(true);
 	});
+
+	it('seeds the standard-code vocabulary (OEC, ISO, OM)', () => {
+		const v = buildActiveVersion();
+		expect(v.standards.map((s) => s.code).sort()).toEqual(['ISO', 'OEC', 'OM']);
+		expect(v.standards.every((s) => s.label && s.description)).toBe(true);
+	});
 });
 
 describe('buildSeedReviews', () => {

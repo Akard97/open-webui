@@ -29,12 +29,18 @@ export interface Theme {
 	name: string;
 	weight: number; // percent
 	gate: boolean;
-	threshold?: number; // gate threshold, default 85
+	threshold: number; // gate threshold (default 85)
 }
 
 export interface VerdictBands {
 	approved: number; // default 85
 	conditional: number; // default 70
+}
+
+export interface StandardCode {
+	code: string; // e.g. 'OEC'
+	label: string; // e.g. 'Organizational Excellence Checklist'
+	description: string;
 }
 
 export type ChecklistStatus = 'active' | 'draft' | 'archived';
@@ -49,6 +55,7 @@ export interface ChecklistVersion {
 	themes: Theme[];
 	sections: Section[];
 	verdictBands: VerdictBands;
+	standards: StandardCode[];
 }
 
 // ─── Review (per policy) ───────────────────────────────────────────────────
@@ -137,4 +144,4 @@ export interface LibraryPolicy {
 
 // Transient view/stage keys (unchanged in Plan 1; expanded in Plan 2).
 export type Stage = 'upload' | 'scanning' | 'review';
-export type ViewKey = 'overview' | 'library' | 'new-review' | 'my-reviews' | 'approvals' | 'review';
+export type ViewKey = 'overview' | 'library' | 'new-review' | 'my-reviews' | 'approvals' | 'review' | 'admin';

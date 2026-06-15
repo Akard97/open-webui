@@ -57,7 +57,7 @@ function loadInitial(): PersistedState {
 				activeReviewId: parsed.activeReviewId ?? fresh.activeReviewId,
 				stage: parsed.stage ?? 'review',
 				view: (
-					['overview', 'library', 'new-review', 'my-reviews', 'approvals', 'review'] as const
+					['overview', 'library', 'new-review', 'my-reviews', 'approvals', 'review', 'admin'] as const
 				).includes(parsed.view as ViewKey)
 					? (parsed.view as ViewKey)
 					: 'overview',

@@ -5,10 +5,10 @@ import type { ChecklistVersion, ItemResult, Theme } from './types';
 const THEMES: Theme[] = [
 	{ id: 'T1', name: 'Policy Foundation', weight: 28, gate: true, threshold: 85 },
 	{ id: 'T2', name: 'Governance and Accountability', weight: 28, gate: true, threshold: 85 },
-	{ id: 'T3', name: 'People and Communication', weight: 16, gate: false },
-	{ id: 'T4', name: 'Performance and Measurement', weight: 14, gate: false },
-	{ id: 'T5', name: 'Implementation and Change', weight: 7, gate: false },
-	{ id: 'T6', name: 'Policy Integrity', weight: 7, gate: false }
+	{ id: 'T3', name: 'People and Communication', weight: 16, gate: false, threshold: 85 },
+	{ id: 'T4', name: 'Performance and Measurement', weight: 14, gate: false, threshold: 85 },
+	{ id: 'T5', name: 'Implementation and Change', weight: 7, gate: false, threshold: 85 },
+	{ id: 'T6', name: 'Policy Integrity', weight: 7, gate: false, threshold: 85 }
 ];
 
 const VERDICT_BANDS = { approved: 85, conditional: 70 };
@@ -23,6 +23,7 @@ function version(themeIds: string[]): ChecklistVersion {
 		changeSummary: '',
 		themes: THEMES,
 		verdictBands: VERDICT_BANDS,
+		standards: [],
 		sections: themeIds.map((t, i) => ({
 			id: `PRP${i + 1}`,
 			theme: t,

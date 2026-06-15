@@ -14,7 +14,8 @@ import type {
 	Section,
 	Review,
 	ItemResult,
-	VerdictBands
+	VerdictBands,
+	StandardCode
 } from './types';
 
 interface RawItem {
@@ -53,10 +54,10 @@ export const POLICY_META: PolicyMeta = {
 export const THEMES: Theme[] = [
 	{ id: 'T1', name: 'Policy Foundation', weight: 28, gate: true, threshold: 85 },
 	{ id: 'T2', name: 'Governance and Accountability', weight: 28, gate: true, threshold: 85 },
-	{ id: 'T3', name: 'People and Communication', weight: 16, gate: false },
-	{ id: 'T4', name: 'Performance and Measurement', weight: 14, gate: false },
-	{ id: 'T5', name: 'Implementation and Change', weight: 7, gate: false },
-	{ id: 'T6', name: 'Policy Integrity', weight: 7, gate: false }
+	{ id: 'T3', name: 'People and Communication', weight: 16, gate: false, threshold: 85 },
+	{ id: 'T4', name: 'Performance and Measurement', weight: 14, gate: false, threshold: 85 },
+	{ id: 'T5', name: 'Implementation and Change', weight: 7, gate: false, threshold: 85 },
+	{ id: 'T6', name: 'Policy Integrity', weight: 7, gate: false, threshold: 85 }
 ];
 
 // ─── Sections + checklist items (mocked AI verdicts) ───────────────────────
@@ -1195,6 +1196,12 @@ export const TODAY = new Date('2026-05-20');
 
 export const VERDICT_BANDS: VerdictBands = { approved: 85, conditional: 70 };
 
+export const SEED_STANDARDS: StandardCode[] = [
+	{ code: 'OEC', label: 'Organizational Excellence Checklist', description: 'Osool internal policy-quality checklist maintained by Organizational Excellence.' },
+	{ code: 'ISO', label: 'ISO 9001:2015', description: 'International standard for quality management systems.' },
+	{ code: 'OM', label: 'Osool Metapolicy', description: 'The governing policy-on-policies that defines how Osool policies are written and managed.' }
+];
+
 export const ACTIVE_VERSION_ID = 'v2.0';
 
 function defItem(raw: RawItem, sectionId: string): ChecklistItemDef {
@@ -1229,7 +1236,8 @@ export function buildActiveVersion(): ChecklistVersion {
 		changeSummary: 'PRP Master Checklist v2.0 — initial managed version.',
 		themes: structuredClone(THEMES),
 		sections: RAW_SECTIONS.map(defSection),
-		verdictBands: { ...VERDICT_BANDS }
+		verdictBands: { ...VERDICT_BANDS },
+		standards: structuredClone(SEED_STANDARDS)
 	};
 }
 
