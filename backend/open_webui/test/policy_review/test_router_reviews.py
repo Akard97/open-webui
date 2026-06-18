@@ -65,6 +65,10 @@ async def test_full_lifecycle_create_submit_approve_publishes(monkeypatch):
     reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
     approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
 
+    # This test exercises the real submit gate (a pending item must block submit),
+    # so disable the testing autofill that would otherwise pre-resolve every item.
+    monkeypatch.setattr(pr_router, 'AUTOFILL_RESULTS_ON_CREATE', False)
+
     # Create
     async with _client(monkeypatch, user=reviewer) as c:
         created = await c.post('/api/v1/policy/reviews', json={'policy_meta': META})

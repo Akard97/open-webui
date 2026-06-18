@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from typing import Optional
 
@@ -169,6 +170,37 @@ async def publish_checklist_draft(
 # ──────────────────────────── reviews ────────────────────────────
 
 
+# ── TEMP testing scaffolding ────────────────────────────────────────────────
+# There is no AI scan / document parsing yet, so a freshly created review starts
+# with every checklist item `pending`. The submit gate (here and in the UI) blocks
+# submission while ANY item is pending/human, so a new policy can never be sent for
+# approval until ~100 items are answered by hand. To let testers exercise the
+# submit → approve → publish flow, we pre-mark every item `compliant` on creation.
+# Set POLICY_REVIEW_AUTOFILL=false to disable; remove this block once real review
+# (manual or AI-assisted) lands.
+AUTOFILL_RESULTS_ON_CREATE = os.getenv('POLICY_REVIEW_AUTOFILL', 'true').strip().lower() not in (
+    'false', '0', 'no', 'off', '',
+)
+
+
+def _autofilled_results(active_data: Optional[dict]) -> dict:
+    """Mark every checklist item `compliant` so the review is fully resolved and
+    immediately submittable. TEMP testing helper — see AUTOFILL_RESULTS_ON_CREATE."""
+    results: dict = {}
+    for sec in (active_data or {}).get('sections', []):
+        for item in sec.get('items', []):
+            item_id = item.get('id')
+            if not item_id:
+                continue
+            results[item_id] = {
+                'result': 'compliant',
+                'reviewed': True,
+                'confidence': 0.99,
+                'comment': 'Auto-marked compliant (testing default).',
+            }
+    return results
+
+
 class ReviewCreateForm(BaseModel):
     policy_meta: dict
     strengths: Optional[list] = None
@@ -207,6 +239,7 @@ async def create_review(
         created_by_name=user.name,
         policy_meta=form.policy_meta,
         active_version=active,
+        results=_autofilled_results(active.data) if AUTOFILL_RESULTS_ON_CREATE else None,
         strengths=form.strengths or [],
         db=db,
     )
