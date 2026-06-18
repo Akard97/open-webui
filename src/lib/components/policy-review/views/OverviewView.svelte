@@ -61,6 +61,10 @@
 		const v = versionFor(r, $checklistVersions);
 		return v ? summarizeReview(r, v).overall : 0;
 	}
+
+	// Score band — tie green to the 85 gate threshold used across the checklist.
+	const scoreTone = (n: number) => (n >= 85 ? 'ok' : n >= 70 ? 'warn' : 'mute');
+	const initial = (name: string) => (name ?? '').trim().charAt(0).toUpperCase() || '?';
 </script>
 
 <div class="ov-page">
@@ -98,9 +102,10 @@
 								{#each openMine as r (r.id)}
 									<li>
 										<button class="ov-row" onclick={() => openReview(r.id)} type="button">
+											<span class="ov-row-dot {REVIEW_STATUS_META[r.status].tone}"></span>
 											<span class="ov-row-title">{r.policyMeta.name}</span>
-											<span class="ov-chip {REVIEW_STATUS_META[r.status].tone}">{REVIEW_STATUS_META[r.status].label}</span>
-											<span class="ov-row-score">{scoreOf(r)}%</span>
+											<span class="ov-row-state {REVIEW_STATUS_META[r.status].tone}">{REVIEW_STATUS_META[r.status].label}</span>
+											<span class="ov-row-score {scoreTone(scoreOf(r))}">{scoreOf(r)}%</span>
 										</button>
 									</li>
 								{/each}
@@ -125,9 +130,12 @@
 								{#each pending as r (r.id)}
 									<li>
 										<button class="ov-row" onclick={() => openReview(r.id)} type="button">
-											<span class="ov-row-title">{r.policyMeta.name}</span>
-											<span class="ov-row-sub">{r.createdBy}</span>
-											<span class="ov-row-score">{scoreOf(r)}%</span>
+											<span class="ov-row-avatar">{initial(r.createdBy)}</span>
+											<span class="ov-row-main">
+												<span class="ov-row-title">{r.policyMeta.name}</span>
+												<span class="ov-row-sub">{r.createdBy}</span>
+											</span>
+											<span class="ov-row-score {scoreTone(scoreOf(r))}">{scoreOf(r)}%</span>
 										</button>
 									</li>
 								{/each}
@@ -192,17 +200,29 @@
 	.ov-dot.deep { background: var(--primary-500); }
 	.ov-badge { font-size: 12px; font-weight: 600; color: var(--primary); background: var(--primary-50); padding: 2px 9px; border-radius: 20px; }
 	.ov-empty { color: var(--ink-400); font-size: 13px; padding: 6px 0; }
-	.ov-list { list-style: none; display: grid; gap: 6px; }
-	.ov-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 9px; cursor: pointer; transition: background .12s; }
+	.ov-list { list-style: none; display: grid; gap: 0; }
+	.ov-list li + li { border-top: 1px solid var(--ink-100); }
+	.ov-row { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: none; border: 0; padding: 10px 8px; border-radius: 8px; cursor: pointer; transition: background .12s; }
 	.ov-row:hover { background: var(--ink-50, rgba(0,0,0,0.03)); }
+	.ov-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+	.ov-row-dot.muted { background: var(--ink-300); }
+	.ov-row-dot.info { background: var(--primary); }
+	.ov-row-dot.ok { background: var(--ok); }
+	.ov-row-dot.bad { background: var(--bad); }
+	.ov-row-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--primary-100); color: var(--primary); display: grid; place-items: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+	.ov-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 	.ov-row-title { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.ov-row-sub { font-size: 11.5px; color: var(--ink-400); }
-	.ov-row-score { font-size: 12px; font-family: var(--mono); color: var(--ink-500); }
-	.ov-chip { font-size: 10.5px; padding: 2px 8px; border-radius: 20px; }
-	.ov-chip.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
-	.ov-chip.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
-	.ov-chip.info { color: var(--primary); background: var(--primary-50); }
-	.ov-chip.muted { color: var(--ink-500); background: var(--ink-100); }
+	.ov-row-main .ov-row-title { flex: initial; }
+	.ov-row-sub { font-size: 11px; color: var(--ink-400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ov-row-state { font-size: 10.5px; flex-shrink: 0; }
+	.ov-row-state.muted { color: var(--ink-500); }
+	.ov-row-state.info { color: var(--primary); }
+	.ov-row-state.ok { color: var(--ok); }
+	.ov-row-state.bad { color: var(--bad); }
+	.ov-row-score { font-size: 12px; font-family: var(--mono); color: var(--ink-500); font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; flex-shrink: 0; }
+	.ov-row-score.ok { color: var(--ok); }
+	.ov-row-score.warn { color: var(--warn); }
+	.ov-row-score.mute { color: var(--ink-500); }
 	.ov-link { background: none; border: 0; color: var(--primary); font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; padding: 4px 0; }
 	.ov-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--ink-200); background: none; cursor: pointer; }
 	.ov-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
