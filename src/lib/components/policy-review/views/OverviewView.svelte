@@ -22,6 +22,7 @@
 	);
 	let openMine = $derived(openMineAll.slice(0, 4));
 	let pending = $derived($approvalQueue.slice(0, 4));
+	// POLICIES is static seed data; make `recent`/`publishedCount` $derived if this is wired to a live store.
 	const recent = recentlyUpdated(
 		POLICIES.filter((p) => p.status === 'approved'),
 		4,
@@ -54,7 +55,7 @@
 		HSE: 'oklch(0.55 0.12 135)',
 		OPS: 'oklch(0.55 0.08 240)'
 	};
-	const fnColor = (fn: string) => FN_COLOR[fn] ?? 'var(--ink-300)';
+	const fnColor = (fn: string) => FN_COLOR[fn.toUpperCase()] ?? 'var(--ink-300)';
 
 	function scoreOf(r: Review): number {
 		const v = versionFor(r, $checklistVersions);
@@ -67,7 +68,7 @@
 	<div class="ov-wrap">
 		<header class="ov-head">
 			<div class="ov-eyebrow">
-				<span class="em">Policy Review</span><span class="d"></span>Dashboard
+				<span class="em">Policy Review</span><span class="d" aria-hidden="true"></span>Dashboard
 			</div>
 			<h1>Welcome back, {firstName}</h1>
 			<p>Review policies against the PRP Master Checklist and publish approved policies to the library.</p>
@@ -75,7 +76,7 @@
 				<div class="ov-stats">
 					{#each stats as s, i (s.l)}
 						{#if i > 0}<span class="ov-stats-sep">·</span>{/if}
-						<div class="ov-stat"><b>{s.v}</b><span>{s.l}</span></div>
+						<div class="ov-stat {i === 0 ? 'lead' : ''}"><b>{s.v}</b><span>{s.l}</span></div>
 					{/each}
 				</div>
 			{/if}
@@ -176,7 +177,7 @@
 	.ov-stats { display: flex; align-items: baseline; gap: 16px; margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--ink-100); flex-wrap: wrap; }
 	.ov-stat { display: flex; align-items: baseline; gap: 7px; }
 	.ov-stat b { font-size: 21px; font-weight: 600; color: var(--ink-900); font-variant-numeric: tabular-nums; }
-	.ov-stat:first-child b { color: var(--primary); }
+	.ov-stat.lead b { color: var(--primary); }
 	.ov-stat span { font-size: 10.5px; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.07em; }
 	.ov-stats-sep { color: var(--ink-200); }
 
