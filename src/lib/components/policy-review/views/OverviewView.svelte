@@ -64,7 +64,6 @@
 </script>
 
 <div class="ov-page">
-	<div class="ov-brandline"></div>
 	<div class="ov-wrap">
 		<header class="ov-head">
 			<div class="ov-eyebrow">
@@ -165,7 +164,6 @@
 
 <style>
 	.ov-page { min-height: 100%; }
-	.ov-brandline { height: 2px; background: linear-gradient(90deg, #003B4A 0%, #0F5567 35%, #769A4A 100%); }
 	.ov-wrap { max-width: 920px; margin: 0 auto; padding: 28px 24px 40px; }
 
 	.ov-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-500); display: flex; align-items: center; gap: 8px; }
