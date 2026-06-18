@@ -4,18 +4,46 @@
 
 	import { onDestroy } from 'svelte';
 	import { POLICIES, FN_META } from '../lib/seed';
-	import { policyPopupOpen, selectedPolicy, openPolicyPopup, closePolicyPopup } from '../lib/store';
+	import {
+		policyPopupOpen,
+		selectedPolicy,
+		openPolicyPopup,
+		closePolicyPopup,
+		canAdmin,
+		canApprove,
+		unpublishPolicy
+	} from '../lib/store';
 	import type { LibraryPolicy } from '../lib/types';
 
 	let isOpen = $state(false);
 	let policy = $state<LibraryPolicy | null>(null);
+	let confirmingUnpublish = $state(false);
 
-	const unsubOpen = policyPopupOpen.subscribe((v) => (isOpen = v));
-	const unsubSel = selectedPolicy.subscribe((v) => (policy = v));
+	const unsubOpen = policyPopupOpen.subscribe((v) => {
+		isOpen = v;
+		if (!v) confirmingUnpublish = false;
+	});
+	const unsubSel = selectedPolicy.subscribe((v) => {
+		policy = v;
+		confirmingUnpublish = false;
+	});
 	onDestroy(() => {
 		unsubOpen();
 		unsubSel();
 	});
+
+	// An approver or admin may unpublish (remove) a policy from the library.
+	// Two-click confirm avoids a native confirm() dialog.
+	async function onUnpublish() {
+		if (!policy) return;
+		if (!confirmingUnpublish) {
+			confirmingUnpublish = true;
+			return;
+		}
+		await unpublishPolicy(policy.code);
+		confirmingUnpublish = false;
+		closePolicyPopup();
+	}
 
 	const fnClass = (id: string) => `pl-fn-${id.toLowerCase()}`;
 
@@ -145,9 +173,36 @@
 
 		<footer class="pl-popup-foot">
 			<button class="btn btn-sm btn-ghost" type="button">Download</button>
+			{#if $canAdmin || $canApprove}
+				<button
+					class="btn btn-sm pl-unpublish"
+					class:armed={confirmingUnpublish}
+					type="button"
+					onclick={onUnpublish}
+					onmouseleave={() => (confirmingUnpublish = false)}
+				>
+					{confirmingUnpublish ? 'Confirm unpublish' : 'Unpublish'}
+				</button>
+			{/if}
 			<span class="grow"></span>
 			<button class="btn btn-sm" type="button" onclick={closePolicyPopup}>Close</button>
 			<button class="btn btn-sm btn-primary" type="button">Open PDF</button>
 		</footer>
 	{/if}
 </div>
+
+<style>
+	.pl-unpublish {
+		color: var(--bad);
+		border-color: color-mix(in srgb, var(--bad) 35%, var(--ink-200));
+	}
+	.pl-unpublish:hover {
+		border-color: var(--bad);
+	}
+	.pl-unpublish.armed {
+		background: var(--bad);
+		color: #fff;
+		border-color: var(--bad);
+		font-weight: 600;
+	}
+</style>

@@ -139,8 +139,8 @@ export async function createReview(policyMeta: Review['policyMeta'], strengths: 
 	return created;
 }
 
-export async function submitForApproval(reviewId: string, _note: string): Promise<void> {
-	const updated = mapReview(await api.submitReviewApi(token(), reviewId));
+export async function submitForApproval(reviewId: string, note: string): Promise<void> {
+	const updated = mapReview(await api.submitReviewApi(token(), reviewId, note));
 	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
 }
 
@@ -153,6 +153,18 @@ export async function approveAndPublish(reviewId: string, note?: string): Promis
 export async function rejectPolicy(reviewId: string, note?: string): Promise<void> {
 	const updated = mapReview(await api.rejectReviewApi(token(), reviewId, note ?? ''));
 	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
+}
+
+export async function deleteReview(reviewId: string): Promise<void> {
+	await api.deleteReviewApi(token(), reviewId);
+	reviews.update((arr) => arr.filter((r) => r.id !== reviewId));
+	if (get(activeReviewId) === reviewId) activeReviewId.set(null);
+}
+
+// ── Library mutators ──
+export async function unpublishPolicy(code: string): Promise<void> {
+	await api.deleteLibraryApi(token(), code);
+	await loadLibrary(); // re-fetch so publishedPolicies reflects the removal
 }
 
 // ── Checklist draft mutators ──
@@ -184,6 +196,23 @@ export async function publishDraft(): Promise<{ ok: boolean; errors: string[] }>
 	} catch (e) {
 		return { ok: false, errors: [String(e)] };
 	}
+}
+
+// Load the full version history (active + archived) for the admin version list.
+// loadChecklist() only fetches the active version, which is all non-admin paths need.
+export async function loadVersions(): Promise<void> {
+	const vs = (await api.getChecklistVersions(token()).catch(() => [])) ?? [];
+	checklistVersions.set(vs.map(mapVersion));
+}
+
+// Audit-safe revert: re-activate an archived version. The returned version becomes
+// active; every other version is archived locally to mirror the backend.
+export async function reactivateVersion(id: string): Promise<void> {
+	const activated = mapVersion(await api.activateVersionApi(token(), id));
+	checklistVersions.update((arr) => [
+		activated,
+		...arr.filter((v) => v.id !== activated.id).map((v) => ({ ...v, status: 'archived' as const }))
+	]);
 }
 
 // ── Library popup helpers (unchanged) ──

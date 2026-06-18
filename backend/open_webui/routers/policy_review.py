@@ -75,6 +75,22 @@ async def get_checklist_version(
     return version
 
 
+@router.post('/checklist/versions/{version_id}/activate')
+async def activate_checklist_version(
+    request: Request, version_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    # Audit-safe revert: re-activate an archived version (the current active is archived,
+    # the target is promoted). The target keeps its label; nothing is deleted.
+    await _require(request, user, 'policy_admin', db)
+    result = await PolicyChecklistVersions.activate_version(version_id, by_id=user.id, by_name=user.name, db=db)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    if result is False:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Only an archived version can be re-activated.')
+    await PolicyAudits.insert('checklist', result.id, 'checklist_reactivated', user.id, user.name, {'label': result.label}, db=db)
+    return result
+
+
 @router.get('/checklist/draft')
 async def get_checklist_draft(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
@@ -247,7 +263,11 @@ async def update_review_results(
 
 @router.post('/reviews/{review_id}/submit')
 async def submit_review(
-    request: Request, review_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+    request: Request,
+    review_id: str,
+    form: Optional[NoteForm] = None,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
 ):
     await _require(request, user, 'policy_checker', db)
     review = await _load_owned_or_403(review_id, user, db)
@@ -256,7 +276,9 @@ async def submit_review(
     score = compute_scores(review.checklist_snapshot or {}, review.results or {})
     if score['humanItemsRemain']:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Resolve all items before submitting.')
-    approval = {**(review.approval or {}), 'status': 'pending', 'sentAt': _audit_now(), 'note': ''}
+    # The reviewer's optional note is meaningful context for the approver.
+    note = ((form.note if form else '') or '').strip()
+    approval = {**(review.approval or {}), 'status': 'pending', 'sentAt': _audit_now(), 'note': note}
     updated = await PolicyReviews.update_fields(review_id, {'status': 'pending', 'approval': approval}, db=db)
     await PolicyAudits.insert('review', review_id, 'submitted', user.id, user.name, None, db=db)
     return updated
@@ -326,6 +348,32 @@ async def reject_review(
     return updated
 
 
+@router.delete('/reviews/{review_id}')
+async def delete_review(
+    request: Request, review_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    review = await PolicyReviews.get_by_id(review_id, db=db)
+    if not review:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    # Admins (role or policy_admin) may delete any review in any status, for governance/cleanup.
+    # A plain checker may delete only their OWN review while it is still a draft or returned
+    # (rejected). Deleting an approved review does NOT remove its published library entry —
+    # unpublishing is a separate, explicit action.
+    is_admin = user.role == 'admin' or await has_permission(
+        user.id, 'features.policy_admin', request.app.state.config.USER_PERMISSIONS, db=db
+    )
+    if not is_admin:
+        await _require(request, user, 'policy_checker', db)
+        is_owner = review.created_by_id is not None and review.created_by_id == user.id
+        if not is_owner:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
+        if review.status not in ('draft', 'rejected'):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only a draft or returned review can be deleted.')
+    await PolicyReviews.delete(review_id, db=db)
+    await PolicyAudits.insert('review', review_id, 'deleted', user.id, user.name, {'code': (review.policy_meta or {}).get('code')}, db=db)
+    return {'success': True}
+
+
 # ──────────────────────────── library ────────────────────────────
 
 
@@ -344,3 +392,24 @@ async def get_library_entry(
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
     return entry
+
+
+@router.delete('/library/{code}')
+async def delete_library_entry(
+    request: Request, code: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    # Unpublish a policy from the library. Allowed for an approver or admin (OR-gate, so it
+    # is not expressed via the single-key _require helper).
+    allowed = (
+        user.role == 'admin'
+        or await has_permission(user.id, 'features.policy_approver', request.app.state.config.USER_PERMISSIONS, db=db)
+        or await has_permission(user.id, 'features.policy_admin', request.app.state.config.USER_PERMISSIONS, db=db)
+    )
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.UNAUTHORIZED)
+    entry = await PolicyLibrary.get_by_code(code, db=db)
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    await PolicyLibrary.delete_by_code(code, db=db)
+    await PolicyAudits.insert('library', entry.id, 'unpublished', user.id, user.name, {'code': code}, db=db)
+    return {'success': True}

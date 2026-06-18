@@ -43,6 +43,18 @@ def _client(monkeypatch, *, user, allow=True):
     return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user)), base_url='http://test')
 
 
+def _client_keys(monkeypatch, *, user, keys=()):
+    # Key-aware permission stub: grants only the named feature keys (e.g. {'policy_checker'}),
+    # so owner-vs-admin paths can be exercised without the single-bool stub masking them.
+    granted = set(keys)
+
+    async def _hp(user_id, key, permissions, db=None):
+        return key.split('.')[-1] in granted
+
+    monkeypatch.setattr(pr_router, 'has_permission', _hp)
+    return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user)), base_url='http://test')
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _seed_active():
     await PolicyChecklistVersions.insert_version('v2.0', 'active', ACTIVE_DATA, None, 'OE')
@@ -83,6 +95,33 @@ async def test_full_lifecycle_create_submit_approve_publishes(monkeypatch):
     entry = await PolicyLibrary.get_by_code('C-TEST')
     assert entry is not None
     assert entry.data['score'] == 100
+
+
+@pytest.mark.asyncio
+async def test_submit_stores_reviewer_note_for_approver(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        submitted = await c.post(
+            f'/api/v1/policy/reviews/{rid}/submit', json={'note': '  Please prioritise section 3.  '}
+        )
+        assert submitted.status_code == 200
+        assert submitted.json()['status'] == 'pending'
+        # The reviewer's note is meaningful context for the approver and is trimmed.
+        assert submitted.json()['approval']['note'] == 'Please prioritise section 3.'
+
+
+@pytest.mark.asyncio
+async def test_submit_without_note_is_allowed(monkeypatch):
+    # The note is optional: submitting with no body must still succeed.
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        submitted = await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        assert submitted.status_code == 200
+        assert submitted.json()['approval']['note'] == ''
 
 
 @pytest.mark.asyncio
@@ -152,3 +191,201 @@ async def test_get_review_forbidden_for_non_owner_non_approver(monkeypatch):
     async with _client(monkeypatch, user=stranger, allow=False) as c:
         res = await c.get(f'/api/v1/policy/reviews/{rid}')
     assert res.status_code == 403
+
+
+# ──────────────────────────── admin bypass coverage ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_admin_role_bypasses_permission_gate(monkeypatch):
+    # An admin-role user passes a policy_admin-gated route even when has_permission says no.
+    admin = SimpleNamespace(id='ad1', role='admin', name='Admin', email='ad@x.io')
+    async with _client(monkeypatch, user=admin, allow=False) as c:
+        res = await c.get('/api/v1/policy/checklist/versions')
+    assert res.status_code == 200
+
+
+# ──────────────────────────── delete a review ────────────────────────────
+
+
+async def _create(c, **meta_over):
+    meta = {**META, **meta_over}
+    return (await c.post('/api/v1/policy/reviews', json={'policy_meta': meta})).json()['id']
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_draft_review(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+        deleted = await c.delete(f'/api/v1/policy/reviews/{rid}')
+        assert deleted.status_code == 200
+        gone = await c.get(f'/api/v1/policy/reviews/{rid}')
+        assert gone.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_delete_pending_review(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        res = await c.delete(f'/api/v1/policy/reviews/{rid}')
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_rejected_review(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        await c.post(f'/api/v1/policy/reviews/{rid}/reject', json={'note': 'fix it'})
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        res = await c.delete(f'/api/v1/policy/reviews/{rid}')
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_admin_can_delete_any_review(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    admin = SimpleNamespace(id='ad1', role='admin', name='Admin', email='ad@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')  # now pending
+    # Admin may delete a pending review (governance cleanup).
+    async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
+        res = await c.delete(f'/api/v1/policy/reviews/{rid}')
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_non_owner_checker_cannot_delete(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+    # Another checker who does not own the review -> 403 (not 401).
+    other = SimpleNamespace(id='rev2', role='user', name='Other', email='o@x.io')
+    async with _client_keys(monkeypatch, user=other, keys={'policy_checker'}) as c:
+        res = await c.delete(f'/api/v1/policy/reviews/{rid}')
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_review_requires_checker_or_admin(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+    # A user with no policy permissions at all -> 401.
+    nobody = SimpleNamespace(id='nb1', role='user', name='Nobody', email='n@x.io')
+    async with _client_keys(monkeypatch, user=nobody, keys=set()) as c:
+        res = await c.delete(f'/api/v1/policy/reviews/{rid}')
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_review_404(monkeypatch):
+    admin = SimpleNamespace(id='ad1', role='admin', name='Admin', email='ad@x.io')
+    async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
+        res = await c.delete('/api/v1/policy/reviews/does-not-exist')
+    assert res.status_code == 404
+
+
+# ──────────────────────────── unpublish a library entry ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_approver_can_unpublish_library_entry(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})  # publishes C-TEST
+        deleted = await c.delete('/api/v1/policy/library/C-TEST')
+        assert deleted.status_code == 200
+        gone = await c.get('/api/v1/policy/library/C-TEST')
+        assert gone.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unpublish_unknown_code_404(monkeypatch):
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        res = await c.delete('/api/v1/policy/library/NO-SUCH-CODE')
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unpublish_requires_approver_or_admin(monkeypatch):
+    nobody = SimpleNamespace(id='nb1', role='user', name='Nobody', email='n@x.io')
+    async with _client_keys(monkeypatch, user=nobody, keys={'policy_checker'}) as c:
+        res = await c.delete('/api/v1/policy/library/C-TEST')
+    assert res.status_code == 401
+
+
+# ──────────────────────────── re-activate an archived version ────────────────────────────
+
+
+async def _publish_v21(c):
+    # Clone the active v2.0 into a draft and publish -> archives v2.0, active becomes v2.1.
+    await c.post('/api/v1/policy/checklist/draft')
+    pub = await c.post('/api/v1/policy/checklist/draft/publish')
+    assert pub.status_code == 200
+    return pub.json()
+
+
+@pytest.mark.asyncio
+async def test_reactivate_archived_version(monkeypatch):
+    admin = SimpleNamespace(id='ad1', role='user', name='Nouf', email='n@x.io')
+    async with _client_keys(monkeypatch, user=admin, keys={'policy_admin'}) as c:
+        published = await _publish_v21(c)
+        assert published['label'] == 'v2.1'
+        versions = (await c.get('/api/v1/policy/checklist/versions')).json()
+        v20 = next(v for v in versions if v['label'] == 'v2.0')
+        assert v20['status'] == 'archived'
+
+        res = await c.post(f"/api/v1/policy/checklist/versions/{v20['id']}/activate")
+        assert res.status_code == 200
+        assert res.json()['status'] == 'active'
+        assert res.json()['label'] == 'v2.0'  # label is NOT bumped on re-activation
+
+        active = (await c.get('/api/v1/policy/checklist/active')).json()
+        assert active['label'] == 'v2.0'
+        # The previously-active v2.1 is now archived.
+        versions2 = (await c.get('/api/v1/policy/checklist/versions')).json()
+        v21 = next(v for v in versions2 if v['label'] == 'v2.1')
+        assert v21['status'] == 'archived'
+
+
+@pytest.mark.asyncio
+async def test_reactivate_active_version_rejected(monkeypatch):
+    admin = SimpleNamespace(id='ad1', role='user', name='Nouf', email='n@x.io')
+    async with _client_keys(monkeypatch, user=admin, keys={'policy_admin'}) as c:
+        versions = (await c.get('/api/v1/policy/checklist/versions')).json()
+        active_id = next(v['id'] for v in versions if v['status'] == 'active')
+        res = await c.post(f'/api/v1/policy/checklist/versions/{active_id}/activate')
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reactivate_unknown_version_404(monkeypatch):
+    admin = SimpleNamespace(id='ad1', role='user', name='Nouf', email='n@x.io')
+    async with _client_keys(monkeypatch, user=admin, keys={'policy_admin'}) as c:
+        res = await c.post('/api/v1/policy/checklist/versions/nope/activate')
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_reactivate_requires_admin(monkeypatch):
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        res = await c.post('/api/v1/policy/checklist/versions/whatever/activate')
+    assert res.status_code == 401

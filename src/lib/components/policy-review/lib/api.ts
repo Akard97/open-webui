@@ -20,7 +20,7 @@ async function request<T>(token: string, path: string, method = 'GET', body?: un
 		})
 		.catch((err) => {
 			error = err?.detail ?? err;
-			console.error(err);
+			console.error(error);
 			return null;
 		});
 	if (error) throw error;
@@ -42,6 +42,8 @@ export const publishChecklistDraft = (token: string) =>
 	request<ChecklistVersion>(token, '/checklist/draft/publish', 'POST');
 export const discardChecklistDraft = (token: string) =>
 	request<{ success: boolean }>(token, '/checklist/draft', 'DELETE');
+export const activateVersionApi = (token: string, id: string) =>
+	request<ChecklistVersion>(token, `/checklist/versions/${id}/activate`, 'POST');
 
 // ── Reviews ──
 export const createReviewApi = (token: string, policy_meta: unknown, strengths: string[] = []) =>
@@ -51,13 +53,17 @@ export const getApprovalQueue = (token: string) => request<Review[]>(token, '/re
 export const getReviewApi = (token: string, id: string) => request<Review>(token, `/reviews/${id}`);
 export const updateResultsApi = (token: string, id: string, results: unknown) =>
 	request<Review>(token, `/reviews/${id}/results`, 'PATCH', { results });
-export const submitReviewApi = (token: string, id: string) =>
-	request<Review>(token, `/reviews/${id}/submit`, 'POST');
+export const submitReviewApi = (token: string, id: string, note = '') =>
+	request<Review>(token, `/reviews/${id}/submit`, 'POST', { note });
 export const approveReviewApi = (token: string, id: string, note: string) =>
 	request<Review>(token, `/reviews/${id}/approve`, 'POST', { note });
 export const rejectReviewApi = (token: string, id: string, note: string) =>
 	request<Review>(token, `/reviews/${id}/reject`, 'POST', { note });
+export const deleteReviewApi = (token: string, id: string) =>
+	request<{ success: boolean }>(token, `/reviews/${id}`, 'DELETE');
 
 // ── Library ──
 export const getLibrary = (token: string) =>
 	request<Array<{ code: string; data: LibraryPolicy }>>(token, '/library');
+export const deleteLibraryApi = (token: string, code: string) =>
+	request<{ success: boolean }>(token, `/library/${encodeURIComponent(code)}`, 'DELETE');

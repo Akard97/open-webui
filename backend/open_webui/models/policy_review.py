@@ -254,6 +254,31 @@ class PolicyChecklistVersionTable:
             await db.refresh(draft)
             return ChecklistVersionModel.model_validate(draft)
 
+    async def activate_version(self, id: str, by_id: Optional[str], by_name: str, db: Optional[AsyncSession] = None):
+        # Audit-safe revert: re-activate an ARCHIVED version (archives the current active,
+        # promotes the target). The target keeps its label; nothing is deleted; in-flight
+        # review snapshots are untouched. Returns: None=not found, False=not archived, model=ok.
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(PolicyChecklistVersion).filter_by(id=id))
+            target = res.scalars().first()
+            if not target:
+                return None
+            if target.status != 'archived':
+                return False
+            res2 = await db.execute(select(PolicyChecklistVersion).filter_by(status='active'))
+            current = res2.scalars().first()
+            if current and current.id != target.id:
+                current.status = 'archived'
+                current.updated_at = _now()
+            target.status = 'active'
+            target.published_at = _now()
+            target.published_by_id = by_id
+            target.published_by_name = by_name
+            target.updated_at = _now()  # label intentionally left unchanged
+            await db.commit()
+            await db.refresh(target)
+            return ChecklistVersionModel.model_validate(target)
+
 
 # ──────────────────────────── DAO: reviews ────────────────────────────
 
@@ -320,6 +345,15 @@ class PolicyReviewTable:
             await db.refresh(row)
             return ReviewModel.model_validate(row)
 
+    async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(PolicyReview).filter_by(id=id))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(PolicyReview).filter_by(id=id))
+            await db.commit()
+            return True
+
 
 # ──────────────────────────── DAO: library ────────────────────────────
 
@@ -357,6 +391,15 @@ class PolicyLibraryTable:
             await db.commit()
             await db.refresh(row)
             return LibraryEntryModel.model_validate(row)
+
+    async def delete_by_code(self, code: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(PolicyLibraryEntry).filter_by(code=code))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(PolicyLibraryEntry).filter_by(code=code))
+            await db.commit()
+            return True
 
 
 # ──────────────────────────── DAO: audit ────────────────────────────

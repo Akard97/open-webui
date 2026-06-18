@@ -12,6 +12,44 @@
 	} from '../lib/store';
 
 	let approval = $derived($activeReview?.approval ?? null);
+	let approvalError = $state('');
+	let rejectOpen = $state(false);
+	let rejectNote = $state('');
+
+	async function approve() {
+		if (!$activeReview) return;
+		approvalError = '';
+		try {
+			await approveAndPublish($activeReview.id);
+		} catch (e) {
+			approvalError = String(e);
+		}
+	}
+
+	function openReject() {
+		approvalError = '';
+		rejectOpen = true;
+	}
+
+	function cancelReject() {
+		rejectOpen = false;
+		rejectNote = '';
+		approvalError = '';
+	}
+
+	// The approver's note is required by the backend; the disabled Confirm button
+	// keeps us from ever reaching that 400 from the UI.
+	async function confirmReject() {
+		if (!$activeReview || !rejectNote.trim()) return;
+		approvalError = '';
+		try {
+			await rejectPolicy($activeReview.id, rejectNote.trim());
+			rejectOpen = false;
+			rejectNote = '';
+		} catch (e) {
+			approvalError = String(e);
+		}
+	}
 
 	const MAP: Record<
 		string,
@@ -51,14 +89,42 @@
 			{#if approval.note && approval.status !== 'pending'}
 				<div class="note">"{approval.note}"</div>
 			{/if}
+			{#if approvalError}
+				<div class="error">{approvalError}</div>
+			{/if}
+			{#if rejectOpen}
+				<div class="editor-grid reject-form">
+					<div>
+						<label for="reject-note">Rejection note (required)</label>
+						<textarea
+							id="reject-note"
+							bind:value={rejectNote}
+							placeholder="Explain what the reviewer needs to change before resubmitting…"
+						></textarea>
+					</div>
+					<div class="reject-actions">
+						<button class="btn btn-sm" onclick={cancelReject} type="button">Cancel</button>
+						<button
+							class="btn btn-sm btn-danger"
+							onclick={confirmReject}
+							disabled={!rejectNote.trim()}
+							type="button"
+						>
+							Confirm rejection
+						</button>
+					</div>
+				</div>
+			{/if}
 		</div>
 		<div style="display:flex; gap:6px; flex-shrink:0">
 			{#if approval.status === 'pending'}
 				{#if $canApprove}
-					<button class="btn btn-sm btn-primary" onclick={() => $activeReview && approveAndPublish($activeReview.id)} type="button">
+					<button class="btn btn-sm btn-primary" onclick={approve} type="button">
 						Approve &amp; Publish
 					</button>
-					<button class="btn btn-sm" onclick={() => $activeReview && rejectPolicy($activeReview.id)} type="button"> Reject </button>
+					{#if !rejectOpen}
+						<button class="btn btn-sm" onclick={openReject} type="button"> Reject </button>
+					{/if}
 				{/if}
 			{:else if $activeReview?.status === 'rejected'}
 				<!-- No reset affordance in normal flow; rejected policy must go through a new review cycle -->

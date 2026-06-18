@@ -55,7 +55,11 @@ vi.mock('./api', () => ({
 	rejectReviewApi: vi.fn(async (_t, id) => backendReview({ id, status: 'rejected' })),
 	startChecklistDraft: vi.fn(),
 	publishChecklistDraft: vi.fn(),
-	discardChecklistDraft: vi.fn(async () => ({ success: true }))
+	discardChecklistDraft: vi.fn(async () => ({ success: true })),
+	getChecklistVersions: vi.fn(async () => []),
+	deleteReviewApi: vi.fn(async () => ({ success: true })),
+	deleteLibraryApi: vi.fn(async () => ({ success: true })),
+	activateVersionApi: vi.fn(async (_t, id) => ({ id, label: 'v2.0', status: 'active', data: {} }))
 }));
 
 import {
@@ -63,19 +67,41 @@ import {
 	activeReviewId,
 	activeReview,
 	approvalQueue,
+	checklistVersions,
+	libraryEntries,
 	view,
 	stage,
 	openReview,
 	goNewReview,
 	createReview,
 	updateItemResult,
-	submitForApproval
+	submitForApproval,
+	deleteReview,
+	unpublishPolicy,
+	reactivateVersion
 } from './store';
 import * as api from './api';
+
+function review(over: Record<string, unknown> = {}) {
+	return {
+		id: 'rev-1',
+		policyMeta: {} as never,
+		checklistVersionId: 'v2.0',
+		results: {},
+		status: 'draft' as const,
+		approval: { status: 'idle' as const, sentAt: null, decidedAt: null, decidedBy: null, note: '' },
+		strengths: [],
+		createdBy: 'Test Reviewer',
+		createdAt: '',
+		...over
+	};
+}
 
 beforeEach(() => {
 	reviews.set([]);
 	activeReviewId.set(null);
+	checklistVersions.set([]);
+	libraryEntries.set([]);
 	view.set('overview');
 	stage.set('upload');
 	vi.clearAllMocks();
@@ -159,8 +185,48 @@ describe('api-backed review mutators', () => {
 		]);
 		activeReviewId.set('rev-1');
 		await submitForApproval('rev-1', 'please review');
-		expect(api.submitReviewApi).toHaveBeenCalledWith('', 'rev-1');
+		// The reviewer's note must be forwarded to the api, not dropped.
+		expect(api.submitReviewApi).toHaveBeenCalledWith('', 'rev-1', 'please review');
 		expect(get(activeReview)!.status).toBe('pending');
 		expect(get(approvalQueue).some((r) => r.id === 'rev-1')).toBe(true);
+	});
+});
+
+describe('delete / unpublish / re-activate mutators', () => {
+	it('deleteReview removes the review from the store and clears the active selection', async () => {
+		reviews.set([review({ id: 'rev-1' }), review({ id: 'rev-2' })]);
+		activeReviewId.set('rev-1');
+		await deleteReview('rev-1');
+		expect(api.deleteReviewApi).toHaveBeenCalledWith('', 'rev-1');
+		expect(get(reviews).some((r) => r.id === 'rev-1')).toBe(false);
+		expect(get(reviews).some((r) => r.id === 'rev-2')).toBe(true);
+		// The deleted review was active, so the selection is cleared.
+		expect(get(activeReviewId)).toBe(null);
+	});
+
+	it('deleteReview leaves the active selection alone when a different review is deleted', async () => {
+		reviews.set([review({ id: 'rev-1' }), review({ id: 'rev-2' })]);
+		activeReviewId.set('rev-2');
+		await deleteReview('rev-1');
+		expect(get(activeReviewId)).toBe('rev-2');
+	});
+
+	it('unpublishPolicy calls the api then reloads the library from the source of truth', async () => {
+		await unpublishPolicy('POL-1');
+		expect(api.deleteLibraryApi).toHaveBeenCalledWith('', 'POL-1');
+		// loadLibrary() re-fetches so publishedPolicies reflects the removal.
+		expect(api.getLibrary).toHaveBeenCalledOnce();
+	});
+
+	it('reactivateVersion marks the returned version active and archives the rest', async () => {
+		checklistVersions.set([
+			{ id: 'ver-21', label: 'v2.1', status: 'active' } as never,
+			{ id: 'ver-20', label: 'v2.0', status: 'archived' } as never
+		]);
+		await reactivateVersion('ver-20');
+		expect(api.activateVersionApi).toHaveBeenCalledWith('', 'ver-20');
+		const vs = get(checklistVersions);
+		expect(vs.find((v) => v.status === 'active')!.id).toBe('ver-20');
+		expect(vs.find((v) => v.id === 'ver-21')!.status).toBe('archived');
 	});
 });
