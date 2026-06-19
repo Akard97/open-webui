@@ -89,6 +89,9 @@ describe('itemNumber', () => {
 		expect(itemNumber('PRP1', 2)).toBe('1.2');
 		expect(itemNumber('PRP12', 3)).toBe('12.3');
 	});
+	it('is a no-op when there is no PRP prefix', () => {
+		expect(itemNumber('SEC1', 3)).toBe('SEC1.3');
+	});
 });
 
 describe('topGaps', () => {
@@ -98,10 +101,15 @@ describe('topGaps', () => {
 		expect(gaps.map((g) => g.theme)).toEqual(['T1', 'T3']); // PRP2 is T1 → first
 		expect(gaps[0]).toMatchObject({ ref: '2.1', theme: 'T1', sectionId: 'PRP2', n: 1 });
 	});
-	it('honours the limit', () => {
+	it('defaults to at most 5 gaps', () => {
 		const v = version([{ theme: 'T1', items: 6 }]);
 		const all = Object.fromEntries(Array.from({ length: 6 }, (_, k) => [`PRP1-${k + 1}`, 'non-compliant']));
 		expect(topGaps(v, res(all as Record<string, ItemResult['result']>)).length).toBe(5);
+	});
+	it('honours an explicit limit', () => {
+		const v = version([{ theme: 'T1', items: 6 }]);
+		const all = Object.fromEntries(Array.from({ length: 6 }, (_, k) => [`PRP1-${k + 1}`, 'non-compliant']));
+		expect(topGaps(v, res(all as Record<string, ItemResult['result']>), 3).length).toBe(3);
 	});
 });
 

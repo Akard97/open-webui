@@ -55,7 +55,7 @@ export function resolvedCount(c: ResultCounts): number {
 	return c.compliant + c['non-compliant'];
 }
 
-// Display number for an item: 'PRP1' + n 2 → '1.2'. The PRP prefix is stripped.
+// Display number: sectionId 'PRP1', n 2 → '1.2'. Strips the PRP prefix.
 export function itemNumber(sectionId: string, n: number): string {
 	return `${sectionId.replace('PRP', '')}.${n}`;
 }
@@ -69,31 +69,32 @@ export interface Gap {
 	comment?: string;
 }
 
-const THEME_RANK: Record<string, number> = { T1: 0, T2: 1, T3: 2, T4: 3, T5: 4, T6: 5 };
-
-// Non-compliant items, ranked T1→T6 (unranked last), capped at `limit`.
+// Non-compliant items, ranked by the version's theme order (unknown themes
+// last), capped at `limit`.
 export function topGaps(
 	version: ChecklistVersion,
 	results: Record<string, ItemResult>,
 	limit = 5
 ): Gap[] {
+	const themeRank = new Map(version.themes.map((t, i) => [t.id, i]));
 	const gaps: Gap[] = [];
 	version.sections.forEach((sec) =>
 		sec.items.forEach((it) => {
-			const r = results[it.id] ?? { result: 'pending' as const };
-			if (r.result === 'non-compliant') {
+			const r = results[it.id];
+			if ((r?.result ?? 'pending') === 'non-compliant') {
 				gaps.push({
 					ref: itemNumber(sec.id, it.n),
 					title: it.text,
 					theme: sec.theme,
 					sectionId: sec.id,
 					n: it.n,
-					comment: r.comment
+					comment: r?.comment
 				});
 			}
 		})
 	);
-	gaps.sort((a, b) => (THEME_RANK[a.theme] ?? 9) - (THEME_RANK[b.theme] ?? 9));
+	const rank = (id: string) => themeRank.get(id) ?? Number.MAX_SAFE_INTEGER;
+	gaps.sort((a, b) => rank(a.theme) - rank(b.theme));
 	return gaps.slice(0, limit);
 }
 
