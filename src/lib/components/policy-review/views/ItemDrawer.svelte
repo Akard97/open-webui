@@ -158,7 +158,7 @@
 	<div class="drawer" class:open={$drawerOpen}></div>
 {:else}
 	<div class="drawer-overlay" class:open={$drawerOpen} onclick={close} role="presentation"></div>
-	<aside
+	<div
 		class="drawer"
 		class:open={$drawerOpen}
 		role="dialog"
@@ -337,5 +337,5 @@
 				{/if}
 			</div>
 		</div>
-	</aside>
+	</div>
 {/if}
