@@ -131,12 +131,21 @@ export function goNewReview(): void {
 	view.set('new-review');
 }
 
-export async function createReview(policyMeta: Review['policyMeta'], strengths: string[] = []): Promise<Review> {
-	const created = mapReview(await api.createReviewApi(token(), policyMeta, strengths));
+export async function createReview(
+	policyMeta: Review['policyMeta'],
+	file: File,
+	strengths: string[] = []
+): Promise<Review> {
+	const created = mapReview(await api.createReviewApi(token(), policyMeta, file, strengths));
 	reviews.update((arr) => [created, ...arr]);
 	activeReviewId.set(created.id);
 	stage.set('review');
 	return created;
+}
+
+export async function replaceDocument(reviewId: string, file: File): Promise<void> {
+	const updated = mapReview(await api.replaceReviewDocumentApi(token(), reviewId, file));
+	reviews.update((arr) => arr.map((r) => (r.id === reviewId ? updated : r)));
 }
 
 export async function submitForApproval(reviewId: string, note: string): Promise<void> {

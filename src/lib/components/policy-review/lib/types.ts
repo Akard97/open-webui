@@ -83,6 +83,12 @@ export interface ApprovalState {
 	note: string;
 }
 
+export interface PolicyDocumentMeta {
+	filename: string;
+	contentType: string | null;
+	size: number;
+}
+
 export interface PolicyMeta {
 	name: string;
 	code: string;
@@ -92,6 +98,7 @@ export interface PolicyMeta {
 	reviewDate: string;
 	pages: number;
 	filename: string;
+	document?: PolicyDocumentMeta;
 }
 
 export interface Review {
@@ -141,6 +148,8 @@ export interface LibraryPolicy {
 	outline?: string[] | null;
 	effectiveDate?: string | null;
 	related?: string[];
+	hasDocument?: boolean;
+	filename?: string;
 }
 
 // Transient view/stage keys (unchanged in Plan 1; expanded in Plan 2).

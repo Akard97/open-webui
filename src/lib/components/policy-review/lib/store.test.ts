@@ -41,6 +41,7 @@ vi.mock('./api', () => ({
 	getApprovalQueue: vi.fn(async () => []),
 	getLibrary: vi.fn(async () => []),
 	createReviewApi: vi.fn(async () => backendReview()),
+	replaceReviewDocumentApi: vi.fn(async (_t: unknown, id: string) => backendReview({ id, status: 'draft' })),
 	updateResultsApi: vi.fn(async (_t, id, results) =>
 		backendReview({ id, results: results as Record<string, unknown> })
 	),
@@ -74,6 +75,7 @@ import {
 	openReview,
 	goNewReview,
 	createReview,
+	replaceDocument,
 	updateItemResult,
 	submitForApproval,
 	deleteReview,
@@ -124,17 +126,23 @@ describe('navigation helpers (pure, sync)', () => {
 
 describe('api-backed review mutators', () => {
 	it('createReview calls the api and adds the mapped review, advancing to review stage', async () => {
-		const created = await createReview({
-			name: 'Test Policy',
-			code: 'POL-1',
-			version: 'v1.0',
-			owner: 'OE',
-			reviewer: 'Rev',
-			reviewDate: '2026-01-01',
-			pages: 4,
-			filename: ''
-		});
+		const file = new File([new Uint8Array([1, 2, 3])], 'policy.pdf', { type: 'application/pdf' });
+		const created = await createReview(
+			{
+				name: 'Test Policy',
+				code: 'POL-1',
+				version: 'v1.0',
+				owner: 'OE',
+				reviewer: 'Rev',
+				reviewDate: '2026-01-01',
+				pages: 4,
+				filename: ''
+			},
+			file
+		);
 		expect(api.createReviewApi).toHaveBeenCalledOnce();
+		// The selected file must be forwarded to the api (3rd arg).
+		expect((api.createReviewApi as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][2]).toBe(file);
 		// Backend snake_case is mapped to the frontend Review shape.
 		expect(created.policyMeta.code).toBe('POL-1');
 		expect(created.createdBy).toBe('Test Reviewer');
@@ -189,6 +197,26 @@ describe('api-backed review mutators', () => {
 		expect(api.submitReviewApi).toHaveBeenCalledWith('', 'rev-1', 'please review');
 		expect(get(activeReview)!.status).toBe('pending');
 		expect(get(approvalQueue).some((r) => r.id === 'rev-1')).toBe(true);
+	});
+
+	it('replaceDocument forwards the file and updates the review from the response', async () => {
+		reviews.set([
+			{
+				id: 'rev-1',
+				policyMeta: {} as never,
+				checklistVersionId: 'v2.0',
+				results: {},
+				status: 'rejected',
+				approval: { status: 'rejected', sentAt: null, decidedAt: null, decidedBy: 'A', note: 'fix' },
+				strengths: [],
+				createdBy: 'Test Reviewer',
+				createdAt: ''
+			}
+		]);
+		const file = new File([new Uint8Array([9])], 'fixed.pdf', { type: 'application/pdf' });
+		await replaceDocument('rev-1', file);
+		expect(api.replaceReviewDocumentApi).toHaveBeenCalledWith('', 'rev-1', file);
+		expect(get(reviews).find((r) => r.id === 'rev-1')!.status).toBe('draft');
 	});
 });
 

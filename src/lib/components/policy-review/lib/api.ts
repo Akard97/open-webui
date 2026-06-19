@@ -46,8 +46,55 @@ export const activateVersionApi = (token: string, id: string) =>
 	request<ChecklistVersion>(token, `/checklist/versions/${id}/activate`, 'POST');
 
 // ── Reviews ──
-export const createReviewApi = (token: string, policy_meta: unknown, strengths: string[] = []) =>
-	request<Review>(token, '/reviews', 'POST', { policy_meta, strengths });
+
+// Multipart create: file is required (Phase 2). The shared request() helper forces
+// a JSON content-type, so multipart uploads use their own fetch (the browser sets
+// the multipart boundary automatically when given a FormData body).
+async function upload<T>(token: string, path: string, method: string, form: FormData): Promise<T> {
+	let error: unknown = null;
+	const res = await fetch(`${BASE}${path}`, {
+		method,
+		headers: { Accept: 'application/json', authorization: `Bearer ${token}` },
+		body: form
+	})
+		.then(async (r) => {
+			if (!r.ok) throw await r.json();
+			return r.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			console.error(error);
+			return null;
+		});
+	if (error) throw error;
+	return res as T;
+}
+
+export const createReviewApi = (
+	token: string,
+	policy_meta: unknown,
+	file: File,
+	strengths: string[] = []
+) => {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('meta', JSON.stringify(policy_meta));
+	form.append('strengths', JSON.stringify(strengths));
+	return upload<Review>(token, '/reviews', 'POST', form);
+};
+
+export const replaceReviewDocumentApi = (token: string, id: string, file: File) => {
+	const form = new FormData();
+	form.append('file', file);
+	return upload<Review>(token, `/reviews/${id}/document`, 'PUT', form);
+};
+
+// Download URLs for navigation (window.open). Auth rides the session cookie, as the
+// app's existing file-content links do.
+export const reviewDocumentUrl = (id: string) => `${BASE}/reviews/${id}/document`;
+export const libraryDocumentUrl = (code: string) =>
+	`${BASE}/library/${encodeURIComponent(code)}/document`;
+
 export const getMyReviews = (token: string) => request<Review[]>(token, '/reviews/mine');
 export const getApprovalQueue = (token: string) => request<Review[]>(token, '/reviews/queue');
 export const getReviewApi = (token: string, id: string) => request<Review>(token, `/reviews/${id}`);
