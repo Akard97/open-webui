@@ -122,3 +122,58 @@ async def test_create_parse_failure_cleans_up(monkeypatch, fake_docs):
 
     assert await pr_router.PolicyReviews.list_by_creator('rev1') == []
     assert fake_docs.blobs == {}
+
+
+@pytest.mark.asyncio
+async def test_replace_document_swaps_binary(monkeypatch, fake_docs):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = (await c.post('/api/v1/policy/reviews', **_upload())).json()['id']
+        old = await PolicyDocuments.get('review', rid)
+
+        res = await c.put(
+            f'/api/v1/policy/reviews/{rid}/document',
+            files={'file': ('v2.pdf', b'%PDF-1.4 second', 'application/pdf')},
+            data={},
+        )
+        assert res.status_code == 200
+
+    new = await PolicyDocuments.get('review', rid)
+    assert new.filename == 'v2.pdf'
+    assert new.storage_path != old.storage_path
+    assert old.storage_path not in fake_docs.blobs  # old binary deleted
+
+
+@pytest.mark.asyncio
+async def test_replace_document_reopens_rejected(monkeypatch, fake_docs):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = (await c.post('/api/v1/policy/reviews', **_upload())).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        await c.post(f'/api/v1/policy/reviews/{rid}/reject', json={'note': 'fix it'})
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        res = await c.put(
+            f'/api/v1/policy/reviews/{rid}/document',
+            files={'file': ('fixed.pdf', b'%PDF-1.4 fixed', 'application/pdf')},
+            data={},
+        )
+        assert res.status_code == 200
+        assert res.json()['status'] == 'draft'  # editing a returned review reopens it
+
+
+@pytest.mark.asyncio
+async def test_replace_document_forbidden_when_pending(monkeypatch, fake_docs):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = (await c.post('/api/v1/policy/reviews', **_upload())).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')  # now pending
+        res = await c.put(
+            f'/api/v1/policy/reviews/{rid}/document',
+            files={'file': ('x.pdf', b'%PDF-1.4 x', 'application/pdf')},
+            data={},
+        )
+    assert res.status_code == 403

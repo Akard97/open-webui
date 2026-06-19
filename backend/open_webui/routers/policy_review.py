@@ -360,6 +360,55 @@ async def update_review_results(
     return updated
 
 
+@router.put('/reviews/{review_id}/document')
+async def replace_review_document(
+    request: Request,
+    review_id: str,
+    file: UploadFile = File(...),
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    await _require(request, user, 'policy_checker', db)
+    review = await _load_owned_or_403(review_id, user, db)
+    if review.status not in ('draft', 'rejected'):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Review is locked.')
+
+    contents = await file.read()
+    try:
+        validate_upload(file.filename, len(contents))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    storage_path = store_upload(contents, file.filename)
+    try:
+        text = await extract_text(file.filename, file.content_type, storage_path)
+    except Exception:
+        delete_stored(storage_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not extract text from this document.',
+        )
+
+    old = await PolicyDocuments.get('review', review_id, db=db)
+    await PolicyDocuments.upsert(
+        'review', review_id, file.filename, file.content_type, len(contents), storage_path, text, db=db
+    )
+    if old and old.storage_path != storage_path:
+        delete_stored(old.storage_path)
+
+    meta = {**(review.policy_meta or {})}
+    meta['document'] = {'filename': file.filename, 'contentType': file.content_type, 'size': len(contents)}
+    meta['filename'] = file.filename
+    fields = {'policy_meta': meta}
+    if review.status == 'rejected':
+        fields['status'] = 'draft'  # editing a returned review reopens it
+        await PolicyAudits.insert('review', review_id, 'reopened', user.id, user.name, None, db=db)
+
+    updated = await PolicyReviews.update_fields(review_id, fields, db=db)
+    await PolicyAudits.insert('review', review_id, 'document_replaced', user.id, user.name, {'filename': file.filename}, db=db)
+    return updated
+
+
 @router.post('/reviews/{review_id}/submit')
 async def submit_review(
     request: Request,
