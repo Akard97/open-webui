@@ -35,8 +35,6 @@
 			? countResults(version, results)
 			: { compliant: 0, 'non-compliant': 0, human: 0, pending: 0, total: 0 }
 	);
-	let totalItems = $derived(counts.total);
-
 	let byTheme = $derived.by(() => {
 		const out: Record<string, Section[]> = {};
 		themesList.forEach((t) => (out[t.id] = []));
@@ -113,7 +111,7 @@
 	<!-- Filters -->
 	<div class="review-toolbar">
 		<button class="chip" class:active={filter === 'all'} aria-pressed={filter === 'all'} onclick={() => (filter = 'all')} type="button">
-			All <span class="count">{totalItems}</span>
+			All <span class="count">{counts.total}</span>
 		</button>
 		<button class="chip" class:active={filter === 'issues'} aria-pressed={filter === 'issues'} onclick={() => (filter = 'issues')} type="button">
 			<Icon name="alert" size={12} /> Non-Compliant <span class="count">{counts['non-compliant'] || 0}</span>
@@ -151,10 +149,10 @@
 					</div>
 
 					{#each visibleSecs as sec (sec.id)}
-						{@const isOpen = openMap[sec.id] === true}
 						{@const items = sectionVisibleItems(sec)}
-						{@const c = sectionCounts(sec)}
 						{#if items.length > 0 || filter === 'all'}
+							{@const isOpen = openMap[sec.id] === true}
+							{@const c = sectionCounts(sec)}
 							<div class="section" class:open={isOpen}>
 								<button class="sec-head" aria-expanded={isOpen} aria-controls="sec-{sec.id}" onclick={() => setOpen(sec.id, !isOpen)} type="button">
 									<div class="left">
