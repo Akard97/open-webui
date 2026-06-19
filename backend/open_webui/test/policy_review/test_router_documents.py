@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 import open_webui.routers.policy_review as pr_router
 from open_webui.utils.auth import get_verified_user
-from open_webui.models.policy_review import PolicyChecklistVersions, PolicyDocuments
+from open_webui.models.policy_review import PolicyChecklistVersions, PolicyDocuments, PolicyLibrary
 
 ACTIVE_DATA = {
     'changeSummary': 'init',
@@ -213,3 +213,63 @@ async def test_download_review_document_404_when_absent(monkeypatch, fake_docs):
     async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
         res = await c.get(f'/api/v1/policy/reviews/{review.id}/document')
     assert res.status_code == 404
+
+
+async def _approve_flow(monkeypatch, fake_docs):
+    """Create -> resolve -> submit -> approve; returns the review id."""
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = (await c.post('/api/v1/policy/reviews', **_upload())).json()['id']
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})
+    return rid
+
+
+@pytest.mark.asyncio
+async def test_approve_copies_document_to_library(monkeypatch, fake_docs):
+    await _approve_flow(monkeypatch, fake_docs)
+    lib_doc = await PolicyDocuments.get('library', 'C-TEST')
+    assert lib_doc is not None
+    assert lib_doc.filename == 'policy.pdf'
+
+    entry = await PolicyLibrary.get_by_code('C-TEST')
+    assert entry.data['hasDocument'] is True
+    assert entry.data['filename'] == 'policy.pdf'
+
+    # Library download works for any verified user (open access).
+    anyone = SimpleNamespace(id='u9', role='user', name='Anyone', email='u9@x.io')
+    async with _client_keys(monkeypatch, user=anyone, keys=set()) as c:
+        dl = await c.get('/api/v1/policy/library/C-TEST/document')
+        assert dl.status_code == 200
+        assert dl.content == b'%PDF-1.4 dummy'
+
+
+@pytest.mark.asyncio
+async def test_library_download_survives_review_deletion(monkeypatch, fake_docs):
+    rid = await _approve_flow(monkeypatch, fake_docs)
+    review_doc = await PolicyDocuments.get('review', rid)
+
+    admin = SimpleNamespace(id='ad1', role='admin', name='Admin', email='ad@x.io')
+    async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
+        assert (await c.delete(f'/api/v1/policy/reviews/{rid}')).status_code == 200
+
+    # The review document + its binary are gone, but the library copy remains.
+    assert await PolicyDocuments.get('review', rid) is None
+    assert review_doc.storage_path not in fake_docs.blobs
+    assert await PolicyDocuments.get('library', 'C-TEST') is not None
+    async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
+        assert (await c.get('/api/v1/policy/library/C-TEST/document')).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_unpublish_removes_library_document(monkeypatch, fake_docs):
+    await _approve_flow(monkeypatch, fake_docs)
+    lib_doc = await PolicyDocuments.get('library', 'C-TEST')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        assert (await c.delete('/api/v1/policy/library/C-TEST')).status_code == 200
+    assert await PolicyDocuments.get('library', 'C-TEST') is None
+    assert lib_doc.storage_path not in fake_docs.blobs

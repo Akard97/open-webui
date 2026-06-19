@@ -489,6 +489,17 @@ async def approve_review(
         'nextReview': '—',
         'updatedDays': 0,
     }
+    # Copy the review's source document into a library-owned, immutable copy so the
+    # Library download survives later deletion of the review.
+    src_doc = await PolicyDocuments.get('review', review_id, db=db)
+    if src_doc:
+        new_path = copy_stored(src_doc.storage_path, src_doc.filename)
+        await PolicyDocuments.upsert(
+            'library', meta.get('code'), src_doc.filename, src_doc.content_type, src_doc.size, new_path, src_doc.text, db=db
+        )
+        library_data['hasDocument'] = True
+        library_data['filename'] = src_doc.filename
+
     await PolicyLibrary.upsert(code=meta.get('code'), data=library_data, source_review_id=review_id, db=db)
     await PolicyAudits.insert('review', review_id, 'approved', user.id, user.name, {'score': score['overall']}, db=db)
     await PolicyAudits.insert('review', review_id, 'published', user.id, user.name, {'code': meta.get('code')}, db=db)
@@ -540,6 +551,9 @@ async def delete_review(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
         if review.status not in ('draft', 'rejected'):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only a draft or returned review can be deleted.')
+    doc = await PolicyDocuments.delete('review', review_id, db=db)
+    if doc:
+        delete_stored(doc.storage_path)
     await PolicyReviews.delete(review_id, db=db)
     await PolicyAudits.insert('review', review_id, 'deleted', user.id, user.name, {'code': (review.policy_meta or {}).get('code')}, db=db)
     return {'success': True}
@@ -591,6 +605,9 @@ async def delete_library_entry(
     entry = await PolicyLibrary.get_by_code(code, db=db)
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    doc = await PolicyDocuments.delete('library', code, db=db)
+    if doc:
+        delete_stored(doc.storage_path)
     await PolicyLibrary.delete_by_code(code, db=db)
     await PolicyAudits.insert('library', entry.id, 'unpublished', user.id, user.name, {'code': code}, db=db)
     return {'success': True}
