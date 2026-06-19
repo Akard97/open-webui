@@ -1479,6 +1479,21 @@
   animation: pl-skel-pulse 1.4s ease-in-out infinite;
 }
 
+/* ── review responsive ──────────────────────────────── */
+@media (max-width: 1024px) {
+	.review { padding: 0 24px 80px; }
+	.rv-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+	.rv-theme-grid { grid-template-columns: 1fr; }
+	.rv-split { grid-template-columns: 1fr; }
+	.rv-action { margin-left: 0; align-items: flex-start; width: 100%; }
+}
+@media (max-width: 640px) {
+	.review { padding: 0 16px 72px; }
+	.drawer { width: 100%; max-width: 100%; }
+}
+
 /* ── RTL hardening ───────────────────────────────────────────── */
 :dir(rtl) .pl-chev { transform: scaleX(-1) translateX(-3px); }
 :dir(rtl) .pl-row:hover .pl-chev { transform: scaleX(-1) translateX(0); }
@@ -1494,10 +1509,16 @@
    of the line (= visual right in RTL) */
 :dir(rtl) .pl-rc .meta { flex-direction: row-reverse; }
 
+/* Review page: mirror the disclosure chevrons + band action edge in RTL */
+:dir(rtl) .sec-head .chev { transform: scaleX(-1); }
+:dir(rtl) .section.open .sec-head .chev { transform: scaleX(-1) rotate(90deg); }
+:dir(rtl) .rv-action { margin-left: 0; margin-right: auto; }
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .pl-row, .pl-rc, .pl-chip, .pl-search, .pl-rail, .pl-chev,
-  .pl-popup, .pl-popup-backdrop, .pl-rc .accent {
+  .pl-popup, .pl-popup-backdrop, .pl-rc .accent,
+  .sec-head .chev, .item-row, .rv-gap {
     transition-duration: 0.01ms !important;
   }
 }
