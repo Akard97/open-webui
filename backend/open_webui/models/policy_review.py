@@ -4,7 +4,7 @@ import uuid
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Column, Text, JSON, select, delete
+from sqlalchemy import BigInteger, Column, Text, JSON, UniqueConstraint, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
@@ -82,6 +82,7 @@ class PolicyAuditEntry(Base):
 
 class PolicyDocument(Base):
     __tablename__ = 'policy_document'
+    __table_args__ = (UniqueConstraint('owner_type', 'owner_id', name='uq_policy_document_owner'),)
 
     id = Column(Text, primary_key=True, unique=True)
     owner_type = Column(Text)  # 'review' | 'library'
