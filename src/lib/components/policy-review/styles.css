@@ -576,13 +576,6 @@
 .chip { min-height: 36px; }
 .rv-action .btn, .rv-decide-actions .btn { min-height: 40px; }
 
-/* Policy header */
-.policy-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--ink-100); }
-.policy-title { font-size: 22px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.015em; color: var(--ink-900); }
-.policy-tags { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--ink-500); }
-.policy-tags span { font-family: var(--mono); }
-.policy-tags .dot { color: var(--ink-200); }
-
 .verdict-badge {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 0; background: transparent;

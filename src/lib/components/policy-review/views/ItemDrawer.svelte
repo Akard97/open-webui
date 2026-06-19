@@ -12,6 +12,7 @@
 		markReviewed
 	} from '../lib/store';
 	import type { ChecklistItemDef, ItemVerdict, ItemResult, Section } from '../lib/types';
+	import { isLocked } from '../lib/reviewView';
 
 	type Mode = 'view' | 'edit' | 'thinking';
 
@@ -53,6 +54,7 @@
 		def && $activeReview ? ($activeReview.results[def.id] ?? { result: 'pending' }) : { result: 'pending' }
 	);
 	let verdict = $derived<ItemVerdict>(answer.result);
+	let locked = $derived($activeReview ? isLocked($activeReview.status) : true);
 
 	let prevKey = '';
 	$effect(() => {
@@ -228,7 +230,7 @@
 							{/if}
 						</div>
 					</div>
-					<button class="btn btn-sm btn-ghost" onclick={() => (mode = 'edit')} type="button">
+					<button class="btn btn-sm btn-ghost" onclick={() => (mode = 'edit')} type="button" disabled={locked}>
 						<Icon name="pencil" size={12} /> Override
 					</button>
 				</div>
@@ -278,6 +280,7 @@
 								thinkStep = 0;
 							}}
 							type="button"
+							disabled={locked}
 						>
 							<Icon name="sparkle" size={12} /> Re-review
 						</button>
@@ -330,7 +333,7 @@
 			<div style="display:flex; gap:8px">
 				{#if mode === 'edit'}
 					<button class="btn btn-sm" onclick={() => (mode = 'view')} type="button">Cancel</button>
-					<button class="btn btn-primary btn-sm" onclick={saveEdit} type="button">
+					<button class="btn btn-primary btn-sm" onclick={saveEdit} type="button" disabled={locked}>
 						<Icon name="check" size={12} stroke={3} /> Save override
 					</button>
 				{:else if mode === 'view'}
