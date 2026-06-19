@@ -7,7 +7,6 @@
 	import { computeScores } from '../lib/scoring';
 	import {
 		resolveMode,
-		isLocked,
 		countResults,
 		openCount as openCountOf,
 		resolvedCount,
@@ -42,7 +41,6 @@
 	);
 	let gaps = $derived(version ? topGaps(version, results) : []);
 	let mode = $derived(review ? resolveMode(review.status, $canUseChecker, $canApprove) : 'readonly');
-	let locked = $derived(review ? isLocked(review.status) : true);
 	let document_ = $derived(review?.policyMeta?.document ?? null);
 	let canReplace = $derived(
 		$canUseChecker && review != null && (review.status === 'draft' || review.status === 'rejected')
@@ -61,7 +59,7 @@
 	);
 
 	// ── Replace document (reviewer mode) ──
-	let replaceInput: HTMLInputElement;
+	let replaceInput = $state<HTMLInputElement>();
 	let replacing = $state(false);
 	async function onReplaceChange(e: Event) {
 		const f = (e.target as HTMLInputElement).files?.[0];
