@@ -5,6 +5,7 @@ from open_webui.models.policy_review import (
     PolicyReviews,
     PolicyLibrary,
     PolicyAudits,
+    PolicyDocuments,
 )
 
 ACTIVE_DATA = {'changeSummary': 'init', 'themes': [], 'sections': [], 'verdictBands': {'approved': 85, 'conditional': 70}, 'standards': []}
@@ -69,3 +70,35 @@ async def test_audit_append():
     rows = await PolicyAudits.list_for('review', 'rev1')
     assert len(rows) == 1
     assert rows[0].action == 'created'
+
+
+@pytest.mark.asyncio
+async def test_policy_document_upsert_get_delete_roundtrip():
+    created = await PolicyDocuments.upsert(
+        'review', 'rev-1', 'a.pdf', 'application/pdf', 1234, 'uploads/a.pdf', 'hello text'
+    )
+    assert created.owner_type == 'review'
+    assert created.owner_id == 'rev-1'
+    assert created.text == 'hello text'
+
+    got = await PolicyDocuments.get('review', 'rev-1')
+    assert got is not None
+    assert got.filename == 'a.pdf'
+    assert got.storage_path == 'uploads/a.pdf'
+
+    deleted = await PolicyDocuments.delete('review', 'rev-1')
+    assert deleted is not None
+    assert deleted.storage_path == 'uploads/a.pdf'
+    assert await PolicyDocuments.get('review', 'rev-1') is None
+
+
+@pytest.mark.asyncio
+async def test_policy_document_upsert_overwrites_same_owner():
+    await PolicyDocuments.upsert('review', 'rev-2', 'old.pdf', 'application/pdf', 1, 'uploads/old.pdf', 'old')
+    await PolicyDocuments.upsert('review', 'rev-2', 'new.pdf', 'application/pdf', 2, 'uploads/new.pdf', 'new')
+
+    rows = await PolicyDocuments.list_all_for_test()
+    same_owner = [r for r in rows if r.owner_type == 'review' and r.owner_id == 'rev-2']
+    assert len(same_owner) == 1  # UNIQUE(owner_type, owner_id) — replace, not duplicate
+    assert same_owner[0].filename == 'new.pdf'
+    assert same_owner[0].text == 'new'

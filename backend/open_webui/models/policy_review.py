@@ -80,6 +80,21 @@ class PolicyAuditEntry(Base):
     created_at = Column(BigInteger)
 
 
+class PolicyDocument(Base):
+    __tablename__ = 'policy_document'
+
+    id = Column(Text, primary_key=True, unique=True)
+    owner_type = Column(Text)  # 'review' | 'library'
+    owner_id = Column(Text)    # policy_review.id  OR  policy_library.code
+    filename = Column(Text)
+    content_type = Column(Text, nullable=True)
+    size = Column(BigInteger, nullable=True)
+    storage_path = Column(Text)
+    text = Column(Text, nullable=True)  # extracted plain text (Phase 3 input)
+    created_at = Column(BigInteger)
+    updated_at = Column(BigInteger)
+
+
 # ──────────────────────────── Pydantic ────────────────────────────
 
 
@@ -132,6 +147,20 @@ class AuditEntryModel(BaseModel):
     actor_name: str
     detail: Optional[dict] = None
     created_at: int
+
+
+class PolicyDocumentModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    owner_type: str
+    owner_id: str
+    filename: str
+    content_type: Optional[str] = None
+    size: Optional[int] = None
+    storage_path: str
+    text: Optional[str] = None
+    created_at: int
+    updated_at: int
 
 
 # ──────────────────────────── DAO: checklist versions ────────────────────────────
@@ -442,7 +471,87 @@ class PolicyAuditTable:
             return [AuditEntryModel.model_validate(r) for r in res.scalars().all()]
 
 
+# ──────────────────────────── DAO: documents ────────────────────────────
+
+
+class PolicyDocumentTable:
+    async def upsert(
+        self,
+        owner_type: str,
+        owner_id: str,
+        filename: str,
+        content_type: Optional[str],
+        size: Optional[int],
+        storage_path: str,
+        text: Optional[str],
+        db: Optional[AsyncSession] = None,
+    ) -> PolicyDocumentModel:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(PolicyDocument).filter_by(owner_type=owner_type, owner_id=owner_id)
+            )
+            row = res.scalars().first()
+            if row:
+                row.filename = filename
+                row.content_type = content_type
+                row.size = size
+                row.storage_path = storage_path
+                row.text = text
+                row.updated_at = _now()
+            else:
+                row = PolicyDocument(
+                    id=str(uuid.uuid4()),
+                    owner_type=owner_type,
+                    owner_id=owner_id,
+                    filename=filename,
+                    content_type=content_type,
+                    size=size,
+                    storage_path=storage_path,
+                    text=text,
+                    created_at=_now(),
+                    updated_at=_now(),
+                )
+                db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return PolicyDocumentModel.model_validate(row)
+
+    async def get(
+        self, owner_type: str, owner_id: str, db: Optional[AsyncSession] = None
+    ) -> Optional[PolicyDocumentModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(PolicyDocument).filter_by(owner_type=owner_type, owner_id=owner_id)
+            )
+            row = res.scalars().first()
+            return PolicyDocumentModel.model_validate(row) if row else None
+
+    async def delete(
+        self, owner_type: str, owner_id: str, db: Optional[AsyncSession] = None
+    ) -> Optional[PolicyDocumentModel]:
+        # Returns the deleted row (so the caller can remove its binary), or None.
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(PolicyDocument).filter_by(owner_type=owner_type, owner_id=owner_id)
+            )
+            row = res.scalars().first()
+            if not row:
+                return None
+            model = PolicyDocumentModel.model_validate(row)
+            await db.execute(
+                delete(PolicyDocument).filter_by(owner_type=owner_type, owner_id=owner_id)
+            )
+            await db.commit()
+            return model
+
+    async def list_all_for_test(self, db: Optional[AsyncSession] = None) -> list[PolicyDocumentModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(PolicyDocument))
+            return [PolicyDocumentModel.model_validate(r) for r in res.scalars().all()]
+
+
 PolicyChecklistVersions = PolicyChecklistVersionTable()
 PolicyReviews = PolicyReviewTable()
 PolicyLibrary = PolicyLibraryTable()
 PolicyAudits = PolicyAuditTable()
+PolicyDocuments = PolicyDocumentTable()
