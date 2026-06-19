@@ -1,15 +1,20 @@
 <script lang="ts">
-	// New-review entry screen. Collects policy metadata and creates a review
-	// against the active checklist via the backend API. There is no AI scan and
-	// no file parsing in Phase 1 — the dropzone is decorative only.
+	// New-review entry screen. Collects policy metadata + the policy document and
+	// creates a review (multipart upload + synchronous parse) via the backend API.
 
 	import Icon from '../ui/Icon.svelte';
 	import { activeVersion, createReview } from '../lib/store';
+	import { validateUploadFile, ACCEPT_ATTR, MAX_UPLOAD_MB } from '../lib/uploadValidation';
 	import type { PolicyMeta } from '../lib/types';
 
 	let dragging = $state(false);
 	let submitting = $state(false);
+	let phase = $state<'' | 'uploading' | 'parsing'>('');
 	let error = $state('');
+
+	// Selected file.
+	let file = $state<File | null>(null);
+	let fileInput: HTMLInputElement;
 
 	// Metadata form state.
 	let name = $state('');
@@ -20,13 +25,48 @@
 	let reviewDate = $state('');
 	let pages = $state<number>(0);
 
-	let canSubmit = $derived(name.trim().length > 0 && code.trim().length > 0 && !submitting);
+	let canSubmit = $derived(
+		name.trim().length > 0 && code.trim().length > 0 && file !== null && !submitting
+	);
+
+	function pickFile(f: File | null) {
+		error = '';
+		if (!f) {
+			file = null;
+			return;
+		}
+		const msg = validateUploadFile(f);
+		if (msg) {
+			error = msg;
+			file = null;
+			return;
+		}
+		file = f;
+	}
+
+	function onFileChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		pickFile(input.files?.[0] ?? null);
+	}
+
+	function clearFile() {
+		file = null;
+		error = '';
+		if (fileInput) fileInput.value = '';
+	}
+
+	function fmtSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	}
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		if (!canSubmit) return;
+		if (!canSubmit || !file) return;
 		submitting = true;
 		error = '';
+		phase = 'uploading';
 		const meta: PolicyMeta = {
 			name: name.trim(),
 			code: code.trim(),
@@ -35,13 +75,15 @@
 			reviewer: reviewer.trim(),
 			reviewDate: reviewDate,
 			pages: Number(pages) || 0,
-			filename: ''
+			filename: file.name
 		};
 		try {
-			await createReview(meta); // navigates to the workspace via stage='review'
+			phase = 'parsing';
+			await createReview(meta, file); // navigates to the workspace via stage='review'
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 			submitting = false;
+			phase = '';
 		}
 	}
 
@@ -69,6 +111,7 @@
 	function onDrop(e: DragEvent) {
 		e.preventDefault();
 		dragging = false;
+		pickFile(e.dataTransfer?.files?.[0] ?? null);
 	}
 </script>
 
@@ -134,7 +177,7 @@
 			<span class="mf-hint">Fields marked <i class="mf-req">*</i> are required.</span>
 			<button class="btn btn-primary" type="submit" disabled={!canSubmit}>
 				{#if submitting}
-					Creating review…
+					{phase === 'parsing' ? 'Parsing document…' : 'Uploading…'}
 				{:else}
 					<Icon name="check" size={14} /> Create review
 				{/if}
@@ -145,28 +188,41 @@
 	<div
 		class="dropzone upload-card"
 		class:dragging
+		class:has-file={file}
 		ondragover={onDragOver}
 		ondragleave={onDragLeave}
 		ondrop={onDrop}
 		role="presentation"
 	>
-		<div class="dz-doc" aria-hidden="true">
-			<div class="dz-doc-corner"></div>
-			<div class="dz-doc-lines">
-				<span style="width:72%"></span>
-				<span style="width:90%"></span>
-				<span style="width:62%"></span>
-				<span style="width:80%"></span>
+		<input
+			bind:this={fileInput}
+			type="file"
+			accept={ACCEPT_ATTR}
+			class="dz-input"
+			onchange={onFileChange}
+		/>
+		{#if file}
+			<div class="dz-file">
+				<Icon name="fileText" size={18} />
+				<div class="dz-file-meta">
+					<div class="dz-file-name">{file.name}</div>
+					<div class="dz-file-size">{fmtSize(file.size)}</div>
+				</div>
+				<button type="button" class="dz-remove" onclick={clearFile} aria-label="Remove file">
+					<Icon name="x" size={14} />
+				</button>
 			</div>
-			<div class="dz-doc-badge"><Icon name="upload" size={14} stroke={2.2} /></div>
-		</div>
-		<h3>Document upload coming soon</h3>
-		<p>For now, register the policy using the form above.</p>
-		<div class="formats">
-			<span>.docx</span><i></i><span>.pdf</span><i></i><span>.md</span><i></i><span
-				>max 25&nbsp;MB</span
-			><i></i>
-		</div>
+		{:else}
+			<button type="button" class="dz-browse" onclick={() => fileInput?.click()}>
+				<div class="dz-doc-badge"><Icon name="upload" size={14} stroke={2.2} /></div>
+				<h3>Drag &amp; drop the policy document, or browse</h3>
+				<p>Required to start a review.</p>
+				<div class="formats">
+					<span>.docx</span><i></i><span>.pdf</span><i></i><span>.md</span><i></i><span>.txt</span>
+					<i></i><span>max {MAX_UPLOAD_MB}&nbsp;MB</span>
+				</div>
+			</button>
+		{/if}
 	</div>
 
 	<div class="checklist-panel">
@@ -322,5 +378,53 @@
 	.btn[disabled] {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+	.dropzone {
+		position: relative;
+	}
+	.dz-input {
+		display: none;
+	}
+	.dz-browse {
+		display: block;
+		width: 100%;
+		background: none;
+		border: 0;
+		cursor: pointer;
+		font: inherit;
+		color: inherit;
+		text-align: center;
+	}
+	.dz-file {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		text-align: left;
+	}
+	.dz-file-meta {
+		min-width: 0;
+		flex: 1;
+	}
+	.dz-file-name {
+		font-weight: 600;
+		color: var(--ink-900);
+		font-size: 13.5px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.dz-file-size {
+		font-size: 12px;
+		color: var(--ink-500);
+	}
+	.dz-remove {
+		background: none;
+		border: 0;
+		cursor: pointer;
+		color: var(--ink-400);
+		padding: 4px;
+	}
+	.dz-remove:hover {
+		color: var(--ink-700);
 	}
 </style>
