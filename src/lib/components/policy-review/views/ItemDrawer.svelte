@@ -35,6 +35,7 @@
 	let draftComment = $state('');
 	let draftRefSection = $state('');
 	let draftRefQuote = $state('');
+	let drawerEl: HTMLElement | undefined = $state();
 
 	let section = $derived.by<Section | null>(() => {
 		const p = $picked;
@@ -89,6 +90,46 @@
 		return () => clearTimeout(t);
 	});
 
+	// While open: lock background scroll, move focus into the drawer, and trap
+	// Tab inside it. Restore focus to the previously-focused element on close.
+	$effect(() => {
+		if (!$drawerOpen || !drawerEl) return;
+		const prevActive = document.activeElement as HTMLElement | null;
+		const prevOverflow = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+
+		const focusables = () =>
+			Array.from(
+				drawerEl!.querySelectorAll<HTMLElement>(
+					'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+				)
+			).filter((el) => !el.hasAttribute('disabled'));
+
+		focusables()[0]?.focus();
+
+		function onKeydown(e: KeyboardEvent) {
+			if (e.key !== 'Tab') return;
+			const els = focusables();
+			if (els.length === 0) return;
+			const first = els[0];
+			const last = els[els.length - 1];
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault();
+				first.focus();
+			}
+		}
+		drawerEl.addEventListener('keydown', onKeydown);
+
+		return () => {
+			drawerEl?.removeEventListener('keydown', onKeydown);
+			document.body.style.overflow = prevOverflow;
+			prevActive?.focus?.();
+		};
+	});
+
 	function close() {
 		drawerOpen.set(false);
 	}
@@ -117,11 +158,18 @@
 	<div class="drawer" class:open={$drawerOpen}></div>
 {:else}
 	<div class="drawer-overlay" class:open={$drawerOpen} onclick={close} role="presentation"></div>
-	<aside class="drawer" class:open={$drawerOpen}>
+	<aside
+		class="drawer"
+		class:open={$drawerOpen}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="pr-drawer-title"
+		bind:this={drawerEl}
+	>
 		<div class="drawer-head">
 			<div style="min-width:0; flex:1">
 				<div class="crumb">{section.theme} · {section.id} · Item {def.n}</div>
-				<h2>{def.text}</h2>
+				<h2 id="pr-drawer-title">{def.text}</h2>
 				<div style="display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap">
 					<span style="font-family:var(--mono); font-size:11px; color:var(--ink-400)">
 						{def.codes}
