@@ -1,3 +1,4 @@
+import json
 import pytest
 import pytest_asyncio
 from types import SimpleNamespace
@@ -60,6 +61,20 @@ async def _seed_active():
     await PolicyChecklistVersions.insert_version('v2.0', 'active', ACTIVE_DATA, None, 'OE')
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _stub_document_io(monkeypatch):
+    monkeypatch.setattr(pr_router, 'validate_upload', lambda filename, size: None)
+    monkeypatch.setattr(pr_router, 'store_upload', lambda contents, filename: f'fake://{filename}')
+    monkeypatch.setattr(pr_router, 'read_stored', lambda path: b'bytes')
+    monkeypatch.setattr(pr_router, 'copy_stored', lambda path, filename: f'fake-copy://{filename}')
+    monkeypatch.setattr(pr_router, 'delete_stored', lambda path: None)
+
+    async def _extract(filename, content_type, path):
+        return 'stub text'
+
+    monkeypatch.setattr(pr_router, 'extract_text', _extract)
+
+
 @pytest.mark.asyncio
 async def test_full_lifecycle_create_submit_approve_publishes(monkeypatch):
     reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
@@ -71,7 +86,11 @@ async def test_full_lifecycle_create_submit_approve_publishes(monkeypatch):
 
     # Create
     async with _client(monkeypatch, user=reviewer) as c:
-        created = await c.post('/api/v1/policy/reviews', json={'policy_meta': META})
+        created = await c.post(
+            '/api/v1/policy/reviews',
+            files={'file': ('policy.pdf', b'%PDF-1.4 dummy', 'application/pdf')},
+            data={'meta': json.dumps(META)},
+        )
         assert created.status_code == 200
         rid = created.json()['id']
         assert created.json()['status'] == 'draft'
@@ -105,7 +124,7 @@ async def test_full_lifecycle_create_submit_approve_publishes(monkeypatch):
 async def test_submit_stores_reviewer_note_for_approver(monkeypatch):
     reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
     async with _client(monkeypatch, user=reviewer) as c:
-        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        rid = await _create(c)
         await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
         submitted = await c.post(
             f'/api/v1/policy/reviews/{rid}/submit', json={'note': '  Please prioritise section 3.  '}
@@ -121,7 +140,7 @@ async def test_submit_without_note_is_allowed(monkeypatch):
     # The note is optional: submitting with no body must still succeed.
     reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
     async with _client(monkeypatch, user=reviewer) as c:
-        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        rid = await _create(c)
         await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
         submitted = await c.post(f'/api/v1/policy/reviews/{rid}/submit')
         assert submitted.status_code == 200
@@ -132,7 +151,11 @@ async def test_submit_without_note_is_allowed(monkeypatch):
 async def test_non_reviewer_cannot_create(monkeypatch):
     user = SimpleNamespace(id='x', role='user', name='X', email='x@x.io')
     async with _client(monkeypatch, user=user, allow=False) as c:
-        res = await c.post('/api/v1/policy/reviews', json={'policy_meta': META})
+        res = await c.post(
+            '/api/v1/policy/reviews',
+            files={'file': ('policy.pdf', b'%PDF-1.4 dummy', 'application/pdf')},
+            data={'meta': json.dumps(META)},
+        )
     assert res.status_code == 401
 
 
@@ -142,7 +165,7 @@ async def test_reject_requires_note_and_returns_to_owner(monkeypatch):
     approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
 
     async with _client(monkeypatch, user=reviewer) as c:
-        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        rid = await _create(c)
         await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
         await c.post(f'/api/v1/policy/reviews/{rid}/submit')
 
@@ -164,7 +187,7 @@ async def test_reject_requires_note_and_returns_to_owner(monkeypatch):
 async def test_cannot_edit_after_submit(monkeypatch):
     reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
     async with _client(monkeypatch, user=reviewer) as c:
-        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        rid = await _create(c)
         await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
         await c.post(f'/api/v1/policy/reviews/{rid}/submit')
         # Now pending -> editing must be refused
@@ -178,7 +201,7 @@ async def test_cannot_approve_non_pending_review(monkeypatch):
     approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
     # Create but do NOT submit -> stays 'draft'.
     async with _client(monkeypatch, user=reviewer) as c:
-        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        rid = await _create(c)
     # Approving a non-pending (draft) review must be refused.
     async with _client(monkeypatch, user=approver) as c:
         res = await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})
@@ -189,7 +212,7 @@ async def test_cannot_approve_non_pending_review(monkeypatch):
 async def test_get_review_forbidden_for_non_owner_non_approver(monkeypatch):
     reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
     async with _client(monkeypatch, user=reviewer) as c:
-        rid = (await c.post('/api/v1/policy/reviews', json={'policy_meta': META})).json()['id']
+        rid = await _create(c)
     # A different user who is neither owner, admin, nor approver (permission denied) -> 403.
     stranger = SimpleNamespace(id='str1', role='user', name='Stranger', email='s@x.io')
     async with _client(monkeypatch, user=stranger, allow=False) as c:
@@ -214,7 +237,12 @@ async def test_admin_role_bypasses_permission_gate(monkeypatch):
 
 async def _create(c, **meta_over):
     meta = {**META, **meta_over}
-    return (await c.post('/api/v1/policy/reviews', json={'policy_meta': meta})).json()['id']
+    res = await c.post(
+        '/api/v1/policy/reviews',
+        files={'file': ('policy.pdf', b'%PDF-1.4 dummy', 'application/pdf')},
+        data={'meta': json.dumps(meta)},
+    )
+    return res.json()['id']
 
 
 @pytest.mark.asyncio

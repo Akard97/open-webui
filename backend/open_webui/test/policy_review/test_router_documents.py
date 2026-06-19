@@ -1,0 +1,113 @@
+import json
+from types import SimpleNamespace
+
+import pytest
+import pytest_asyncio
+import httpx
+from httpx import ASGITransport
+from fastapi import FastAPI
+
+import open_webui.routers.policy_review as pr_router
+from open_webui.utils.auth import get_verified_user
+from open_webui.models.policy_review import PolicyChecklistVersions, PolicyDocuments
+
+ACTIVE_DATA = {
+    'changeSummary': 'init',
+    'themes': [{'id': 'T1', 'name': 'T1', 'weight': 100, 'gate': True, 'threshold': 85}],
+    'sections': [{'id': 'S1', 'theme': 'T1', 'items': [{'id': 'S1-1', 'assessment': 'auto'}]}],
+    'verdictBands': {'approved': 85, 'conditional': 70},
+    'standards': [],
+}
+META = {'name': 'Test Policy', 'code': 'C-TEST', 'version': 'v1', 'owner': 'O',
+        'reviewer': 'R', 'reviewDate': 'd', 'pages': 1, 'filename': ''}
+
+
+class _AsyncReturn:
+    def __init__(self, value):
+        self.value = value
+
+    async def __call__(self, *args, **kwargs):
+        return self.value
+
+
+def _make_app(user):
+    app = FastAPI()
+    app.state.config = SimpleNamespace(USER_PERMISSIONS={})
+    app.include_router(pr_router.router, prefix='/api/v1/policy')
+    app.dependency_overrides[get_verified_user] = lambda: user
+    return app
+
+
+def _client_keys(monkeypatch, *, user, keys=()):
+    granted = set(keys)
+
+    async def _hp(user_id, key, permissions, db=None):
+        return key.split('.')[-1] in granted
+
+    monkeypatch.setattr(pr_router, 'has_permission', _hp)
+    return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user)), base_url='http://test')
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _seed_active():
+    await PolicyChecklistVersions.insert_version('v2.0', 'active', ACTIVE_DATA, None, 'OE')
+
+
+class FakeStorage:
+    """In-memory storage stand-in: store/read/delete bytes by a fake path."""
+    def __init__(self):
+        self.blobs = {}
+        self._n = 0
+
+    def store(self, contents, filename):
+        self._n += 1
+        path = f'fake://{self._n}-{filename}'
+        self.blobs[path] = contents
+        return path
+
+    def read(self, path):
+        return self.blobs[path]
+
+    def delete(self, path):
+        self.blobs.pop(path, None)
+
+
+@pytest.fixture
+def fake_docs(monkeypatch):
+    """Wire the router's document seams to an in-memory FakeStorage + canned parse."""
+    fs = FakeStorage()
+    monkeypatch.setattr(pr_router, 'validate_upload', lambda filename, size: None)
+    monkeypatch.setattr(pr_router, 'store_upload', lambda contents, filename: fs.store(contents, filename))
+    monkeypatch.setattr(pr_router, 'read_stored', lambda path: fs.read(path))
+    monkeypatch.setattr(pr_router, 'copy_stored', lambda path, filename: fs.store(fs.read(path), filename))
+    monkeypatch.setattr(pr_router, 'delete_stored', lambda path: fs.delete(path))
+
+    async def _extract(filename, content_type, path):
+        return f'extracted::{filename}'
+
+    monkeypatch.setattr(pr_router, 'extract_text', _extract)
+    return fs
+
+
+def _upload(meta=META):
+    return {
+        'files': {'file': ('policy.pdf', b'%PDF-1.4 dummy', 'application/pdf')},
+        'data': {'meta': json.dumps(meta)},
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_with_file_stores_document(monkeypatch, fake_docs):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        res = await c.post('/api/v1/policy/reviews', **_upload())
+        assert res.status_code == 200
+        body = res.json()
+        rid = body['id']
+        assert body['policy_meta']['document']['filename'] == 'policy.pdf'
+        assert body['policy_meta']['filename'] == 'policy.pdf'
+
+    doc = await PolicyDocuments.get('review', rid)
+    assert doc is not None
+    assert doc.text == 'extracted::policy.pdf'
+    assert doc.storage_path in fake_docs.blobs

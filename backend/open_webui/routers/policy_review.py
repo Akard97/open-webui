@@ -3,7 +3,7 @@ import os
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,19 @@ from open_webui.models.policy_review import (
     PolicyReviews,
     PolicyLibrary,
     PolicyAudits,
+    PolicyDocuments,
+)
+
+import json
+from fastapi.responses import Response
+
+from open_webui.utils.policy_review.documents import (
+    validate_upload,
+    store_upload,
+    read_stored,
+    copy_stored,
+    delete_stored,
+    extract_text,
 )
 
 log = logging.getLogger(__name__)
@@ -201,11 +214,6 @@ def _autofilled_results(active_data: Optional[dict]) -> dict:
     return results
 
 
-class ReviewCreateForm(BaseModel):
-    policy_meta: dict
-    strengths: Optional[list] = None
-
-
 class ResultsForm(BaseModel):
     results: dict
 
@@ -228,22 +236,73 @@ async def _load_owned_or_403(review_id: str, user, db, *, approver_ok: bool = Fa
 
 @router.post('/reviews')
 async def create_review(
-    request: Request, form: ReviewCreateForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+    request: Request,
+    file: UploadFile = File(...),
+    meta: str = Form(...),
+    strengths: Optional[str] = Form(None),
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
 ):
     await _require(request, user, 'policy_checker', db)
+
+    try:
+        policy_meta = json.loads(meta)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid metadata.')
+    strengths_list: list = []
+    if strengths:
+        try:
+            strengths_list = json.loads(strengths)
+        except json.JSONDecodeError:
+            strengths_list = []
+
     active = await PolicyChecklistVersions.get_active(db=db)
     if not active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='No active checklist version.')
+
+    contents = await file.read()
+    try:
+        validate_upload(file.filename, len(contents))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    storage_path = store_upload(contents, file.filename)
+    try:
+        text = await extract_text(file.filename, file.content_type, storage_path)
+    except Exception:
+        delete_stored(storage_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not extract text from this document.',
+        )
+
+    policy_meta['document'] = {
+        'filename': file.filename,
+        'contentType': file.content_type,
+        'size': len(contents),
+    }
+    policy_meta['filename'] = file.filename
+
     review = await PolicyReviews.insert_review(
         created_by_id=user.id,
         created_by_name=user.name,
-        policy_meta=form.policy_meta,
+        policy_meta=policy_meta,
         active_version=active,
         results=_autofilled_results(active.data) if AUTOFILL_RESULTS_ON_CREATE else None,
-        strengths=form.strengths or [],
+        strengths=strengths_list,
         db=db,
     )
+    try:
+        await PolicyDocuments.upsert(
+            'review', review.id, file.filename, file.content_type, len(contents), storage_path, text, db=db
+        )
+    except Exception:
+        await PolicyReviews.delete(review.id, db=db)
+        delete_stored(storage_path)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Failed to store document.')
+
     await PolicyAudits.insert('review', review.id, 'created', user.id, user.name, None, db=db)
+    await PolicyAudits.insert('review', review.id, 'document_uploaded', user.id, user.name, {'filename': file.filename}, db=db)
     return review
 
 
