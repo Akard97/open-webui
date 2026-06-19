@@ -14,8 +14,10 @@
 		picked,
 		drawerOpen,
 		submitModalOpen,
-		canUseChecker
+		canUseChecker,
+		replaceDocument
 	} from '../lib/store';
+	import { reviewDocumentUrl } from '../lib/api';
 
 	type Filter = 'all' | 'issues' | 'human' | 'compliant';
 
@@ -36,6 +38,29 @@
 	let locked = $derived(
 		$activeReview ? $activeReview.status !== 'draft' && $activeReview.status !== 'rejected' : false
 	);
+
+	let replaceInput: HTMLInputElement;
+	let replacing = $state(false);
+
+	let document_ = $derived($activeReview?.policyMeta?.document ?? null);
+	let canReplace = $derived(
+		$canUseChecker &&
+			$activeReview != null &&
+			($activeReview.status === 'draft' || $activeReview.status === 'rejected')
+	);
+
+	async function onReplaceChange(e: Event) {
+		const f = (e.target as HTMLInputElement).files?.[0];
+		if (!f || !$activeReview) return;
+		replacing = true;
+		try {
+			await replaceDocument($activeReview.id, f);
+		} finally {
+			replacing = false;
+			if (replaceInput) replaceInput.value = '';
+		}
+	}
+
 	function rOf(sec: Section, it: ChecklistItemDef): ItemResult {
 		return results[it.id] ?? { result: 'pending' };
 	}
@@ -157,6 +182,37 @@
 					<span>Reviewed {meta?.reviewDate}</span><span class="dot">·</span>
 					<span>Reviewer: {meta?.reviewer}</span>
 				</div>
+				{#if document_ && $activeReview}
+					<div class="policy-source">
+						<a
+							class="src-link"
+							href={reviewDocumentUrl($activeReview.id)}
+							target="_blank"
+							rel="noopener"
+						>
+							<Icon name="fileText" size={13} />
+							{document_.filename}
+							<span class="src-dl">Download</span>
+						</a>
+						{#if canReplace}
+							<button
+								type="button"
+								class="src-replace"
+								onclick={() => replaceInput?.click()}
+								disabled={replacing}
+							>
+								{replacing ? 'Replacing…' : 'Replace'}
+							</button>
+							<input
+								bind:this={replaceInput}
+								type="file"
+								accept=".pdf,.docx,.md,.txt"
+								style="display:none"
+								onchange={onReplaceChange}
+							/>
+						{/if}
+					</div>
+				{/if}
 			</div>
 			{#if scoreResult}
 				<VerdictBadge verdict={scoreResult.verdict} />
@@ -439,5 +495,40 @@
 		font: inherit;
 		color: inherit;
 		padding: 0;
+	}
+
+	.policy-source {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-top: 8px;
+		font-size: 12.5px;
+	}
+	.src-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--ink-700);
+		text-decoration: none;
+	}
+	.src-link:hover {
+		color: var(--primary);
+	}
+	.src-dl {
+		color: var(--primary);
+		font-weight: 600;
+	}
+	.src-replace {
+		background: none;
+		border: 0;
+		color: var(--primary);
+		font-weight: 600;
+		cursor: pointer;
+		font-size: 12.5px;
+		padding: 0;
+	}
+	.src-replace[disabled] {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 </style>

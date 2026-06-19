@@ -14,6 +14,7 @@
 		unpublishPolicy
 	} from '../lib/store';
 	import type { LibraryPolicy } from '../lib/types';
+	import { libraryDocumentUrl } from '../lib/api';
 
 	let isOpen = $state(false);
 	let policy = $state<LibraryPolicy | null>(null);
@@ -130,7 +131,7 @@
 					<p class="pl-popup-summary">{policy.summary}</p>
 				{:else}
 					<p class="pl-popup-summary" style="color: var(--ink-500); font-style: italic;">
-						Summary not yet available — open the PDF to read the policy.
+						Summary not yet available{#if policy.hasDocument} — download the source document to read the policy{/if}.
 					</p>
 				{/if}
 			</section>
@@ -172,7 +173,14 @@
 		</div>
 
 		<footer class="pl-popup-foot">
-			<button class="btn btn-sm btn-ghost" type="button">Download</button>
+			{#if policy.hasDocument}
+				<a
+					class="btn btn-sm btn-ghost"
+					href={libraryDocumentUrl(policy.code)}
+					target="_blank"
+					rel="noopener"
+				>Download{policy.filename ? ` (${policy.filename})` : ''}</a>
+			{/if}
 			{#if $canAdmin || $canApprove}
 				<button
 					class="btn btn-sm pl-unpublish"
@@ -186,7 +194,6 @@
 			{/if}
 			<span class="grow"></span>
 			<button class="btn btn-sm" type="button" onclick={closePolicyPopup}>Close</button>
-			<button class="btn btn-sm btn-primary" type="button">Open PDF</button>
 		</footer>
 	{/if}
 </div>
