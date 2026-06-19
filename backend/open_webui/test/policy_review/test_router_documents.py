@@ -22,14 +22,6 @@ META = {'name': 'Test Policy', 'code': 'C-TEST', 'version': 'v1', 'owner': 'O',
         'reviewer': 'R', 'reviewDate': 'd', 'pages': 1, 'filename': ''}
 
 
-class _AsyncReturn:
-    def __init__(self, value):
-        self.value = value
-
-    async def __call__(self, *args, **kwargs):
-        return self.value
-
-
 def _make_app(user):
     app = FastAPI()
     app.state.config = SimpleNamespace(USER_PERMISSIONS={})
@@ -111,3 +103,22 @@ async def test_create_with_file_stores_document(monkeypatch, fake_docs):
     assert doc is not None
     assert doc.text == 'extracted::policy.pdf'
     assert doc.storage_path in fake_docs.blobs
+
+
+@pytest.mark.asyncio
+async def test_create_parse_failure_cleans_up(monkeypatch, fake_docs):
+    # If text extraction fails, the request must 400, create NO review, and delete the
+    # just-stored binary (no orphan).
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+
+    async def _boom(filename, content_type, path):
+        raise ValueError('bad parse')
+
+    monkeypatch.setattr(pr_router, 'extract_text', _boom)
+
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        res = await c.post('/api/v1/policy/reviews', **_upload())
+        assert res.status_code == 400
+
+    assert await pr_router.PolicyReviews.list_by_creator('rev1') == []
+    assert fake_docs.blobs == {}

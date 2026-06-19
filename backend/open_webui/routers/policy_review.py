@@ -276,6 +276,8 @@ async def create_review(
             detail='Could not extract text from this document.',
         )
 
+    # filename is surfaced both at policy_meta.filename (legacy display) and inside
+    # policy_meta.document (the Phase 2 descriptor) — both are part of the frontend contract.
     policy_meta['document'] = {
         'filename': file.filename,
         'contentType': file.content_type,
@@ -283,21 +285,26 @@ async def create_review(
     }
     policy_meta['filename'] = file.filename
 
-    review = await PolicyReviews.insert_review(
-        created_by_id=user.id,
-        created_by_name=user.name,
-        policy_meta=policy_meta,
-        active_version=active,
-        results=_autofilled_results(active.data) if AUTOFILL_RESULTS_ON_CREATE else None,
-        strengths=strengths_list,
-        db=db,
-    )
+    # The binary is already stored; if review insert OR document upsert fails, roll both
+    # back (delete the review on a fresh session — the request session may be dirty after a
+    # failed commit — and remove the orphaned binary) so no half-state survives.
+    review = None
     try:
+        review = await PolicyReviews.insert_review(
+            created_by_id=user.id,
+            created_by_name=user.name,
+            policy_meta=policy_meta,
+            active_version=active,
+            results=_autofilled_results(active.data) if AUTOFILL_RESULTS_ON_CREATE else None,
+            strengths=strengths_list,
+            db=db,
+        )
         await PolicyDocuments.upsert(
             'review', review.id, file.filename, file.content_type, len(contents), storage_path, text, db=db
         )
     except Exception:
-        await PolicyReviews.delete(review.id, db=db)
+        if review is not None:
+            await PolicyReviews.delete(review.id)
         delete_stored(storage_path)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Failed to store document.')
 
