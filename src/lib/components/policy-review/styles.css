@@ -555,10 +555,23 @@
 .rv-gap-title { color: var(--ink-900); font-weight: 500; margin-bottom: 2px; }
 .rv-gap-ref { font-size: 11.5px; color: var(--ink-500); font-family: var(--mono); }
 
-/* ── review layout ── minimalist ───────────────────── */
-.review { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 0; height: 100%; min-height: 0; }
-.review-main { overflow-y: auto; padding: 36px 40px 96px; min-width: 0; }
-.review-side { overflow-y: auto; border-left: 1px solid var(--ink-100); background: var(--white); padding: 36px 28px; }
+/* ── review layout ── single column ─────────────────── */
+.review { max-width: 1120px; margin: 0 auto; padding: 0 40px 96px; min-width: 0; }
+
+/* ── review a11y: contrast + focus + touch targets ──── */
+.item-num, .item-text .meta, .item-text .meta .conf, .sec-head .prp, .chip .count { color: var(--ink-500); }
+.chip:focus-visible,
+.sec-head:focus-visible,
+.item-row:focus-visible,
+.rv-gap:focus-visible {
+	outline: 2px solid var(--primary-100);
+	outline-offset: -2px;
+	border-radius: 6px;
+}
+.item-row { min-height: 44px; }
+.sec-head { min-height: 48px; }
+.chip { min-height: 36px; }
+.rv-action .btn, .rv-decide-actions .btn { min-height: 40px; }
 
 /* Policy header */
 .policy-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--ink-100); }
@@ -708,26 +721,6 @@
 .status-circle.warn{ background: var(--warn); }
 .status-circle.pending { background: var(--ink-200); }
 
-/* ── side rail — flat sections, no card boxes ─────── */
-.side-card {
-  background: transparent; border: 0; border-radius: 0;
-  padding: 0 0 28px;
-  margin-bottom: 28px;
-  border-bottom: 1px solid var(--ink-100);
-}
-.side-card:last-child { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
-.side-card h4 {
-  margin: 0 0 18px; font-size: 10.5px; font-weight: 500;
-  color: var(--ink-400); text-transform: uppercase; letter-spacing: 0.08em;
-}
-.score-block { text-align: left; padding-bottom: 16px; }
-.score-block .num { font-size: 52px; font-weight: 500; letter-spacing: -0.03em; color: var(--ink-900); font-variant-numeric: tabular-nums; line-height: 1; }
-.score-block .num .pct { font-size: 22px; color: var(--ink-300); font-weight: 400; margin-left: 4px; }
-.score-block .lbl { font-size: 12px; color: var(--ink-500); margin-top: 8px; }
-.decision-summary { padding-top: 18px; border-top: 1px solid var(--ink-100); display: grid; gap: 10px; }
-.decision-summary .row { display: flex; justify-content: space-between; font-size: 12.5px; align-items: center; }
-.decision-summary .row .l { color: var(--ink-500); }
-.decision-summary .row .r { font-weight: 500; color: var(--ink-900); font-variant-numeric: tabular-nums; }
 
 .theme-score-row { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 10px; padding: 4px 0 2px; font-size: 13px; }
 .theme-score-row .id { font-family: var(--mono); font-size: 10.5px; color: var(--ink-400); letter-spacing: 0.04em; }
@@ -752,8 +745,6 @@
 .gap-item .n { font-family: var(--mono); font-size: 11px; color: var(--bad); font-weight: 500; padding-top: 1px; }
 .gap-item.strength .n { color: var(--ok); }
 
-/* Submit-for-approval button refinement */
-.review-side .btn-primary { padding: 10px 14px; font-weight: 500; }
 
 /* ── drawer ─────────────────────────────────────────── */
 .drawer-overlay { position: fixed; inset: 0; background: rgba(11,20,24,0.18); z-index: 80; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
