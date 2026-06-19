@@ -94,16 +94,17 @@
 	// Tab inside it. Restore focus to the previously-focused element on close.
 	$effect(() => {
 		if (!$drawerOpen || !drawerEl) return;
+		const el = drawerEl;
 		const prevActive = document.activeElement as HTMLElement | null;
 		const prevOverflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
 
 		const focusables = () =>
 			Array.from(
-				drawerEl!.querySelectorAll<HTMLElement>(
+				el.querySelectorAll<HTMLElement>(
 					'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 				)
-			).filter((el) => !el.hasAttribute('disabled'));
+			).filter((node) => !node.hasAttribute('disabled'));
 
 		focusables()[0]?.focus();
 
@@ -121,10 +122,10 @@
 				first.focus();
 			}
 		}
-		drawerEl.addEventListener('keydown', onKeydown);
+		el.addEventListener('keydown', onKeydown);
 
 		return () => {
-			drawerEl?.removeEventListener('keydown', onKeydown);
+			el.removeEventListener('keydown', onKeydown);
 			document.body.style.overflow = prevOverflow;
 			prevActive?.focus?.();
 		};
