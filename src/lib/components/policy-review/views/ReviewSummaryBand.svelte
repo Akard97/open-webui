@@ -59,7 +59,7 @@
 	);
 
 	// ── Replace document (reviewer mode) ──
-	let replaceInput = $state<HTMLInputElement>();
+	let replaceInput = $state<HTMLInputElement | undefined>(undefined);
 	let replacing = $state(false);
 	async function onReplaceChange(e: Event) {
 		const f = (e.target as HTMLInputElement).files?.[0];
@@ -75,15 +75,19 @@
 
 	// ── Approve / reject (decide mode) ──
 	let approvalError = $state('');
+	let approving = $state(false);
 	let rejectOpen = $state(false);
 	let rejectNote = $state('');
 	async function approve() {
-		if (!review) return;
+		if (!review || approving) return;
+		approving = true;
 		approvalError = '';
 		try {
 			await approveAndPublish(review.id);
 		} catch (e) {
 			approvalError = String(e);
+		} finally {
+			approving = false;
 		}
 	}
 	function openReject() {
@@ -114,7 +118,8 @@
 	// Read-only status line for pending-creator / approved / rejected-viewer.
 	let statusText = $derived.by(() => {
 		if (!approval) return '';
-		if (approval.status === 'pending') return `Submitted for approval — awaiting OE approver · ${approval.sentAt ?? ''}`;
+		if (approval.status === 'pending')
+			return `Submitted for approval — awaiting OE approver${approval.sentAt ? ` · ${approval.sentAt}` : ''}`;
 		if (approval.status === 'approved')
 			return `Approved & published${approval.decidedBy ? ` by ${approval.decidedBy}` : ''}${approval.decidedAt ? ` · ${approval.decidedAt}` : ''}`;
 		if (approval.status === 'rejected')
@@ -176,7 +181,7 @@
 				</span>
 			</div>
 			<div class="rv-stat">
-				<span class="rv-stat-l">Issue threshold</span>
+				<span class="rv-stat-l">Threshold for issue</span>
 				<span class="rv-stat-v">≥ {threshold}%</span>
 			</div>
 			{#if mode === 'reviewer'}
@@ -219,12 +224,14 @@
 						<div class="rv-hint">Resolve {openItems} open item{openItems === 1 ? '' : 's'} before submitting</div>
 					{/if}
 				{:else if mode === 'decide'}
-					<div class="rv-decide-actions">
-						<button class="btn btn-primary" type="button" onclick={approve}>Approve &amp; Publish</button>
-						{#if !rejectOpen}
-							<button class="btn" type="button" onclick={openReject}>Reject</button>
-						{/if}
-					</div>
+					{#if approval?.status === 'pending'}
+						<div class="rv-decide-actions">
+							<button class="btn btn-primary" type="button" onclick={approve} disabled={approving}>Approve &amp; Publish</button>
+							{#if !rejectOpen}
+								<button class="btn" type="button" onclick={openReject}>Reject</button>
+							{/if}
+						</div>
+					{/if}
 				{:else}
 					<div class="rv-status {approval?.status ?? 'idle'}">{statusText}</div>
 				{/if}
@@ -278,7 +285,7 @@
 			<div>
 				<h4 class="rv-h">Top strengths</h4>
 				<div class="gap-list">
-					{#each strengths as s, i (i)}
+					{#each strengths as s (s)}
 						<div class="gap-item strength"><span class="n">+</span><span>{s}</span></div>
 					{/each}
 					{#if strengths.length === 0}
