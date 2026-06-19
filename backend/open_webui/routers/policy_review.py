@@ -42,6 +42,15 @@ def _audit_now() -> str:
     return time.strftime('%d %b, %H:%M', time.gmtime())
 
 
+def _document_response(doc) -> Response:
+    data = read_stored(doc.storage_path)
+    return Response(
+        content=data,
+        media_type=doc.content_type or 'application/octet-stream',
+        headers={'Content-Disposition': f'attachment; filename="{doc.filename}"'},
+    )
+
+
 # ──────────────────────────── helpers ────────────────────────────
 
 
@@ -340,6 +349,20 @@ async def get_review(
     return await _load_owned_or_403(review_id, user, db, approver_ok=is_approver)
 
 
+@router.get('/reviews/{review_id}/document')
+async def download_review_document(
+    request: Request, review_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    is_approver = user.role == 'admin' or await has_permission(
+        user.id, 'features.policy_approver', request.app.state.config.USER_PERMISSIONS, db=db
+    )
+    await _load_owned_or_403(review_id, user, db, approver_ok=is_approver)
+    doc = await PolicyDocuments.get('review', review_id, db=db)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    return _document_response(doc)
+
+
 @router.patch('/reviews/{review_id}/results')
 async def update_review_results(
     request: Request, review_id: str, form: ResultsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
@@ -540,6 +563,16 @@ async def get_library_entry(
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
     return entry
+
+
+@router.get('/library/{code}/document')
+async def download_library_document(
+    request: Request, code: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    doc = await PolicyDocuments.get('library', code, db=db)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
+    return _document_response(doc)
 
 
 @router.delete('/library/{code}')

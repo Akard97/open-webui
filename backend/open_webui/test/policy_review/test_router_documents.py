@@ -177,3 +177,39 @@ async def test_replace_document_forbidden_when_pending(monkeypatch, fake_docs):
             data={},
         )
     assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_review_document_access_matrix(monkeypatch, fake_docs):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    admin = SimpleNamespace(id='ad1', role='admin', name='Admin', email='ad@x.io')
+    stranger = SimpleNamespace(id='str1', role='user', name='Stranger', email='s@x.io')
+
+    async with _client_keys(monkeypatch, user=reviewer, keys={'policy_checker'}) as c:
+        rid = (await c.post('/api/v1/policy/reviews', **_upload())).json()['id']
+        owner_dl = await c.get(f'/api/v1/policy/reviews/{rid}/document')
+        assert owner_dl.status_code == 200
+        assert owner_dl.content == b'%PDF-1.4 dummy'
+        assert 'attachment' in owner_dl.headers['content-disposition']
+
+    async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
+        assert (await c.get(f'/api/v1/policy/reviews/{rid}/document')).status_code == 200
+    async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
+        assert (await c.get(f'/api/v1/policy/reviews/{rid}/document')).status_code == 200
+    async with _client_keys(monkeypatch, user=stranger, keys=set()) as c:
+        assert (await c.get(f'/api/v1/policy/reviews/{rid}/document')).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_review_document_404_when_absent(monkeypatch, fake_docs):
+    admin = SimpleNamespace(id='ad1', role='admin', name='Admin', email='ad@x.io')
+    # Seed a review row with no document (insert directly via the reviews DAO).
+    from open_webui.models.policy_review import PolicyReviews
+    active = await PolicyChecklistVersions.get_active()
+    review = await PolicyReviews.insert_review(
+        created_by_id='ad1', created_by_name='Admin', policy_meta=META, active_version=active
+    )
+    async with _client_keys(monkeypatch, user=admin, keys=set()) as c:
+        res = await c.get(f'/api/v1/policy/reviews/{review.id}/document')
+    assert res.status_code == 404
