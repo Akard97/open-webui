@@ -8,7 +8,7 @@
 
 	import XMark from '$lib/components/icons/XMark.svelte';
 
-	import { railItems, activeRailItem, type RailItem } from './railItems';
+	import { railItems, activeRailItem } from './railItems';
 
 	const i18n = getContext<any>('i18n');
 
@@ -35,8 +35,6 @@
 		window.addEventListener('keydown', onKeyDown);
 		return () => window.removeEventListener('keydown', onKeyDown);
 	});
-
-	const isActive = (item: RailItem) => item.id === activeId;
 </script>
 
 {#if $showRailDrawer}
@@ -72,9 +70,9 @@
 				{#each visibleItems as item (item.id)}
 					<a
 						href={item.href}
-						aria-current={isActive(item) ? 'page' : undefined}
+						aria-current={item.id === activeId ? 'page' : undefined}
 						class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
-							{isActive(item)
+							{item.id === activeId
 							? 'bg-gray-100 dark:bg-gray-800 text-black dark:text-white font-medium'
 							: 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-850'}"
 					>

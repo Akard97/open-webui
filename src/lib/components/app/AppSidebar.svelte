@@ -7,7 +7,7 @@
 
 	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
 
-	import { railItems, activeRailItem, type RailItem } from './railItems';
+	import { railItems, activeRailItem } from './railItems';
 
 	const i18n = getContext<any>('i18n');
 
@@ -16,8 +16,6 @@
 	$: visibleItems = railItems.filter((item) => item.visible({ user: $user, config: $config }));
 
 	$: activeId = activeRailItem($page.url.pathname, visibleItems)?.id;
-
-	const isActive = (item: RailItem) => item.id === activeId;
 </script>
 
 <!-- Spacer keeps the collapsed gap in the parent flex row. -->
@@ -62,9 +60,9 @@
 					<a
 						href={item.href}
 						aria-label={$i18n?.t(item.label) ?? item.label}
-						aria-current={isActive(item) ? 'page' : undefined}
+						aria-current={item.id === activeId ? 'page' : undefined}
 						class="flex items-center h-9 rounded-lg transition-colors duration-100
-							{isActive(item)
+							{item.id === activeId
 								? 'bg-gray-200/60 dark:bg-gray-900 text-gray-900 dark:text-white'
 								: 'text-gray-600 dark:text-gray-400 hover:bg-gray-200/40 dark:hover:bg-gray-900/60 hover:text-gray-900 dark:hover:text-white'}"
 					>
