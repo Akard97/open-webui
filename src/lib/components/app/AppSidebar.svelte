@@ -6,6 +6,7 @@
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
+	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
 	import { railItems, activeRailItem } from './railItems';
 
@@ -80,6 +81,9 @@
 			{/each}
 		</ul>
 	</div>
+
+	<!-- Theme -->
+	<ThemeSwitcher />
 
 	<!-- User -->
 	{#if $user !== undefined && $user !== null}
