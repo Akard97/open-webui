@@ -2,6 +2,7 @@ x.py
 yarn.lock
 .DS_Store
 node_modules
+.superpowers/
 /build
 /.svelte-kit
 /package
