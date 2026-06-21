@@ -12,9 +12,7 @@
 
 	const i18n = getContext<any>('i18n');
 
-	$: visibleItems = railItems.filter((item) =>
-		item.visible({ user: $user, config: $config })
-	);
+	$: visibleItems = railItems.filter((item) => item.visible({ user: $user, config: $config }));
 
 	$: activeId = activeRailItem($page.url.pathname, visibleItems)?.id;
 
@@ -52,7 +50,9 @@
 			transition:fly={{ x: -280, duration: 200 }}
 			aria-label={$i18n?.t('App navigation') ?? 'App navigation'}
 		>
-			<div class="flex items-center justify-between px-3 h-11 border-b border-gray-100 dark:border-gray-850">
+			<div
+				class="flex items-center justify-between px-3 h-11 border-b border-gray-100 dark:border-gray-850"
+			>
 				<div class="font-medium text-sm text-gray-700 dark:text-gray-200">
 					{$i18n?.t('Navigate') ?? 'Navigate'}
 				</div>

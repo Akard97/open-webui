@@ -64,8 +64,8 @@
 						aria-current={item.id === activeId ? 'page' : undefined}
 						class="flex items-center h-9 rounded-lg transition-colors duration-100
 							{item.id === activeId
-								? 'bg-gray-200/60 dark:bg-gray-900 text-gray-900 dark:text-white'
-								: 'text-gray-600 dark:text-gray-400 hover:bg-gray-200/40 dark:hover:bg-gray-900/60 hover:text-gray-900 dark:hover:text-white'}"
+							? 'bg-gray-200/60 dark:bg-gray-900 text-gray-900 dark:text-white'
+							: 'text-gray-600 dark:text-gray-400 hover:bg-gray-200/40 dark:hover:bg-gray-900/60 hover:text-gray-900 dark:hover:text-white'}"
 					>
 						<span class="w-10 shrink-0 flex items-center justify-center">
 							<svelte:component this={item.icon} className="size-[1.125rem]" strokeWidth="1.5" />

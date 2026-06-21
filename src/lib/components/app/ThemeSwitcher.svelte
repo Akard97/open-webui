@@ -49,8 +49,8 @@
 			class="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md text-[12px] font-medium
 				transition-colors duration-100
 				{mode === 'light'
-					? 'bg-white text-gray-900 shadow-sm'
-					: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
+				? 'bg-white text-gray-900 shadow-sm'
+				: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
 		>
 			<Sun className="size-4" strokeWidth="1.5" />
 			<span>{$i18n?.t('Light') ?? 'Light'}</span>
@@ -62,8 +62,8 @@
 			class="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md text-[12px] font-medium
 				transition-colors duration-100
 				{mode === 'dark'
-					? 'bg-gray-700 text-white shadow-sm'
-					: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
+				? 'bg-gray-700 text-white shadow-sm'
+				: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
 		>
 			<Moon className="size-4" strokeWidth="1.5" />
 			<span>{$i18n?.t('Dark') ?? 'Dark'}</span>
