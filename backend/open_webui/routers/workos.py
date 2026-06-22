@@ -10,7 +10,7 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
-    TeamModel,
+    TeamModel, WorkspaceModel,
 )
 
 log = logging.getLogger(__name__)
@@ -203,3 +203,163 @@ async def remove_member(
     await _require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
     return {'removed': await TeamMembers.remove(team_id, user_id, db=db)}
+
+
+# ──────────────────────────────── workspace schemas ────────────────────────────────
+
+
+WORKSPACE_ROLES = {'admin', 'member'}
+
+
+class WorkspaceForm(BaseModel):
+    name: str
+    icon: Optional[str] = None
+    visibility: str = 'team'
+
+
+class WorkspaceUpdateForm(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    visibility: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+# ──────────────────────────── workspace permission helpers ────────────────────────────
+
+
+async def workspace_visible(user, workspace, db: AsyncSession) -> bool:
+    if await team_role(user, workspace.team_id, db) is None:
+        return False
+    if workspace.visibility == 'team' or user.role == 'admin':
+        return True
+    return (await WorkspaceMembers.get(workspace.id, user.id, db=db)) is not None
+
+
+async def require_workspace_visible(user, workspace_id: str, db: AsyncSession):
+    ws = await Workspaces.get_by_id(workspace_id, db=db)
+    if not ws or not await workspace_visible(user, ws, db):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Workspace not found.')
+    return ws
+
+
+async def require_workspace_manage(user, workspace_id: str, db: AsyncSession):
+    ws = await require_workspace_visible(user, workspace_id, db)
+    if (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}:
+        return ws
+    wm = await WorkspaceMembers.get(ws.id, user.id, db=db)
+    if wm and wm.role == 'admin':
+        return ws
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Workspace management requires admin.')
+
+
+# ──────────────────────────────── workspace endpoints ────────────────────────────────
+
+
+@router.get('/teams/{team_id}/workspaces')
+async def list_workspaces(
+    request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_team_visible(user, team_id, db)
+    out = []
+    for ws in await Workspaces.list_for_team(team_id, db=db):
+        if await workspace_visible(user, ws, db):
+            out.append(ws)
+    return out
+
+
+@router.post('/teams/{team_id}/workspaces')
+async def create_workspace(
+    request: Request, team_id: str, form: WorkspaceForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_team_role(user, team_id, db, {'owner', 'admin'})
+    if form.visibility not in {'team', 'restricted'}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid visibility.')
+    ws = await Workspaces.insert(team_id, form.name, form.icon, form.visibility, user.id, db=db)
+    if form.visibility == 'restricted':
+        await WorkspaceMembers.add(ws.id, user.id, 'admin', db=db)
+    return ws
+
+
+@router.get('/workspaces/{workspace_id}')
+async def get_workspace(
+    request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    return await require_workspace_visible(user, workspace_id, db)
+
+
+@router.patch('/workspaces/{workspace_id}')
+async def update_workspace(
+    request: Request, workspace_id: str, form: WorkspaceUpdateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_workspace_manage(user, workspace_id, db)
+    fields = form.model_dump(exclude_none=True)
+    if 'visibility' in fields and fields['visibility'] not in {'team', 'restricted'}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid visibility.')
+    return await Workspaces.update_fields(workspace_id, fields, db=db)
+
+
+@router.delete('/workspaces/{workspace_id}')
+async def delete_workspace(
+    request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    ws = await require_workspace_visible(user, workspace_id, db)
+    await require_team_role(user, ws.team_id, db, {'owner', 'admin'})
+    return {'deleted': await Workspaces.delete(workspace_id, db=db)}
+
+
+# ──────────────────────────────── workspace member endpoints ────────────────────────────────
+
+
+@router.get('/workspaces/{workspace_id}/members')
+async def list_workspace_members(
+    request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_workspace_visible(user, workspace_id, db)
+    return await WorkspaceMembers.list_for_workspace(workspace_id, db=db)
+
+
+@router.post('/workspaces/{workspace_id}/members')
+async def add_workspace_member(
+    request: Request, workspace_id: str, form: MemberForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_workspace_manage(user, workspace_id, db)
+    if form.role not in WORKSPACE_ROLES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
+    if await WorkspaceMembers.get(workspace_id, form.user_id, db=db):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Already a member.')
+    return await WorkspaceMembers.add(workspace_id, form.user_id, form.role, db=db)
+
+
+@router.patch('/workspaces/{workspace_id}/members/{user_id}')
+async def update_workspace_member(
+    request: Request, workspace_id: str, user_id: str, form: MemberRoleForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_workspace_manage(user, workspace_id, db)
+    if form.role not in WORKSPACE_ROLES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
+    updated = await WorkspaceMembers.update_role(workspace_id, user_id, form.role, db=db)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Member not found.')
+    return updated
+
+
+@router.delete('/workspaces/{workspace_id}/members/{user_id}')
+async def remove_workspace_member(
+    request: Request, workspace_id: str, user_id: str,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_workspace_manage(user, workspace_id, db)
+    return {'removed': await WorkspaceMembers.remove(workspace_id, user_id, db=db)}
