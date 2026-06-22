@@ -438,3 +438,177 @@ TeamMembers = TeamMembersDao()
 Workspaces = WorkspacesDao()
 WorkspaceMembers = WorkspaceMembersDao()
 Workstreams = WorkstreamsDao()
+
+
+# ──────────────────────────── Label + Task Tables ────────────────────────────
+
+
+class WorkosLabel(Base):
+    __tablename__ = 'workos_label'
+
+    id = Column(Text, primary_key=True, unique=True)
+    team_id = Column(Text)
+    name = Column(Text)
+    color = Column(Text)
+    created_at = Column(BigInteger)
+
+
+class WorkosTask(Base):
+    __tablename__ = 'workos_task'
+
+    id = Column(Text, primary_key=True, unique=True)
+    workstream_id = Column(Text)
+    team_id = Column(Text)
+    number = Column(BigInteger)
+    key = Column(Text)
+    title = Column(Text)
+    description = Column(Text, nullable=True)
+    status = Column(Text, default='backlog')
+    priority = Column(Text, nullable=True)
+    assignee_id = Column(Text, nullable=True)
+    due_date = Column(BigInteger, nullable=True)
+    progress = Column(Integer, default=0)
+    labels = Column(JSON, default=list)
+    sort_key = Column(Float, default=0.0)
+    created_by_id = Column(Text, nullable=True)
+    completed_at = Column(BigInteger, nullable=True)
+    created_at = Column(BigInteger)
+    updated_at = Column(BigInteger)
+
+
+# ──────────────────────────── Label + Task Pydantic ────────────────────────────
+
+
+class LabelModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    team_id: str
+    name: str
+    color: str
+    created_at: int
+
+
+class TaskModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    workstream_id: str
+    team_id: str
+    number: int
+    key: str
+    title: str
+    description: Optional[str] = None
+    status: str
+    priority: Optional[str] = None
+    assignee_id: Optional[str] = None
+    due_date: Optional[int] = None
+    progress: int
+    labels: list = []
+    sort_key: float
+    created_by_id: Optional[str] = None
+    completed_at: Optional[int] = None
+    created_at: int
+    updated_at: int
+
+
+# ──────────────────────────── Label + Task DAO ────────────────────────────
+
+
+class LabelsDao:
+    async def insert(self, team_id: str, name: str, color: str, db: Optional[AsyncSession] = None) -> LabelModel:
+        async with get_async_db_context(db) as db:
+            row = WorkosLabel(id=_id(), team_id=team_id, name=name, color=color, created_at=_now())
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return LabelModel.model_validate(row)
+
+    async def list_for_team(self, team_id: str, db: Optional[AsyncSession] = None) -> list[LabelModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosLabel).filter_by(team_id=team_id).order_by(WorkosLabel.created_at.asc()))
+            return [LabelModel.model_validate(r) for r in res.scalars().all()]
+
+    async def update_fields(self, id: str, fields: dict, db: Optional[AsyncSession] = None) -> Optional[LabelModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosLabel).filter_by(id=id))
+            row = res.scalars().first()
+            if not row:
+                return None
+            for k, v in fields.items():
+                setattr(row, k, v)
+            await db.commit()
+            await db.refresh(row)
+            return LabelModel.model_validate(row)
+
+    async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosLabel).filter_by(id=id))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(WorkosLabel).filter_by(id=id))
+            await db.commit()
+            return True
+
+
+class TasksDao:
+    async def insert(
+        self, workstream_id: str, team_id: str, team_key: str, title: str, created_by_id: Optional[str],
+        *, description: Optional[str] = None, status: str = 'backlog', priority: Optional[str] = None,
+        assignee_id: Optional[str] = None, due_date: Optional[int] = None, labels: Optional[list] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> TaskModel:
+        number = await Teams.next_task_number(team_id, db=db)
+        async with get_async_db_context(db) as db:
+            now = _now()
+            row = WorkosTask(
+                id=_id(), workstream_id=workstream_id, team_id=team_id, number=number,
+                key=f'{team_key}-{number}', title=title, description=description, status=status,
+                priority=priority, assignee_id=assignee_id, due_date=due_date, progress=0,
+                labels=labels or [], sort_key=float(now), created_by_id=created_by_id,
+                completed_at=now if status == 'done' else None, created_at=now, updated_at=now,
+            )
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return TaskModel.model_validate(row)
+
+    async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[TaskModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosTask).filter_by(id=id))
+            row = res.scalars().first()
+            return TaskModel.model_validate(row) if row else None
+
+    async def list_for_workstream(self, workstream_id: str, db: Optional[AsyncSession] = None) -> list[TaskModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosTask).filter_by(workstream_id=workstream_id)
+                .order_by(WorkosTask.status.asc(), WorkosTask.sort_key.asc())
+            )
+            return [TaskModel.model_validate(r) for r in res.scalars().all()]
+
+    async def update_fields(self, id: str, fields: dict, db: Optional[AsyncSession] = None) -> Optional[TaskModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosTask).filter_by(id=id))
+            row = res.scalars().first()
+            if not row:
+                return None
+            for k, v in fields.items():
+                setattr(row, k, v)
+            if 'status' in fields:
+                row.completed_at = _now() if fields['status'] == 'done' else None
+            row.updated_at = _now()
+            await db.commit()
+            await db.refresh(row)
+            return TaskModel.model_validate(row)
+
+    async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosTask).filter_by(id=id))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(WorkosTask).filter_by(id=id))
+            await db.commit()
+            return True
+
+
+Labels = LabelsDao()
+Tasks = TasksDao()
