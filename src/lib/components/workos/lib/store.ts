@@ -11,6 +11,13 @@ import {
 
 export type ViewKey = 'board' | 'list' | 'admin';
 
+export type ModalRequest =
+	| { kind: 'team' }
+	| { kind: 'workspace'; teamId: string }
+	| { kind: 'workstream'; workspaceId: string }
+	| { kind: 'members'; teamId: string };
+export const openModal: Writable<ModalRequest | null> = writable(null);
+
 export const teams: Writable<Team[]> = writable([]);
 export const workspaces: Writable<Workspace[]> = writable([]);
 export const workstreams: Writable<Workstream[]> = writable([]);
