@@ -9,7 +9,6 @@
 	} from '../lib/store';
 
 	$: t = $selectedTask;
-	$: labelById = Object.fromEntries($labels.map((l) => [l.id, l]));
 	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
 	$: void $directory;
 

@@ -12,7 +12,7 @@
 	import { user } from '$lib/stores';
 	import {
 		loadBootstrap, connectRealtime, disconnectRealtime,
-		view, currentWorkstream, selectedTask, teams, loading
+		view, selectedTask, teams, loading
 	} from './lib/store';
 
 	// Guard: snap non-admins away from the admin view.

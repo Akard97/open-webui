@@ -2,7 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import * as api from '../lib/api';
 	import {
-		openModal, token, loadBootstrap, directory, currentTeam, roles, members
+		openModal, token, loadBootstrap, directory
 	} from '../lib/store';
 	import { canManageMembers } from '../lib/roles';
 	import type { TeamRole } from '../lib/types';
