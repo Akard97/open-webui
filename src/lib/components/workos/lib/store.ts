@@ -173,7 +173,7 @@ function unsubscribeRoom(workstreamId: string): void {
 }
 
 let bound = false;
-const handlers: Record<string, (p: any) => void> = {};
+const handlers: Record<string, (...args: any[]) => void> = {};
 
 export function connectRealtime(): void {
 	const s = get(socket);
