@@ -621,8 +621,6 @@ async def admin_list_teams(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require_workos_admin(request, user, db)
-    if user.role != 'admin':
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
     out = []
     for team in await Teams.list_all(db=db):
         members = await TeamMembers.list_for_team(team.id, db=db)
@@ -639,8 +637,6 @@ async def admin_get_settings(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require_workos_admin(request, user, db)
-    if user.role != 'admin':
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
     return request.app.state.config.WORKOS_RULES
 
 
@@ -650,8 +646,6 @@ async def admin_update_settings(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await _require_workos_admin(request, user, db)
-    if user.role != 'admin':
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
     if form.team_creation is not None and form.team_creation not in {'all_users', 'admins_only'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid team_creation.')
     if form.default_workspace_visibility is not None and form.default_workspace_visibility not in {'team', 'restricted'}:

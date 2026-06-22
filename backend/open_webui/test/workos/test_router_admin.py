@@ -30,6 +30,6 @@ async def test_settings_get_and_patch(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_settings_patch_forbidden_for_non_admin(monkeypatch):
-    async with _client(monkeypatch, user=U1) as c:
+    async with _client(monkeypatch, user=U1, allow=False) as c:
         r = await c.patch('/api/v1/workos/admin/settings', json={'team_creation': 'admins_only'})
         assert r.status_code == 403
