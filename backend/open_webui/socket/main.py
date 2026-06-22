@@ -474,6 +474,39 @@ async def join_note(sid, data):
     await sio.enter_room(sid, f'note:{note.id}')
 
 
+@sio.on('workos:subscribe')
+async def workos_subscribe(sid, data):
+    auth = data.get('auth') if isinstance(data, dict) else None
+    if not auth or 'token' not in auth:
+        return
+    token_data = decode_token(auth['token'])
+    if token_data is None or 'id' not in token_data:
+        return
+    user = await Users.get_user_by_id(token_data['id'])
+    if not user:
+        return
+
+    from open_webui.models.workos import can_see_team, can_see_workstream
+
+    is_admin = user.role == 'admin'
+    team_id = data.get('team_id')
+    workstream_id = data.get('workstream_id')
+    if team_id and await can_see_team(user.id, is_admin, team_id):
+        await sio.enter_room(sid, f'workos:team:{team_id}')
+    if workstream_id and await can_see_workstream(user.id, is_admin, workstream_id):
+        await sio.enter_room(sid, f'workos:workstream:{workstream_id}')
+
+
+@sio.on('workos:unsubscribe')
+async def workos_unsubscribe(sid, data):
+    if not isinstance(data, dict):
+        return
+    if data.get('team_id'):
+        await sio.leave_room(sid, f"workos:team:{data['team_id']}")
+    if data.get('workstream_id'):
+        await sio.leave_room(sid, f"workos:workstream:{data['workstream_id']}")
+
+
 @sio.on('events:channel')
 async def channel_events(sid, data):
     room = f'channel:{data["channel_id"]}'

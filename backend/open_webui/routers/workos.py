@@ -16,6 +16,16 @@ from open_webui.models.workos import (
 
 log = logging.getLogger(__name__)
 
+
+async def emit_event(event: str, room: str, payload: dict) -> None:
+    try:
+        from open_webui.socket.main import sio
+
+        await sio.emit(event, payload, room=room)
+    except Exception as e:  # pragma: no cover - emit is best-effort
+        log.debug(f'workos emit failed for {event}: {e}')
+
+
 router = APIRouter()
 
 TEAM_ROLES = {'owner', 'admin', 'member'}
@@ -281,6 +291,7 @@ async def create_workspace(
     ws = await Workspaces.insert(team_id, form.name, form.icon, form.visibility, user.id, db=db)
     if form.visibility == 'restricted':
         await WorkspaceMembers.add(ws.id, user.id, 'admin', db=db)
+    await emit_event('workos:workspace.created', f'workos:team:{team_id}', ws.model_dump())
     return ws
 
 
@@ -302,7 +313,9 @@ async def update_workspace(
     fields = form.model_dump(exclude_none=True)
     if 'visibility' in fields and fields['visibility'] not in {'team', 'restricted'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid visibility.')
-    return await Workspaces.update_fields(workspace_id, fields, db=db)
+    updated = await Workspaces.update_fields(workspace_id, fields, db=db)
+    await emit_event('workos:workspace.updated', f'workos:team:{updated.team_id}', updated.model_dump())
+    return updated
 
 
 @router.delete('/workspaces/{workspace_id}')
@@ -312,7 +325,9 @@ async def delete_workspace(
     await _require_workos(request, user, db)
     ws = await require_workspace_visible(user, workspace_id, db)
     await require_team_role(user, ws.team_id, db, {'owner', 'admin'})
-    return {'deleted': await Workspaces.delete(workspace_id, db=db)}
+    deleted = await Workspaces.delete(workspace_id, db=db)
+    await emit_event('workos:workspace.deleted', f'workos:team:{ws.team_id}', {'id': workspace_id})
+    return {'deleted': deleted}
 
 
 # ──────────────────────────────── workspace member endpoints ────────────────────────────────
@@ -410,7 +425,10 @@ async def create_workstream(
 ):
     await _require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
-    return await Workstreams.insert(workspace_id, form.name, form.icon, user.id, db=db)
+    stream = await Workstreams.insert(workspace_id, form.name, form.icon, user.id, db=db)
+    ws_row = await Workspaces.get_by_id(workspace_id, db=db)
+    await emit_event('workos:workstream.created', f'workos:team:{ws_row.team_id}', stream.model_dump())
+    return stream
 
 
 @router.patch('/workstreams/{workstream_id}')
@@ -421,7 +439,10 @@ async def update_workstream(
     await _require_workos(request, user, db)
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     await require_workspace_manage(user, stream.workspace_id, db)
-    return await Workstreams.update_fields(workstream_id, form.model_dump(exclude_none=True), db=db)
+    updated = await Workstreams.update_fields(workstream_id, form.model_dump(exclude_none=True), db=db)
+    ws_row = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    await emit_event('workos:workstream.updated', f'workos:team:{ws_row.team_id}', updated.model_dump())
+    return updated
 
 
 @router.delete('/workstreams/{workstream_id}')
@@ -431,7 +452,10 @@ async def delete_workstream(
     await _require_workos(request, user, db)
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     await require_workspace_manage(user, stream.workspace_id, db)
-    return {'deleted': await Workstreams.delete(workstream_id, db=db)}
+    deleted = await Workstreams.delete(workstream_id, db=db)
+    ws_row = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    await emit_event('workos:workstream.deleted', f'workos:team:{ws_row.team_id}', {'id': workstream_id, 'workspace_id': stream.workspace_id})
+    return {'deleted': deleted}
 
 
 # ──────────────────────────────── task + label constants ────────────────────────────────
@@ -517,11 +541,13 @@ async def create_task(
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     _validate_task_fields(form.model_dump())
     team = await require_team_visible(user, (await Workspaces.get_by_id(stream.workspace_id, db=db)).team_id, db)
-    return await Tasks.insert(
+    task = await Tasks.insert(
         workstream_id, team.id, team.key, form.title, user.id,
         description=form.description, status=form.status, priority=form.priority,
         assignee_id=form.assignee_id, due_date=form.due_date, labels=form.labels, db=db,
     )
+    await emit_event('workos:task.created', f'workos:workstream:{workstream_id}', task.model_dump())
+    return task
 
 
 @router.get('/tasks/{task_id}')
@@ -542,7 +568,9 @@ async def update_task(
     task, _ = await require_task_visible(user, task_id, db)
     fields = form.model_dump(exclude_none=True)
     _validate_task_fields(fields)
-    return await Tasks.update_fields(task_id, fields, db=db)
+    updated = await Tasks.update_fields(task_id, fields, db=db)
+    await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
+    return updated
 
 
 @router.delete('/tasks/{task_id}')
@@ -555,7 +583,9 @@ async def delete_task(
     is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
     if not is_admin and task.created_by_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the creator or an admin may delete.')
-    return {'deleted': await Tasks.delete(task_id, db=db)}
+    deleted = await Tasks.delete(task_id, db=db)
+    await emit_event('workos:task.deleted', f'workos:workstream:{task.workstream_id}', {'id': task_id, 'workstream_id': task.workstream_id})
+    return {'deleted': deleted}
 
 
 # ──────────────────────────────── label endpoints ────────────────────────────────
