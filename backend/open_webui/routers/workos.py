@@ -10,7 +10,7 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
-    TeamModel, WorkspaceModel,
+    TeamModel, WorkspaceModel, WorkstreamModel,
 )
 
 log = logging.getLogger(__name__)
@@ -363,3 +363,71 @@ async def remove_workspace_member(
     await _require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
     return {'removed': await WorkspaceMembers.remove(workspace_id, user_id, db=db)}
+
+
+# ──────────────────────────────── workstream schemas ────────────────────────────────
+
+
+class WorkstreamForm(BaseModel):
+    name: str
+    icon: Optional[str] = None
+
+
+class WorkstreamUpdateForm(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+# ──────────────────────────── workstream permission helpers ────────────────────────────
+
+
+async def require_workstream_visible(user, workstream_id: str, db: AsyncSession):
+    stream = await Workstreams.get_by_id(workstream_id, db=db)
+    if not stream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Workstream not found.')
+    ws = await require_workspace_visible(user, stream.workspace_id, db)
+    return stream, ws
+
+
+# ──────────────────────────────── workstream endpoints ────────────────────────────────
+
+
+@router.get('/workspaces/{workspace_id}/workstreams')
+async def list_workstreams(
+    request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_workspace_visible(user, workspace_id, db)
+    return await Workstreams.list_for_workspace(workspace_id, db=db)
+
+
+@router.post('/workspaces/{workspace_id}/workstreams')
+async def create_workstream(
+    request: Request, workspace_id: str, form: WorkstreamForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_workspace_manage(user, workspace_id, db)
+    return await Workstreams.insert(workspace_id, form.name, form.icon, user.id, db=db)
+
+
+@router.patch('/workstreams/{workstream_id}')
+async def update_workstream(
+    request: Request, workstream_id: str, form: WorkstreamUpdateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    stream, _ = await require_workstream_visible(user, workstream_id, db)
+    await require_workspace_manage(user, stream.workspace_id, db)
+    return await Workstreams.update_fields(workstream_id, form.model_dump(exclude_none=True), db=db)
+
+
+@router.delete('/workstreams/{workstream_id}')
+async def delete_workstream(
+    request: Request, workstream_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    stream, _ = await require_workstream_visible(user, workstream_id, db)
+    await require_workspace_manage(user, stream.workspace_id, db)
+    return {'deleted': await Workstreams.delete(workstream_id, db=db)}
