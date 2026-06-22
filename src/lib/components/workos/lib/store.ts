@@ -30,6 +30,16 @@ export const members: Writable<Member[]> = writable([]);
 export const view: Writable<ViewKey> = writable('board');
 export const selectedTaskId: Writable<string | null> = writable(null);
 export const loading: Writable<boolean> = writable(false);
+export const directory: Writable<Record<string, { name: string }>> = writable({});
+
+export function displayName(id: string | null | undefined): string {
+	if (!id) return 'Unassigned';
+	return get(directory)[id]?.name ?? id;
+}
+export function initials(id: string | null | undefined): string {
+	const n = displayName(id);
+	return n === 'Unassigned' ? '–' : n.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+}
 
 export const currentTeam = derived([teams, currentTeamId], ([$t, $id]) => $t.find((x) => x.id === $id) ?? null);
 export const currentWorkstream = derived(
@@ -60,6 +70,8 @@ export async function loadBootstrap(): Promise<void> {
 		workspaces.set(b.workspaces);
 		workstreams.set(b.workstreams);
 		roles.set(b.roles);
+		const dir = await api.getDirectory(token()).catch(() => []);
+		directory.set(Object.fromEntries(dir.map((u) => [u.id, { name: u.name }])));
 		if (!get(currentTeamId) && b.teams.length) currentTeamId.set(b.teams[0].id);
 		const team = get(currentTeam);
 		if (team) labels.set(await api.listLabels(token(), team.id).catch(() => []));

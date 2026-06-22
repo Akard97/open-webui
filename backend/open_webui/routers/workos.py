@@ -95,6 +95,33 @@ class MemberRoleForm(BaseModel):
     role: str
 
 
+# ──────────────────────────────── directory ────────────────────────────────
+
+
+async def resolve_user_names(ids: list) -> list:
+    # Wrapper around the Users DAO so tests can monkeypatch a fast stub.
+    from open_webui.models.users import Users
+
+    out = []
+    for uid in ids:
+        u = await Users.get_user_by_id(uid)
+        if u:
+            out.append({'id': u.id, 'name': u.name})
+    return out
+
+
+@router.get('/directory')
+async def directory(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+    await _require_workos(request, user, db)
+    teams = await (Teams.list_all(db=db) if user.role == 'admin' else Teams.list_for_user(user.id, db=db))
+    ids: set = set()
+    for t in teams:
+        for m in await TeamMembers.list_for_team(t.id, db=db):
+            ids.add(m.user_id)
+    ids.add(user.id)
+    return await resolve_user_names(sorted(ids))
+
+
 # ──────────────────────────────── bootstrap ────────────────────────────────
 
 

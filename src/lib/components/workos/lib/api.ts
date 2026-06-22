@@ -105,6 +105,9 @@ export const updateLabel = (token: string, id: string, body: { name?: string; co
 	request<Label>(token, `/labels/${id}`, 'PATCH', body);
 export const deleteLabel = (token: string, id: string) => request<{ deleted: boolean }>(token, `/labels/${id}`, 'DELETE');
 
+// Directory
+export const getDirectory = (token: string) => request<{ id: string; name: string }[]>(token, '/directory');
+
 // Admin
 export const adminListTeams = (token: string) =>
 	request<{ team: Team; owner_ids: string[]; member_count: number }[]>(token, '/admin/teams');
