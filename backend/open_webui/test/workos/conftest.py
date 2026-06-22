@@ -23,8 +23,9 @@ with engine.begin() as _conn:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _create_schema():
+    tables = [t for name, t in Base.metadata.tables.items() if name.startswith('workos_')]
     async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=tables))
     yield
     async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(lambda c: Base.metadata.drop_all(c, tables=tables))
