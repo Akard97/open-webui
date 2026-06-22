@@ -1575,6 +1575,14 @@ USER_PERMISSIONS_FEATURES_POLICY_ADMIN = (
     os.environ.get('USER_PERMISSIONS_FEATURES_POLICY_ADMIN', 'False').lower() == 'true'
 )
 
+USER_PERMISSIONS_FEATURES_WORKOS = (
+    os.environ.get('USER_PERMISSIONS_FEATURES_WORKOS', 'True').lower() == 'true'
+)
+
+USER_PERMISSIONS_FEATURES_WORKOS_ADMIN = (
+    os.environ.get('USER_PERMISSIONS_FEATURES_WORKOS_ADMIN', 'False').lower() == 'true'
+)
+
 
 USER_PERMISSIONS_SETTINGS_INTERFACE = os.environ.get('USER_PERMISSIONS_SETTINGS_INTERFACE', 'True').lower() == 'true'
 
@@ -1651,6 +1659,8 @@ DEFAULT_USER_PERMISSIONS = {
         'policy_checker': USER_PERMISSIONS_FEATURES_POLICY_CHECKER,
         'policy_approver': USER_PERMISSIONS_FEATURES_POLICY_APPROVER,
         'policy_admin': USER_PERMISSIONS_FEATURES_POLICY_ADMIN,
+        'workos': USER_PERMISSIONS_FEATURES_WORKOS,
+        'workos_admin': USER_PERMISSIONS_FEATURES_WORKOS_ADMIN,
     },
     'settings': {
         'interface': USER_PERMISSIONS_SETTINGS_INTERFACE,
@@ -1661,6 +1671,17 @@ USER_PERMISSIONS = PersistentConfig(
     'USER_PERMISSIONS',
     'user.permissions',
     DEFAULT_USER_PERMISSIONS,
+)
+
+WORKOS_RULES = PersistentConfig(
+    'WORKOS_RULES',
+    'workos.rules',
+    json.loads(
+        os.environ.get(
+            'WORKOS_RULES',
+            '{"team_creation": "all_users", "default_workspace_visibility": "team"}',
+        )
+    ),
 )
 
 ENABLE_FOLDERS = PersistentConfig(
