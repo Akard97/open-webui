@@ -603,3 +603,60 @@ async def delete_label(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
     await require_team_role(user, existing.team_id, db, {'owner', 'admin'})
     return {'deleted': await Labels.delete(label_id, db=db)}
+
+
+# ──────────────────────────────── admin settings schema ────────────────────────────────
+
+
+class SettingsForm(BaseModel):
+    team_creation: Optional[str] = None
+    default_workspace_visibility: Optional[str] = None
+
+
+# ──────────────────────────────── admin endpoints ────────────────────────────────
+
+
+@router.get('/admin/teams')
+async def admin_list_teams(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos_admin(request, user, db)
+    if user.role != 'admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
+    out = []
+    for team in await Teams.list_all(db=db):
+        members = await TeamMembers.list_for_team(team.id, db=db)
+        out.append({
+            'team': team,
+            'owner_ids': [m.user_id for m in members if m.role == 'owner'],
+            'member_count': len(members),
+        })
+    return out
+
+
+@router.get('/admin/settings')
+async def admin_get_settings(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos_admin(request, user, db)
+    if user.role != 'admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
+    return request.app.state.config.WORKOS_RULES
+
+
+@router.patch('/admin/settings')
+async def admin_update_settings(
+    request: Request, form: SettingsForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos_admin(request, user, db)
+    if user.role != 'admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
+    if form.team_creation is not None and form.team_creation not in {'all_users', 'admins_only'}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid team_creation.')
+    if form.default_workspace_visibility is not None and form.default_workspace_visibility not in {'team', 'restricted'}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid default_workspace_visibility.')
+    rules = dict(request.app.state.config.WORKOS_RULES or {})
+    rules.update(form.model_dump(exclude_none=True))
+    request.app.state.config.WORKOS_RULES = rules
+    return request.app.state.config.WORKOS_RULES
