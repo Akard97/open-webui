@@ -7,6 +7,7 @@
 	import ListView from './views/ListView.svelte';
 	import TaskDetail from './views/TaskDetail.svelte';
 	import AdminApp from './views/admin/AdminApp.svelte';
+	import ModalHost from './views/ModalHost.svelte';
 	import { canUseAdmin } from './lib/roles';
 	import { user } from '$lib/stores';
 	import {
@@ -48,4 +49,5 @@
 			{/if}
 		</div>
 	</div>
+	<ModalHost />
 </div>

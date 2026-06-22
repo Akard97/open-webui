@@ -2,7 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import ThemeSwitcher from '$lib/components/app/ThemeSwitcher.svelte';
 	import { user } from '$lib/stores';
-	import { canUseAdmin, canCreateWorkspace } from '../lib/roles';
+	import { canUseAdmin, canCreateWorkspace, canManageMembers } from '../lib/roles';
 	import {
 		teams, workspaces, workstreams, roles, currentTeam, currentTeamId, currentWorkstreamId,
 		selectTeam, selectWorkstream, view, openModal
@@ -40,6 +40,11 @@
 						{#if t.id === $currentTeamId}<Icon name="check" size={14} />{/if}
 					</button>
 				{/each}
+				{#if canManageMembers(myRole) && $currentTeamId}
+					<button class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800" onclick={() => { openModal.set({ kind: 'members', teamId: $currentTeamId }); teamMenuOpen = false; }}>
+						<Icon name="users" size={14} /> Manage members
+					</button>
+				{/if}
 				<button
 					class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm text-teal-600 hover:bg-gray-100 dark:hover:bg-gray-800"
 					onclick={() => { openModal.set({ kind: 'team' }); teamMenuOpen = false; }}
