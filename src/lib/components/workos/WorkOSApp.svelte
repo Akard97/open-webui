@@ -1,22 +1,51 @@
 <script lang="ts">
-	import Clipboard from '$lib/components/icons/Clipboard.svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import './styles.css';
+	import Sidebar from './chrome/Sidebar.svelte';
+	import Topbar from './chrome/Topbar.svelte';
+	import BoardView from './views/BoardView.svelte';
+	import ListView from './views/ListView.svelte';
+	import TaskDetail from './views/TaskDetail.svelte';
+	import AdminApp from './views/admin/AdminApp.svelte';
+	import { canUseAdmin } from './lib/roles';
+	import { user } from '$lib/stores';
+	import {
+		loadBootstrap, connectRealtime, disconnectRealtime,
+		view, currentWorkstream, selectedTask, teams, loading
+	} from './lib/store';
 
-	// Placeholder shell for the WorkOS task-management tool. Intentionally minimal
-	// — this is the file the real tool will grow out of.
+	// Guard: snap non-admins away from the admin view.
+	$: if ($view === 'admin' && !canUseAdmin($user)) view.set('board');
+
+	onMount(async () => {
+		await loadBootstrap();
+		connectRealtime();
+	});
+	onDestroy(() => disconnectRealtime());
 </script>
 
-<div class="w-full h-full flex items-center justify-center p-6 text-gray-700 dark:text-gray-200">
-	<div class="flex flex-col items-center text-center max-w-md">
-		<div
-			class="flex items-center justify-center size-16 rounded-2xl bg-gray-100 dark:bg-gray-850 text-gray-500 dark:text-gray-300 mb-5"
-		>
-			<Clipboard className="size-8" strokeWidth="1.5" />
+<div class="workos-root text-gray-800 dark:text-gray-100">
+	<Sidebar />
+	<div class="flex-1 flex flex-col min-w-0">
+		<Topbar />
+		<div class="flex-1 relative min-h-0 bg-gray-50 dark:bg-gray-900">
+			{#if $loading && !$teams.length}
+				<div class="h-full flex items-center justify-center text-sm text-gray-400">Loading…</div>
+			{:else if $view === 'admin'}
+				<AdminApp />
+			{:else if !$teams.length}
+				<div class="h-full flex flex-col items-center justify-center gap-2 text-center px-6">
+					<div class="text-lg font-medium">You're not in any teams yet</div>
+					<div class="text-sm text-gray-500">Create a team from the sidebar to get started.</div>
+				</div>
+			{:else if $view === 'list'}
+				<ListView />
+			{:else}
+				<BoardView />
+			{/if}
+			{#if $selectedTask}
+				<TaskDetail />
+			{/if}
 		</div>
-
-		<h1 class="text-2xl font-semibold mb-2">WorkOS</h1>
-
-		<p class="text-sm text-gray-500 dark:text-gray-400">
-			Task management is coming soon. This space is reserved while we build it out.
-		</p>
 	</div>
 </div>

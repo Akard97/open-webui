@@ -1,0 +1,7 @@
+/* WorkOS tool-local tokens. Expanded in Task 23. */
+.workos-root {
+	height: 100%;
+	width: 100%;
+	display: flex;
+	min-height: 0;
+}

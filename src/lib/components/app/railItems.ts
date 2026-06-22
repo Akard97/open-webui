@@ -102,7 +102,8 @@ export const railItems: RailItem[] = [
 		href: '/workos',
 		icon: Clipboard,
 		segments: ['workos'],
-		visible: () => true
+		visible: ({ user }) =>
+			user?.role === 'admin' || (user?.permissions?.features?.workos ?? true)
 	},
 	{
 		id: 'admin',
