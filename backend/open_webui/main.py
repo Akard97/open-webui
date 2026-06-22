@@ -754,6 +754,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.exception(f'Policy Review seeding failed: {e}')
 
+    try:
+        from open_webui.internal.workos.seeder import seed_workos_demo
+        await seed_workos_demo()
+    except Exception as e:
+        log.exception(f'WorkOS seeding failed: {e}')
+
     yield
 
     # Shutdown: clean up shared resources
