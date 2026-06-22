@@ -5,6 +5,7 @@ import Sparkles from '$lib/components/icons/Sparkles.svelte';
 import Note from '$lib/components/icons/Note.svelte';
 import Cube from '$lib/components/icons/Cube.svelte';
 import DocumentCheck from '$lib/components/icons/DocumentCheck.svelte';
+import Clipboard from '$lib/components/icons/Clipboard.svelte';
 import UserGroup from '$lib/components/icons/UserGroup.svelte';
 
 export type RailIconComponent = ComponentType<SvelteComponent<{ className?: string; strokeWidth?: string }>>;
@@ -90,6 +91,17 @@ export const railItems: RailItem[] = [
 		href: '/policy-review',
 		icon: DocumentCheck,
 		segments: ['policy-review'],
+		visible: () => true
+	},
+	{
+		// WorkOS task-management tool. Placeholder for now — visible to everyone,
+		// like Policy Review. A `features.workos` gate will be added once the tool
+		// is actually built out.
+		id: 'workos',
+		label: 'WorkOS',
+		href: '/workos',
+		icon: Clipboard,
+		segments: ['workos'],
 		visible: () => true
 	},
 	{
