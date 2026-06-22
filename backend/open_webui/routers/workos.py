@@ -10,7 +10,8 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
-    TeamModel, WorkspaceModel, WorkstreamModel,
+    Labels, Tasks,
+    TeamModel, WorkspaceModel, WorkstreamModel, TaskModel, LabelModel,
 )
 
 log = logging.getLogger(__name__)
@@ -431,3 +432,174 @@ async def delete_workstream(
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     await require_workspace_manage(user, stream.workspace_id, db)
     return {'deleted': await Workstreams.delete(workstream_id, db=db)}
+
+
+# ──────────────────────────────── task + label constants ────────────────────────────────
+
+
+STATUSES = {'backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled'}
+PRIORITIES = {'urgent', 'high', 'medium', 'low'}
+
+
+# ──────────────────────────────── task + label schemas ────────────────────────────────
+
+
+class TaskCreateForm(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: str = 'backlog'
+    priority: Optional[str] = None
+    assignee_id: Optional[str] = None
+    due_date: Optional[int] = None
+    labels: Optional[list] = None
+
+
+class TaskUpdateForm(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    assignee_id: Optional[str] = None
+    due_date: Optional[int] = None
+    progress: Optional[int] = None
+    labels: Optional[list] = None
+    sort_key: Optional[float] = None
+
+
+class LabelForm(BaseModel):
+    name: str
+    color: str
+
+
+class LabelUpdateForm(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+
+# ──────────────────────────── task permission helpers ────────────────────────────
+
+
+async def require_task_visible(user, task_id: str, db: AsyncSession):
+    task = await Tasks.get_by_id(task_id, db=db)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Task not found.')
+    stream, _ = await require_workstream_visible(user, task.workstream_id, db)
+    return task, stream
+
+
+def _validate_task_fields(fields: dict) -> None:
+    if fields.get('status') is not None and fields['status'] not in STATUSES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid status.')
+    if fields.get('priority') is not None and fields['priority'] not in PRIORITIES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid priority.')
+    if fields.get('progress') is not None and not (0 <= fields['progress'] <= 100):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Progress out of range.')
+
+
+# ──────────────────────────────── task endpoints ────────────────────────────────
+
+
+@router.get('/workstreams/{workstream_id}/tasks')
+async def list_tasks(
+    request: Request, workstream_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_workstream_visible(user, workstream_id, db)
+    return await Tasks.list_for_workstream(workstream_id, db=db)
+
+
+@router.post('/workstreams/{workstream_id}/tasks')
+async def create_task(
+    request: Request, workstream_id: str, form: TaskCreateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    stream, _ = await require_workstream_visible(user, workstream_id, db)
+    _validate_task_fields(form.model_dump())
+    team = await require_team_visible(user, (await Workspaces.get_by_id(stream.workspace_id, db=db)).team_id, db)
+    return await Tasks.insert(
+        workstream_id, team.id, team.key, form.title, user.id,
+        description=form.description, status=form.status, priority=form.priority,
+        assignee_id=form.assignee_id, due_date=form.due_date, labels=form.labels, db=db,
+    )
+
+
+@router.get('/tasks/{task_id}')
+async def get_task(
+    request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    task, _ = await require_task_visible(user, task_id, db)
+    return task
+
+
+@router.patch('/tasks/{task_id}')
+async def update_task(
+    request: Request, task_id: str, form: TaskUpdateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    task, _ = await require_task_visible(user, task_id, db)
+    fields = form.model_dump(exclude_none=True)
+    _validate_task_fields(fields)
+    return await Tasks.update_fields(task_id, fields, db=db)
+
+
+@router.delete('/tasks/{task_id}')
+async def delete_task(
+    request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    task, stream = await require_task_visible(user, task_id, db)
+    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
+    if not is_admin and task.created_by_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the creator or an admin may delete.')
+    return {'deleted': await Tasks.delete(task_id, db=db)}
+
+
+# ──────────────────────────────── label endpoints ────────────────────────────────
+
+
+@router.get('/teams/{team_id}/labels')
+async def list_labels(
+    request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_team_visible(user, team_id, db)
+    return await Labels.list_for_team(team_id, db=db)
+
+
+@router.post('/teams/{team_id}/labels')
+async def create_label(
+    request: Request, team_id: str, form: LabelForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await require_team_role(user, team_id, db, {'owner', 'admin'})
+    return await Labels.insert(team_id, form.name, form.color, db=db)
+
+
+@router.patch('/labels/{label_id}')
+async def update_label(
+    request: Request, label_id: str, form: LabelUpdateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    existing = await Labels.update_fields(label_id, {}, db=db)  # fetch-only to read team_id
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
+    await require_team_role(user, existing.team_id, db, {'owner', 'admin'})
+    return await Labels.update_fields(label_id, form.model_dump(exclude_none=True), db=db)
+
+
+@router.delete('/labels/{label_id}')
+async def delete_label(
+    request: Request, label_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    existing = await Labels.update_fields(label_id, {}, db=db)
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
+    await require_team_role(user, existing.team_id, db, {'owner', 'admin'})
+    return {'deleted': await Labels.delete(label_id, db=db)}
