@@ -53,6 +53,8 @@ async def require_team_visible(user, team_id: str, db: AsyncSession) -> TeamMode
 
 async def require_team_role(user, team_id: str, db: AsyncSession, allowed: set) -> TeamModel:
     team = await require_team_visible(user, team_id, db)
+    if user.role == 'admin':
+        return team
     if (await team_role(user, team_id, db)) not in allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient role.')
     return team

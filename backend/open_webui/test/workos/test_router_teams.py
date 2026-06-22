@@ -74,3 +74,18 @@ async def test_gate_denied_returns_401(monkeypatch):
     async with _client(monkeypatch, user=U1, allow=False) as c:
         r = await c.get('/api/v1/workos/teams')
         assert r.status_code == 401
+
+
+ADMIN = SimpleNamespace(id='admin1', name='Root', role='admin')
+
+
+@pytest.mark.asyncio
+async def test_system_admin_can_edit_and_delete_any_team(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
+    async with _client(monkeypatch, user=ADMIN) as c:
+        r = await c.patch(f"/api/v1/workos/teams/{team['id']}", json={'name': 'Renamed'})
+        assert r.status_code == 200, r.text
+        assert r.json()['name'] == 'Renamed'
+        r = await c.delete(f"/api/v1/workos/teams/{team['id']}")
+        assert r.json()['deleted'] is True
