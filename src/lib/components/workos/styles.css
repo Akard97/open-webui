@@ -5,3 +5,12 @@
 	display: flex;
 	min-height: 0;
 }
+
+@keyframes workos-spin {
+	to { transform: rotate(360deg); }
+}
+.workos-spin {
+	display: inline-flex;
+	animation: workos-spin 0.8s linear infinite;
+	transform-origin: center;
+}
