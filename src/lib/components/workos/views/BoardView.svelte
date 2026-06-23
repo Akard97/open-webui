@@ -2,14 +2,28 @@
 	import Sortable from 'sortablejs';
 	import { onDestroy, tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
-	import Pills from '../ui/Pills.svelte';
+	import TaskCard from './TaskCard.svelte';
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
-	import { tasksByStatus, currentWorkstream, labels, openTask, moveTask, addTask } from '../lib/store';
+	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask } from '../lib/store';
+
+	// Status accent colors — mirrors Pills' STATUS_COLOR.
+	const STATUS_COLOR: Record<TaskStatus, string> = {
+		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#2563eb',
+		in_review: '#7c3aed', done: '#16a34a', canceled: '#9ca3af'
+	};
+
+	const FILTERS = [
+		{ k: 'Due Date', v: 'All' },
+		{ k: 'Assignee', v: 'All' },
+		{ k: 'Priority', v: 'All' }
+	];
 
 	let columnEls: Record<string, HTMLElement> = {};
 	let sortables: Sortable[] = [];
 	let adding: TaskStatus | null = null;
 	let newTitle = '';
+	let creatingTop = false;
+	let topTitle = '';
 
 	$: byStatus = $tasksByStatus;
 	$: labelById = Object.fromEntries($labels.map((l) => [l.id, l]));
@@ -70,60 +84,92 @@
 		adding = null;
 		await initSortables(); // attach the new card to the sortable list
 	}
+
+	async function submitTop() {
+		if (!topTitle.trim() || !$currentWorkstream) return;
+		await addTask($currentWorkstream.id, { title: topTitle.trim() });
+		topTitle = '';
+		creatingTop = false;
+		await initSortables();
+	}
 </script>
 
-<div class="h-full overflow-x-auto flex gap-4 p-4 box-border">
-	{#each STATUS_ORDER as status (status)}
-		<div class="w-72 flex-none flex flex-col h-full">
-			<div class="flex items-center gap-2 px-1 pb-2">
-				<Pills {status} />
-				<span class="text-sm font-semibold">{STATUS_LABEL[status]}</span>
-				<span class="text-xs text-gray-400">{(byStatus[status] ?? []).length}</span>
-				<div class="flex-1"></div>
-				<button class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)}><Icon name="plus" size={15} /></button>
-			</div>
+<div class="h-full flex flex-col min-h-0">
+	<!-- Filter bar: decorative controls + functional Add New -->
+	<div class="flex-none flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+		{#each FILTERS as f (f.k)}
+			<button
+				class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-xs hover:bg-gray-100 dark:hover:bg-gray-900"
+				title="Coming soon"
+				aria-disabled="true"
+			>
+				<span class="text-gray-400">{f.k}</span>
+				<span class="font-medium text-gray-700 dark:text-gray-200">{f.v}</span>
+				<Icon name="chevron-down" size={13} />
+			</button>
+		{/each}
+		<button
+			class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-xs hover:bg-gray-100 dark:hover:bg-gray-900"
+			title="Coming soon"
+			aria-disabled="true"
+		>
+			<Icon name="sliders" size={14} /> Advance Filters
+		</button>
 
-			<div bind:this={columnEls[status]} data-status={status} class="flex flex-col gap-2 overflow-y-auto flex-1 pb-4 min-h-[8px]">
-				{#each byStatus[status] ?? [] as task (task.id)}
-					<div
-						data-task-id={task.id}
-						data-sort-key={task.sort_key}
-						class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-2.5 cursor-pointer hover:shadow-sm"
-						onclick={() => openTask(task.id)}
-						role="button"
-						tabindex="0"
+		<div class="flex-1"></div>
+
+		{#if creatingTop}
+			<input
+				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-56"
+				placeholder="Task title…"
+				bind:value={topTitle}
+				onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }}
+				autofocus
+			/>
+		{:else}
+			<button
+				class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium"
+				onclick={() => (creatingTop = true)}
+			>
+				<Icon name="plus" size={15} /> Add New
+			</button>
+		{/if}
+	</div>
+
+	<!-- Columns -->
+	<div class="flex-1 overflow-x-auto flex gap-4 p-4 box-border min-h-0">
+		{#each STATUS_ORDER as status (status)}
+			<div class="w-72 flex-none flex flex-col h-full">
+				<div class="flex items-center gap-2 px-1 pb-3">
+					<span
+						class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+						style="background:{STATUS_COLOR[status]}1a; color:{STATUS_COLOR[status]}"
 					>
-						<div class="flex items-center justify-between mb-1.5">
-							<span class="text-[11px] text-gray-400 font-mono">{task.key}</span>
-							<Pills priority={task.priority} />
-						</div>
-						<div class="text-sm font-medium mb-2 leading-snug">{task.title}</div>
-						{#if task.labels.length}
-							<div class="flex flex-wrap gap-1 mb-2">
-								{#each task.labels as lid (lid)}
-									{#if labelById[lid]}<Pills label={labelById[lid]} />{/if}
-								{/each}
-							</div>
-						{/if}
-						<div class="flex items-center gap-3 text-[11px] text-gray-400">
-							{#if task.due_date}
-								<span class="inline-flex items-center gap-1"><Icon name="calendar" size={12} />{new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-							{/if}
-							{#if task.progress > 0}<span>{task.progress}%</span>{/if}
-						</div>
-					</div>
-				{/each}
-			</div>
+						<span class="w-2 h-2 rounded-full" style="background:{STATUS_COLOR[status]}"></span>
+						{STATUS_LABEL[status]}
+					</span>
+					<span class="text-xs text-gray-400 font-medium">{(byStatus[status] ?? []).length}</span>
+					<div class="flex-1"></div>
+					<button class="text-gray-300 hover:text-gray-500" title="More" aria-disabled="true"><Icon name="more-horizontal" size={16} /></button>
+					<button class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></button>
+				</div>
 
-			{#if adding === status}
-				<input
-					class="mt-2 text-sm px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent"
-					placeholder="Task title…"
-					bind:value={newTitle}
-					onkeydown={(e) => { if (e.key === 'Enter') submitAdd(status); if (e.key === 'Escape') { adding = null; newTitle = ''; } }}
-					autofocus
-				/>
-			{/if}
-		</div>
-	{/each}
+				<div bind:this={columnEls[status]} data-status={status} class="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-4 min-h-[8px]">
+					{#each byStatus[status] ?? [] as task (task.id)}
+						<TaskCard {task} {labelById} />
+					{/each}
+				</div>
+
+				{#if adding === status}
+					<input
+						class="mt-2 text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+						placeholder="Task title…"
+						bind:value={newTitle}
+						onkeydown={(e) => { if (e.key === 'Enter') submitAdd(status); if (e.key === 'Escape') { adding = null; newTitle = ''; } }}
+						autofocus
+					/>
+				{/if}
+			</div>
+		{/each}
+	</div>
 </div>
