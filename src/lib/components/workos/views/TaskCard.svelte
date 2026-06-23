@@ -13,14 +13,14 @@
 		medium: { color: '#ca8a04', label: 'Medium Priority' },
 		low: { color: '#6b7280', label: 'Low Priority' }
 	};
-	$: prio = task.priority ? PRIORITY_META[task.priority] : { color: '#9ca3af', label: 'No Priority' };
+	$: prio = task.priority ? PRIORITY_META[task.priority] : { color: '#cbd5e1', label: '–' };
 	$: overdue = isOverdue(task.due_date, task.status, Date.now());
 </script>
 
 <div
 	data-task-id={task.id}
 	data-sort-key={task.sort_key}
-	class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl p-3.5 cursor-pointer hover:shadow-md transition-shadow"
+	class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 cursor-pointer shadow-sm hover:shadow-md transition-shadow"
 	onclick={() => openTask(task.id)}
 	onkeydown={(e) => {
 		if (e.target !== e.currentTarget) return;
@@ -50,27 +50,29 @@
 	</div>
 
 	<!-- Assignee -->
-	<div class="flex items-center gap-2 mb-2 text-gray-400">
-		<Icon name="user" size={15} />
+	<div class="flex items-center gap-2 mb-2.5 text-[13px]">
+		<span class="text-gray-400 flex-none"><Icon name="user" size={15} /></span>
 		{#if task.assignee_id}
 			<span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 text-[10px] font-semibold inline-flex items-center justify-center">{initials(task.assignee_id)}</span>
 		{:else}
-			<span class="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-gray-700 text-gray-400 text-[10px] inline-flex items-center justify-center">–</span>
+			<span class="text-gray-400">–</span>
 		{/if}
 	</div>
 
 	<!-- Due date -->
-	{#if task.due_date}
-		<div class="flex items-center gap-2 mb-2 text-[13px] text-gray-500 dark:text-gray-400">
-			<Icon name="calendar" size={15} />
+	<div class="flex items-center gap-2 mb-2.5 text-[13px] text-gray-600 dark:text-gray-300">
+		<span class="text-gray-400 flex-none"><Icon name="calendar" size={15} /></span>
+		{#if task.due_date}
 			<span>{formatDueDate(task.due_date)}</span>
 			{#if overdue}<span class="text-red-500 font-medium">Overdue</span>{/if}
-		</div>
-	{/if}
+		{:else}
+			<span class="text-gray-400">–</span>
+		{/if}
+	</div>
 
 	<!-- Priority -->
-	<div class="flex items-center gap-2 mb-1 text-[13px]" style="color:{prio.color}">
-		<Icon name="flag" size={15} />
+	<div class="flex items-center gap-2 mb-0.5 text-[13px] text-gray-600 dark:text-gray-300">
+		<span class="flex-none" style="color:{prio.color}"><Icon name="flag" size={15} /></span>
 		<span>{prio.label}</span>
 	</div>
 
