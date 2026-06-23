@@ -102,6 +102,7 @@
 				class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-xs hover:bg-gray-100 dark:hover:bg-gray-900"
 				title="Coming soon"
 				aria-disabled="true"
+				tabindex="-1"
 			>
 				<span class="text-gray-400">{f.k}</span>
 				<span class="font-medium text-gray-700 dark:text-gray-200">{f.v}</span>
@@ -112,6 +113,7 @@
 			class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-xs hover:bg-gray-100 dark:hover:bg-gray-900"
 			title="Coming soon"
 			aria-disabled="true"
+			tabindex="-1"
 		>
 			<Icon name="sliders" size={14} /> Advance Filters
 		</button>
@@ -150,7 +152,7 @@
 					</span>
 					<span class="text-xs text-gray-400 font-medium">{(byStatus[status] ?? []).length}</span>
 					<div class="flex-1"></div>
-					<button class="text-gray-300 hover:text-gray-500" title="More" aria-disabled="true"><Icon name="more-horizontal" size={16} /></button>
+					<button class="text-gray-300 hover:text-gray-500" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
 					<button class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></button>
 				</div>
 

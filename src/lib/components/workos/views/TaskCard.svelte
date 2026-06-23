@@ -42,6 +42,7 @@
 			class="text-gray-300 hover:text-gray-500 flex-none -mr-1"
 			title="More"
 			aria-disabled="true"
+			tabindex="-1"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<Icon name="more-horizontal" size={16} />

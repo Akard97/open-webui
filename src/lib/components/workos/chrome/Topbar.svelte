@@ -38,7 +38,7 @@
 			{parentWorkspace ? `${parentWorkspace.name} · ` : ''}{ws?.name ?? $currentTeam?.name ?? 'WorkOS'}
 		</span>
 		{#if ws}
-			<button class="text-gray-400 hover:text-gray-600" title="Rename" aria-disabled="true"><Icon name="pencil" size={15} /></button>
+			<button class="text-gray-400 hover:text-gray-600" title="Rename" aria-disabled="true" tabindex="-1"><Icon name="pencil" size={15} /></button>
 		{/if}
 
 		<div class="flex-1"></div>
@@ -64,8 +64,8 @@
 					<span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
 				{/each}
 			</div>
-			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true"><Icon name="share-2" size={14} /> Share</button>
-			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true"><Icon name="zap" size={14} /> Automation</button>
+			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true" tabindex="-1"><Icon name="share-2" size={14} /> Share</button>
+			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true" tabindex="-1"><Icon name="zap" size={14} /> Automation</button>
 		{/if}
 	</div>
 
