@@ -70,7 +70,7 @@
 	</div>
 
 	<!-- Tab row -->
-	{#if ws}
+	{#if ws && $view !== 'admin'}
 		<div class="flex items-center gap-1 px-4">
 			{#each TABS as t (t.key)}
 				<button
