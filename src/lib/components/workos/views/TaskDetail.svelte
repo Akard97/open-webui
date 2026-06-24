@@ -6,7 +6,8 @@
 	import DetailHeader from './detail/DetailHeader.svelte';
 	import AssigneeField from './detail/AssigneeField.svelte';
 	import AttachmentsPanel from './detail/AttachmentsPanel.svelte';
-	import SubtasksPlaceholder from './detail/SubtasksPlaceholder.svelte';
+	import SubtasksPanel from './detail/SubtasksPanel.svelte';
+	import { plannedProgress, actualProgress, taskHealth, HEALTH_LABEL } from '../lib/progress';
 	import CommentItem from './detail/CommentItem.svelte';
 	import CommentComposer from './detail/CommentComposer.svelte';
 	import ActivityItem from './detail/ActivityItem.svelte';
@@ -37,11 +38,16 @@
 
 	let editingTitle = false;
 	let titleDraft = '';
+	let editingStart = false;
 	let editingDue = false;
 	let editingProgress = false;
 	let editingDesc = false;
 	let descDraft = '';
 	$: if (t && !editingDesc) descDraft = t.description ?? '';
+	$: now = Date.now();
+	$: actual = t ? actualProgress(t) : 0;
+	$: planned = t ? plannedProgress(t.start_date, t.due_date, now) : null;
+	$: health = t ? taskHealth(t, now) : null;
 
 	function startTitle() {
 		if (t) {
@@ -136,6 +142,32 @@
 							</DropdownMenu.Root>
 						</PropertyRow>
 
+						<!-- Start date -->
+						<PropertyRow icon="calendar" label="Start date">
+							{#if editingStart}
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									type="date"
+									class="text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded px-2 py-1"
+									value={t.start_date ? new Date(t.start_date).toISOString().slice(0, 10) : ''}
+									onchange={(e) => {
+										const v = (e.target as HTMLInputElement).value;
+										editTask(t.id, { start_date: v ? new Date(v).getTime() : null });
+										editingStart = false;
+									}}
+									onblur={() => (editingStart = false)}
+									autofocus
+								/>
+							{:else}
+								<button
+									class="rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-900 {t.start_date ? '' : 'text-gray-400'}"
+									onclick={() => (editingStart = true)}
+								>
+									{t.start_date ? formatDateLong(t.start_date) : 'Add start date'}
+								</button>
+							{/if}
+						</PropertyRow>
+
 						<!-- Due date -->
 						<PropertyRow icon="calendar" label="Due date">
 							{#if editingDue}
@@ -195,26 +227,40 @@
 
 						<!-- Progress -->
 						<PropertyRow icon="loader" label="Progress">
-							{#if editingProgress}
+							<div class="w-full space-y-2">
 								<div class="flex items-center gap-2">
-									<input
-										type="range" min="0" max="100" step="5" value={t.progress}
-										onchange={(e) => editTask(t.id, { progress: parseInt((e.target as HTMLInputElement).value, 10) })}
-									/>
-									<span class="text-sm w-9">{t.progress}%</span>
-									<button class="text-xs text-teal-600 dark:text-teal-400" onclick={() => (editingProgress = false)}>Done</button>
-								</div>
-							{:else}
-								<button
-									class="flex items-center gap-2 w-full rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-900"
-									onclick={() => (editingProgress = true)}
-								>
-									<span class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden max-w-[140px]">
-										<span class="block h-full bg-teal-500 rounded-full" style="width:{t.progress}%"></span>
+									<span class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+										<span class="block h-full bg-teal-500 rounded-full" style="width:{actual}%"></span>
 									</span>
-									<span class="text-sm text-gray-500">{t.progress}%</span>
-								</button>
-							{/if}
+									<span class="text-sm text-gray-500 w-10 text-right">{actual}%</span>
+								</div>
+								{#if planned !== null}
+									<div class="flex items-center gap-2">
+										<span class="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-900 overflow-hidden">
+											<span class="block h-full bg-gray-400 dark:bg-gray-600 rounded-full" style="width:{planned}%"></span>
+										</span>
+										<span class="text-xs text-gray-400 w-20 text-right">Planned {planned}%</span>
+									</div>
+								{/if}
+								{#if health}
+									<span class="inline-flex text-xs rounded-full px-2 py-0.5 bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300">
+										{HEALTH_LABEL[health]}
+									</span>
+								{/if}
+								{#if (t.subtask_total ?? 0) === 0 && editingProgress}
+									<div class="flex items-center gap-2">
+										<input
+											type="range" min="0" max="100" step="5" value={t.progress}
+											onchange={(e) => editTask(t.id, { progress: parseInt((e.target as HTMLInputElement).value, 10) })}
+										/>
+										<button class="text-xs text-teal-600 dark:text-teal-400" onclick={() => (editingProgress = false)}>Done</button>
+									</div>
+								{:else if (t.subtask_total ?? 0) === 0}
+									<button class="text-xs text-gray-400 hover:text-teal-600" onclick={() => (editingProgress = true)}>Edit manual progress</button>
+								{:else}
+									<div class="text-xs text-gray-400">{t.subtask_completed ?? 0}/{t.subtask_total ?? 0} subtasks complete</div>
+								{/if}
+							</div>
 						</PropertyRow>
 					</div>
 
@@ -257,7 +303,7 @@
 								<Tabs.Trigger value="activities">Activities</Tabs.Trigger>
 							</Tabs.List>
 
-							<Tabs.Content value="subtasks"><SubtasksPlaceholder /></Tabs.Content>
+							<Tabs.Content value="subtasks"><SubtasksPanel taskId={t.id} /></Tabs.Content>
 
 							<Tabs.Content value="comments">
 								<div class="divide-y divide-gray-100 dark:divide-gray-900">
