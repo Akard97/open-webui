@@ -50,3 +50,28 @@ async def test_activity_insert_and_list():
     a = await Activity.insert('t1', 'team1', 'u1', 'status_changed', {'from': 'todo', 'to': 'done'})
     assert a.type == 'status_changed' and a.data == {'from': 'todo', 'to': 'done'}
     assert [x.id for x in await Activity.list_for_task('t1')] == [a.id]
+
+
+@pytest.mark.asyncio
+async def test_attachments_crud():
+    from open_webui.models.workos import Attachments
+    a = await Attachments.insert('t1', None, 'wos/abc_file.pdf', 'file.pdf', 1234, 'application/pdf', 'u1')
+    assert a.comment_id is None and a.storage_key == 'wos/abc_file.pdf' and a.size == 1234
+    assert [x.id for x in await Attachments.list_for_task('t1')] == [a.id]
+    assert (await Attachments.get_by_id(a.id)).name == 'file.pdf'
+    assert await Attachments.delete(a.id) is True
+    assert await Attachments.list_for_task('t1') == []
+
+
+@pytest.mark.asyncio
+async def test_notifications_list_count_and_mark_read():
+    from open_webui.models.workos import Notifications
+    n1 = await Notifications.insert('u1', 'u2', 'assigned', {'task_key': 'OSL-1'}, task_id='t1')
+    await Notifications.insert('u1', 'u2', 'mentioned', {'task_key': 'OSL-1'}, task_id='t1')
+    assert await Notifications.unread_count('u1') == 2
+    assert len(await Notifications.list_for_user('u1')) == 2
+    assert len(await Notifications.list_for_user('u1', unread_only=True)) == 2
+    assert await Notifications.mark_read('u1', ids=[n1.id]) == 1
+    assert await Notifications.unread_count('u1') == 1
+    assert await Notifications.mark_read('u1', all=True) == 1
+    assert await Notifications.unread_count('u1') == 0

@@ -786,6 +786,166 @@ Comments = CommentsDao()
 Activity = ActivityDao()
 
 
+# ──────────────────────────── Attachment + Notification Tables ────────────────────────────
+
+
+class WorkosAttachment(Base):
+    __tablename__ = 'workos_attachment'
+
+    id = Column(Text, primary_key=True, unique=True)
+    task_id = Column(Text)
+    comment_id = Column(Text, nullable=True)
+    storage_key = Column(Text)
+    name = Column(Text)
+    size = Column(BigInteger)
+    content_type = Column(Text, nullable=True)
+    created_by_id = Column(Text, nullable=True)
+    created_at = Column(BigInteger)
+
+
+class WorkosNotification(Base):
+    __tablename__ = 'workos_notification'
+
+    id = Column(Text, primary_key=True, unique=True)
+    user_id = Column(Text)
+    actor_id = Column(Text, nullable=True)
+    task_id = Column(Text, nullable=True)
+    comment_id = Column(Text, nullable=True)
+    type = Column(Text)
+    data = Column(JSON, default=dict)
+    read = Column(Boolean, default=False)
+    created_at = Column(BigInteger)
+
+
+class AttachmentModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    task_id: str
+    comment_id: Optional[str] = None
+    storage_key: str
+    name: str
+    size: int
+    content_type: Optional[str] = None
+    created_by_id: Optional[str] = None
+    created_at: int
+
+
+class NotificationModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    user_id: str
+    actor_id: Optional[str] = None
+    task_id: Optional[str] = None
+    comment_id: Optional[str] = None
+    type: str
+    data: dict = {}
+    read: bool
+    created_at: int
+
+
+class AttachmentsDao:
+    async def insert(
+        self, task_id: str, comment_id: Optional[str], storage_key: str, name: str,
+        size: int, content_type: Optional[str], created_by_id: Optional[str],
+        db: Optional[AsyncSession] = None,
+    ) -> AttachmentModel:
+        async with get_async_db_context(db) as db:
+            row = WorkosAttachment(
+                id=_id(), task_id=task_id, comment_id=comment_id, storage_key=storage_key,
+                name=name, size=size, content_type=content_type,
+                created_by_id=created_by_id, created_at=_now(),
+            )
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return AttachmentModel.model_validate(row)
+
+    async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[AttachmentModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosAttachment).filter_by(id=id))
+            row = res.scalars().first()
+            return AttachmentModel.model_validate(row) if row else None
+
+    async def list_for_task(self, task_id: str, db: Optional[AsyncSession] = None) -> list:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosAttachment).filter_by(task_id=task_id).order_by(WorkosAttachment.created_at.asc())
+            )
+            return [AttachmentModel.model_validate(r) for r in res.scalars().all()]
+
+    async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosAttachment).filter_by(id=id))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(WorkosAttachment).filter_by(id=id))
+            await db.commit()
+            return True
+
+
+class NotificationsDao:
+    async def insert(
+        self, user_id: str, actor_id: Optional[str], type: str, data: dict,
+        task_id: Optional[str] = None, comment_id: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> NotificationModel:
+        async with get_async_db_context(db) as db:
+            row = WorkosNotification(
+                id=_id(), user_id=user_id, actor_id=actor_id, task_id=task_id,
+                comment_id=comment_id, type=type, data=data or {}, read=False, created_at=_now(),
+            )
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return NotificationModel.model_validate(row)
+
+    async def list_for_user(
+        self, user_id: str, unread_only: bool = False, limit: int = 50,
+        before: Optional[int] = None, db: Optional[AsyncSession] = None,
+    ) -> list:
+        async with get_async_db_context(db) as db:
+            q = select(WorkosNotification).filter_by(user_id=user_id)
+            if unread_only:
+                q = q.filter(WorkosNotification.read == False)  # noqa: E712
+            if before is not None:
+                q = q.filter(WorkosNotification.created_at < before)
+            q = q.order_by(WorkosNotification.created_at.desc()).limit(limit)
+            res = await db.execute(q)
+            return [NotificationModel.model_validate(r) for r in res.scalars().all()]
+
+    async def unread_count(self, user_id: str, db: Optional[AsyncSession] = None) -> int:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosNotification).filter_by(user_id=user_id, read=False)
+            )
+            return len(res.scalars().all())
+
+    async def mark_read(
+        self, user_id: str, ids: Optional[list] = None, all: bool = False,
+        db: Optional[AsyncSession] = None,
+    ) -> int:
+        async with get_async_db_context(db) as db:
+            q = select(WorkosNotification).filter_by(user_id=user_id, read=False)
+            if not all:
+                q = q.filter(WorkosNotification.id.in_(ids or []))
+            res = await db.execute(q)
+            rows = res.scalars().all()
+            for row in rows:
+                row.read = True
+            await db.commit()
+            return len(rows)
+
+    async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[NotificationModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosNotification).filter_by(id=id))
+            row = res.scalars().first()
+            return NotificationModel.model_validate(row) if row else None
+
+
+Attachments = AttachmentsDao()
+Notifications = NotificationsDao()
+
+
 async def can_see_team(user_id: str, is_admin: bool, team_id: str, db: Optional[AsyncSession] = None) -> bool:
     if is_admin:
         return (await Teams.get_by_id(team_id, db=db)) is not None
