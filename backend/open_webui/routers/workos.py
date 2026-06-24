@@ -10,8 +10,10 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
-    Labels, Tasks,
+    Labels, Tasks, Comments, Activity, Attachments, Notifications,
     TeamModel, WorkspaceModel, WorkstreamModel, TaskModel, LabelModel,
+    CommentModel, ActivityModel, AttachmentModel, NotificationModel,
+    parse_mentions, task_change_activities, can_see_workstream,
 )
 
 log = logging.getLogger(__name__)
@@ -24,6 +26,15 @@ async def emit_event(event: str, room: str, payload: dict) -> None:
         await sio.emit(event, payload, room=room)
     except Exception as e:  # pragma: no cover - emit is best-effort
         log.debug(f'workos emit failed for {event}: {e}')
+
+
+async def emit_users(event: str, payload: dict, user_ids: list) -> None:
+    try:
+        from open_webui.socket.main import emit_to_users
+
+        await emit_to_users(event, payload, user_ids)
+    except Exception as e:  # pragma: no cover - emit is best-effort
+        log.debug(f'workos emit_to_users failed for {event}: {e}')
 
 
 router = APIRouter()
@@ -711,3 +722,160 @@ async def admin_update_settings(
     rules.update(form.model_dump(exclude_none=True))
     request.app.state.config.WORKOS_RULES = rules
     return request.app.state.config.WORKOS_RULES
+
+
+# ──────────────────────────────── collaboration: schemas ────────────────────────────────
+
+
+class CommentForm(BaseModel):
+    body: str
+
+
+# ──────────────────────────────── collaboration: helpers ────────────────────────────────
+
+
+def _notif_enabled(request: Request, type: str) -> bool:
+    rules = request.app.state.config.WORKOS_RULES or {}
+    cfg = rules.get('notifications') or {}
+    return cfg.get(type, True)
+
+
+async def _actor_name(user) -> str:
+    return getattr(user, 'name', None) or user.id
+
+
+async def notify(
+    request: Request, db, *, recipients: set, actor, type: str, task, comment_id=None, snippet=None, extra=None,
+):
+    """Create + deliver one notification per recipient (minus the actor)."""
+    if not _notif_enabled(request, type):
+        return []
+    targets = {r for r in recipients if r and r != actor.id}
+    if not targets:
+        return []
+    data = {
+        'task_id': task.id, 'task_key': task.key, 'task_title': task.title,
+        'workstream_id': task.workstream_id, 'actor_name': await _actor_name(actor),
+    }
+    if snippet is not None:
+        data['snippet'] = snippet[:140]
+    if extra:
+        data.update(extra)
+    created = []
+    for uid in targets:
+        n = await Notifications.insert(uid, actor.id, type, data, task_id=task.id, comment_id=comment_id, db=db)
+        created.append(n)
+        await emit_users('workos:notification.created', n.model_dump(), [uid])
+    return created
+
+
+async def _participants(task, db) -> set:
+    """Creator + assignee + distinct comment authors + users mentioned on existing comments."""
+    out: set = set()
+    if task.created_by_id:
+        out.add(task.created_by_id)
+    if task.assignee_id:
+        out.add(task.assignee_id)
+    for com in await Comments.list_for_task(task.id, db=db):
+        out.add(com.user_id)
+        out.update(com.mentions or [])
+    return out
+
+
+async def _emit_task_room(event: str, task, payload: dict) -> None:
+    await emit_event(event, f'workos:workstream:{task.workstream_id}', payload)
+
+
+# ──────────────────────────────── comment endpoints ────────────────────────────────
+
+
+@router.get('/tasks/{task_id}/comments')
+async def list_comments(
+    request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_task_visible(user, task_id, db)
+    return await Comments.list_for_task(task_id, db=db)
+
+
+@router.post('/tasks/{task_id}/comments')
+async def create_comment(
+    request: Request, task_id: str, form: CommentForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    task, _ = await require_task_visible(user, task_id, db)
+    body = (form.body or '').strip()
+    if not body:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment body required.')
+    mentions = parse_mentions(body)
+    comment = await Comments.insert(task_id, user.id, body, mentions, db=db)
+    activity = await Activity.insert(task_id, task.team_id, user.id, 'comment_added', {}, db=db)
+    payload = {**comment.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
+    await _emit_task_room('workos:comment.created', task, payload)
+    await _emit_task_room('workos:activity.created',
+                          task, {**activity.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    # Notification fan-out: mentioned first, then commented (minus those mentioned).
+    mentioned = {m for m in mentions if await can_see_workstream(m, False, task.workstream_id, db=db)}
+    await notify(request, db, recipients=mentioned, actor=user, type='mentioned', task=task,
+                 comment_id=comment.id, snippet=body)
+    participants = await _participants(task, db) - mentioned
+    await notify(request, db, recipients=participants, actor=user, type='commented', task=task,
+                 comment_id=comment.id, snippet=body)
+    return comment
+
+
+@router.patch('/comments/{comment_id}')
+async def update_comment(
+    request: Request, comment_id: str, form: CommentForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    existing = await Comments.get_by_id(comment_id, db=db)
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
+    task, _ = await require_task_visible(user, existing.task_id, db)
+    if existing.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the author may edit.')
+    body = (form.body or '').strip()
+    if not body:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment body required.')
+    new_mentions = parse_mentions(body)
+    updated = await Comments.update_body(comment_id, body, new_mentions, db=db)
+    payload = {**updated.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
+    await _emit_task_room('workos:comment.updated', task, payload)
+    # Only notify mentions that are newly added on this edit.
+    fresh = {m for m in new_mentions if m not in (existing.mentions or [])
+             and await can_see_workstream(m, False, task.workstream_id, db=db)}
+    await notify(request, db, recipients=fresh, actor=user, type='mentioned', task=task,
+                 comment_id=comment_id, snippet=body)
+    return updated
+
+
+@router.delete('/comments/{comment_id}')
+async def delete_comment(
+    request: Request, comment_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    existing = await Comments.get_by_id(comment_id, db=db)
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
+    task, stream = await require_task_visible(user, existing.task_id, db)
+    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
+    if not is_admin and existing.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the author or an admin may delete.')
+    deleted = await Comments.delete(comment_id, db=db)
+    await _emit_task_room('workos:comment.deleted',
+                          task, {'id': comment_id, 'task_id': task.id, 'workstream_id': task.workstream_id,
+                                 'actor_id': user.id})
+    return {'deleted': deleted}
+
+
+@router.get('/tasks/{task_id}/activity')
+async def list_activity(
+    request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_task_visible(user, task_id, db)
+    return await Activity.list_for_task(task_id, db=db)
