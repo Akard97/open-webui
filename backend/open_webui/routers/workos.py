@@ -699,6 +699,8 @@ async def delete_label(
 class SettingsForm(BaseModel):
     team_creation: Optional[str] = None
     default_workspace_visibility: Optional[str] = None
+    notifications: Optional[dict] = None
+    max_attachment_mb: Optional[int] = None
 
 
 # ──────────────────────────────── admin endpoints ────────────────────────────────
@@ -738,6 +740,8 @@ async def admin_update_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid team_creation.')
     if form.default_workspace_visibility is not None and form.default_workspace_visibility not in {'team', 'restricted'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid default_workspace_visibility.')
+    if form.max_attachment_mb is not None and form.max_attachment_mb < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid max_attachment_mb.')
     rules = dict(request.app.state.config.WORKOS_RULES or {})
     rules.update(form.model_dump(exclude_none=True))
     request.app.state.config.WORKOS_RULES = rules

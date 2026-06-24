@@ -33,3 +33,15 @@ async def test_settings_patch_forbidden_for_non_admin(monkeypatch):
     async with _client(monkeypatch, user=U1, allow=False) as c:
         r = await c.patch('/api/v1/workos/admin/settings', json={'team_creation': 'admins_only'})
         assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_set_notification_settings(monkeypatch):
+    from open_webui.test.workos.test_router_teams import _client, ADMIN
+    async with _client(monkeypatch, user=ADMIN) as c:
+        r = await c.patch('/api/v1/workos/admin/settings',
+                          json={'notifications': {'commented': False}, 'max_attachment_mb': 50})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body['notifications'] == {'commented': False}
+        assert body['max_attachment_mb'] == 50
