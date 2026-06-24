@@ -47,16 +47,19 @@ placeholder empty state to be filled in later.
 4. **Header actions:** Map the image's icon cluster to real actions — pencil
    focuses the title for editing; share **copies the task link to clipboard**;
    `…` opens a DropdownMenu containing **Delete** (gated by `canDeleteTask`).
-   Close (✕) replaces the image's top-left expand glyph.
+   The image's top-left **expand** glyph is kept as a parked, no-op button (a
+   placeholder for a future expand-to-fullscreen feature). Close (✕) lives at
+   the **far right** of the header.
 5. **Tabs:** Split today's combined feed into separate **Comments** and
    **Activities** tabs, plus a **Subtasks** placeholder tab — matching the image.
    `Feed.svelte` is removed (superseded).
 
 ## Layout (top → bottom)
 
-1. **Header bar** — left: close (✕) then breadcrumb `{workstream name} / {status
+1. **Header bar** — left: expand glyph (parked no-op, kept for a future
+   expand-to-fullscreen feature) then breadcrumb `{workstream name} / {status
    label}`. Right: action cluster — pencil (focus title), share (copy task link),
-   `…` DropdownMenu (Delete, gated).
+   `…` DropdownMenu (Delete, gated), then close (✕) at the far right.
 2. **Title** — large/bold; renders as text, becomes an input on click or via the
    pencil. Commits on change via `editTask(id, { title })`.
 3. **Property rows** — reusable `PropertyRow` (icon + label + value slot),
