@@ -43,8 +43,8 @@
 
 <div class="pt-4">
 	<div class="flex items-center justify-between mb-2">
-		<div class="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300">
-			<Icon name="paperclip" size={15} /> Attachment ({files.length})
+		<div class="flex items-center gap-2 text-[13px] font-medium text-gray-600 dark:text-gray-300">
+			<Icon name="paperclip" size={15} /> Attachments ({files.length})
 		</div>
 		{#if files.length}
 			<button

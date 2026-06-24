@@ -26,7 +26,7 @@
 	}
 </script>
 
-<div class="flex items-center gap-1 px-2.5 h-12 border-b border-gray-200 dark:border-gray-800">
+<div class="flex items-center gap-1 px-2.5 h-12 shrink-0 border-b border-gray-200 dark:border-gray-800">
 	<Button variant="ghost" size="icon-sm" title="Expand" class="text-gray-400">
 		<Icon name="maximize" size={16} />
 	</Button>
