@@ -48,7 +48,7 @@
 		</div>
 		{#if files.length}
 			<button
-				class="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700"
+				class="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300"
 				onclick={downloadAll}
 			>
 				<Icon name="download" size={13} /> Download All
@@ -70,7 +70,7 @@
 					<div class="text-xs font-medium truncate">{a.name}</div>
 					<div class="text-[11px] text-gray-400 flex items-center gap-1">
 						{kb(a.size)} ·
-						<a class="text-teal-600 hover:underline" href={api.attachmentUrl(a.id)} target="_blank" rel="noreferrer">Download</a>
+						<a class="text-teal-600 dark:text-teal-400 hover:underline" href={api.attachmentUrl(a.id)} target="_blank" rel="noreferrer">Download</a>
 					</div>
 				</div>
 				{#if canDeleteAttachment(a, $user?.id ?? '', myRole)}
