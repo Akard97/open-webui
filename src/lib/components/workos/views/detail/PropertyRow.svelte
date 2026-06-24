@@ -8,7 +8,7 @@
 
 <div class="flex gap-3 min-h-9 {align === 'start' ? 'items-start' : 'items-center'}">
 	<span
-		class="flex items-center gap-2 w-28 flex-none text-sm text-gray-500 dark:text-gray-400 {align === 'start' ? 'pt-1.5' : ''}"
+		class="flex items-center gap-2 w-28 flex-none text-[13px] text-gray-600 dark:text-gray-300 {align === 'start' ? 'pt-1.5' : ''}"
 	>
 		<Icon name={icon} size={15} />
 		{label}

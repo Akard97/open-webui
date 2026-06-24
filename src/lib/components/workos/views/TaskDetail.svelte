@@ -65,7 +65,7 @@
 		<div class="relative w-[700px] max-w-[92%] h-full bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col">
 			<DetailHeader task={t} onEditTitle={startTitle} />
 
-			<div class="flex-1 overflow-y-auto p-4">
+			<div class="flex-1 overflow-y-auto px-8 py-4">
 				<!-- Title -->
 				{#if editingTitle}
 					<!-- svelte-ignore a11y_autofocus -->
@@ -86,7 +86,7 @@
 				{/if}
 
 				<!-- Properties -->
-				<div class="space-y-1.5 pb-4 border-b border-gray-200 dark:border-gray-800">
+				<div class="space-y-1.5">
 					<!-- Status -->
 					<PropertyRow icon="circle" label="Status">
 						<DropdownMenu.Root>
@@ -115,7 +115,7 @@
 					<PropertyRow icon="flag" label="Priority">
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger class="inline-flex items-center gap-2 rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-900">
-								{#if t.priority}<Pills priority={t.priority} />{:else}<span class="text-gray-400">No priority</span>{/if}
+								{#if t.priority}<Pills priority={t.priority} size="md" />{:else}<span class="text-gray-400">No priority</span>{/if}
 							</DropdownMenu.Trigger>
 							<DropdownMenu.Content>
 								<DropdownMenu.Item onSelect={() => editTask(t.id, { priority: null })}>No priority</DropdownMenu.Item>
@@ -163,7 +163,7 @@
 					<PropertyRow icon="tag" label="Tags" align="start">
 						<div class="flex flex-wrap items-center gap-1.5">
 							{#each $labels.filter((l) => t.labels.includes(l.id)) as l (l.id)}
-								<Pills label={l} />
+								<Pills label={l} size="md" />
 							{/each}
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger class="inline-flex items-center gap-1 text-xs text-gray-400 rounded-md px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-gray-700 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400">
@@ -211,8 +211,8 @@
 				</div>
 
 				<!-- Description -->
-				<div class="pt-4">
-					<div class="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+				<div class="pt-3">
+					<div class="flex items-center gap-2 text-[13px] font-medium text-gray-600 dark:text-gray-300 mb-2">
 						<Icon name="align-left" size={15} /> Description
 					</div>
 					{#if editingDesc}
@@ -223,7 +223,7 @@
 						</div>
 					{:else}
 						<button
-							class="block w-full text-left text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap rounded-lg border border-gray-200 dark:border-gray-800 p-3 hover:border-gray-300 dark:hover:border-gray-700"
+							class="block w-full text-left text-sm whitespace-pre-wrap rounded-lg border border-gray-200 dark:border-gray-800 p-3 hover:border-gray-300 dark:hover:border-gray-700 {t.description ? 'text-black dark:text-white' : 'text-gray-400'}"
 							onclick={() => (editingDesc = true)}
 						>
 							{t.description || 'Add a description…'}
