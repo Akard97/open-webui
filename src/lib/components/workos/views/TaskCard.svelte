@@ -3,6 +3,7 @@
 	import type { Task, Label } from '../lib/types';
 	import { initials, openTask } from '../lib/store';
 	import { formatDueDate, isOverdue } from '../lib/format';
+	import { actualProgress, taskHealth, HEALTH_LABEL } from '../lib/progress';
 
 	export let task: Task;
 	export let labelById: Record<string, Label> = {};
@@ -15,6 +16,8 @@
 	};
 	$: prio = task.priority ? PRIORITY_META[task.priority] : { color: '#cbd5e1', label: '–' };
 	$: overdue = isOverdue(task.due_date, task.status, Date.now());
+	$: actual = actualProgress(task);
+	$: health = taskHealth(task, Date.now());
 </script>
 
 <div
@@ -75,6 +78,19 @@
 		<span class="flex-none" style="color:{prio.color}"><Icon name="flag" size={15} /></span>
 		<span>{prio.label}</span>
 	</div>
+
+	<!-- Schedule health summary -->
+	{#if (task.subtask_total ?? 0) > 0 || health}
+		<div class="flex items-center gap-2 mt-2 text-[12px] text-gray-500 dark:text-gray-400">
+			{#if (task.subtask_total ?? 0) > 0}
+				<span>{task.subtask_completed ?? 0}/{task.subtask_total ?? 0} subtasks</span>
+				<span>{actual}%</span>
+			{/if}
+			{#if health}
+				<span class="rounded-full px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800">{HEALTH_LABEL[health]}</span>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Labels -->
 	{#if task.labels.length}
