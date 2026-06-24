@@ -153,7 +153,10 @@ async def bootstrap(request: Request, user=Depends(get_verified_user), db: Async
             if w.visibility == 'team' or user.role == 'admin' or await WorkspaceMembers.get(w.id, user.id, db=db):
                 workspaces.append(w)
                 workstreams.extend(await Workstreams.list_for_workspace(w.id, db=db))
-    return {'teams': teams, 'workspaces': workspaces, 'workstreams': workstreams, 'roles': roles}
+    return {
+        'teams': teams, 'workspaces': workspaces, 'workstreams': workstreams, 'roles': roles,
+        'notifications_unread': await Notifications.unread_count(user.id, db=db),
+    }
 
 
 # ──────────────────────────────── teams ────────────────────────────────
@@ -989,3 +992,30 @@ async def delete_attachment(
                           task, {'id': attachment_id, 'task_id': task.id,
                                  'workstream_id': task.workstream_id, 'actor_id': user.id})
     return {'deleted': deleted}
+
+
+# ──────────────────────────────── notification endpoints ────────────────────────────────
+
+
+class MarkReadForm(BaseModel):
+    ids: Optional[list] = None
+    all: bool = False
+
+
+@router.get('/notifications')
+async def list_notifications(
+    request: Request, unread_only: bool = False, limit: int = 50, before: Optional[int] = None,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    return await Notifications.list_for_user(user.id, unread_only=unread_only, limit=limit, before=before, db=db)
+
+
+@router.post('/notifications/read')
+async def mark_notifications_read(
+    request: Request, form: MarkReadForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    await Notifications.mark_read(user.id, ids=form.ids, all=form.all, db=db)
+    return {'unread': await Notifications.unread_count(user.id, db=db)}
