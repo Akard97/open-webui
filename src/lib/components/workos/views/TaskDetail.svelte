@@ -7,6 +7,8 @@
 	import {
 		selectedTask, closeTask, editTask, removeTask, labels, directory, displayName, roles, currentTeam
 	} from '../lib/store';
+	import AttachmentList from './detail/AttachmentList.svelte';
+	import Feed from './detail/Feed.svelte';
 
 	$: t = $selectedTask;
 	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
@@ -108,7 +110,8 @@
 					{/if}
 				</div>
 
-				<div class="pt-6 text-xs text-gray-400">Comments &amp; activity arrive in Phase 2.</div>
+				<AttachmentList />
+				<Feed taskId={t.id} />
 			</div>
 		</div>
 	</div>
