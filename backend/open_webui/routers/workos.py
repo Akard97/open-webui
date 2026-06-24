@@ -970,7 +970,17 @@ async def download_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attachment not found.')
     await require_task_visible(user, att.task_id, db)  # 404 if the caller can't see the task
     path = await asyncio.to_thread(Storage.get_file, att.storage_key)
-    return FileResponse(path, media_type=att.content_type or 'application/octet-stream', filename=att.name)
+    # Serve the provider's file directly, like files.py's download endpoints, and
+    # do NOT delete it afterward. Cloud providers hand back a deterministic path
+    # shared across concurrent downloads of the same attachment (and the local
+    # provider returns the real file), so a post-response unlink would race a
+    # sibling download or delete a file we don't own. Cleanup of the cloud cache
+    # copy is governed by STORAGE_LOCAL_CACHE at the storage layer.
+    return FileResponse(
+        path,
+        media_type=att.content_type or 'application/octet-stream',
+        filename=att.name,
+    )
 
 
 @router.delete('/attachments/{attachment_id}')

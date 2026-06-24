@@ -7,6 +7,12 @@
       "runtimeArgs": ["vite", "dev", "--port", "5199"],
       "port": 5199,
       "autoPort": true
+    },
+    {
+      "name": "user-5173",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "dev", "--port", "5173"],
+      "port": 5173
     }
   ]
 }

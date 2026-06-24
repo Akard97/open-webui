@@ -20,7 +20,7 @@
 <div
 	data-task-id={task.id}
 	data-sort-key={task.sort_key}
-	class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+	class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl p-4 cursor-pointer hover:shadow-md transition {task.status === 'backlog' ? 'opacity-60 hover:opacity-100' : ''}"
 	onclick={() => openTask(task.id)}
 	onkeydown={(e) => {
 		if (e.target !== e.currentTarget) return;
