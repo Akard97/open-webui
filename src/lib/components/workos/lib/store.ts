@@ -6,7 +6,8 @@ import { midpoint } from './key';
 import {
 	STATUS_ORDER,
 	type Team, type Workspace, type Workstream, type Label, type Task, type Member,
-	type TeamRole, type TaskStatus, type TaskPriority
+	type TeamRole, type TaskStatus, type TaskPriority,
+	type Comment, type Activity, type Attachment, type Notification, type FeedItem
 } from './types';
 
 export type ViewKey = 'board' | 'list' | 'admin';
@@ -31,6 +32,20 @@ export const view: Writable<ViewKey> = writable('board');
 export const selectedTaskId: Writable<string | null> = writable(null);
 export const loading: Writable<boolean> = writable(false);
 export const directory: Writable<Record<string, { name: string }>> = writable({});
+
+export const comments: Writable<Comment[]> = writable([]);
+export const activity: Writable<Activity[]> = writable([]);
+export const attachments: Writable<Attachment[]> = writable([]);
+export const notifications: Writable<Notification[]> = writable([]);
+export const unreadCount: Writable<number> = writable(0);
+
+export const feed = derived([comments, activity], ([$c, $a]): FeedItem[] => {
+	const items: FeedItem[] = [
+		...$c.map((comment) => ({ kind: 'comment' as const, at: comment.created_at, comment })),
+		...$a.map((act) => ({ kind: 'activity' as const, at: act.created_at, activity: act }))
+	];
+	return items.sort((x, y) => x.at - y.at);
+});
 
 export function displayName(id: string | null | undefined): string {
 	if (!id) return 'Unassigned';
@@ -70,6 +85,7 @@ export async function loadBootstrap(): Promise<void> {
 		workspaces.set(b.workspaces);
 		workstreams.set(b.workstreams);
 		roles.set(b.roles);
+		unreadCount.set(b.notifications_unread ?? 0);
 		const dir = await api.getDirectory(token()).catch(() => []);
 		directory.set(Object.fromEntries(dir.map((u) => [u.id, { name: u.name }])));
 		if (!get(currentTeamId) && b.teams.length) currentTeamId.set(b.teams[0].id);
@@ -103,9 +119,13 @@ export async function selectWorkstream(id: string): Promise<void> {
 
 export function openTask(id: string): void {
 	selectedTaskId.set(id);
+	void loadTaskDetail(id);
 }
 export function closeTask(): void {
 	selectedTaskId.set(null);
+	comments.set([]);
+	activity.set([]);
+	attachments.set([]);
 }
 
 export async function addTask(
@@ -161,6 +181,88 @@ export async function removeTask(id: string): Promise<void> {
 	}
 }
 
+export async function loadTaskDetail(taskId: string): Promise<void> {
+	const [c, a, at] = await Promise.all([
+		api.listComments(token(), taskId).catch(() => []),
+		api.listActivity(token(), taskId).catch(() => []),
+		api.listAttachments(token(), taskId).catch(() => [])
+	]);
+	if (get(selectedTaskId) !== taskId) return; // user moved on
+	comments.set(c);
+	activity.set(a);
+	attachments.set(at);
+}
+
+export async function postComment(taskId: string, body: string): Promise<void> {
+	const saved = await api.createComment(token(), taskId, { body });
+	comments.update((list) => (list.some((c) => c.id === saved.id) ? list : [...list, saved]));
+	void loadTaskDetail(taskId); // refresh activity (comment_added) too
+}
+
+export async function editComment(id: string, body: string): Promise<void> {
+	const saved = await api.updateComment(token(), id, { body });
+	comments.update((list) => list.map((c) => (c.id === id ? saved : c)));
+}
+
+export async function deleteCommentAction(id: string): Promise<void> {
+	comments.update((list) => list.filter((c) => c.id !== id));
+	await api.deleteComment(token(), id);
+}
+
+export async function uploadFiles(taskId: string, files: FileList | File[], commentId?: string): Promise<void> {
+	for (const f of Array.from(files)) {
+		const saved = await api.uploadAttachment(token(), taskId, f, commentId);
+		attachments.update((list) => [...list, saved]);
+	}
+	void loadTaskDetail(taskId);
+}
+
+export async function removeAttachment(id: string): Promise<void> {
+	attachments.update((list) => list.filter((a) => a.id !== id));
+	await api.deleteAttachment(token(), id);
+}
+
+export async function loadNotifications(): Promise<void> {
+	notifications.set(await api.listNotifications(token()).catch(() => []));
+}
+
+export async function markRead(ids: string[]): Promise<void> {
+	notifications.update((list) => list.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
+	const r = await api.markNotificationsRead(token(), { ids });
+	unreadCount.set(r.unread);
+}
+
+export async function markAllRead(): Promise<void> {
+	notifications.update((list) => list.map((n) => ({ ...n, read: true })));
+	const r = await api.markNotificationsRead(token(), { all: true });
+	unreadCount.set(r.unread);
+}
+
+/** Reconcile a collaboration room event into the open task's feed. */
+export function applyCollabEvent(event: string, payload: any): void {
+	const open = get(selectedTaskId);
+	if (!payload || payload.task_id !== open) return;
+	if (event === 'workos:comment.created') {
+		comments.update((l) => (l.some((c) => c.id === payload.id) ? l : [...l, payload]));
+	} else if (event === 'workos:comment.updated') {
+		comments.update((l) => l.map((c) => (c.id === payload.id ? { ...c, ...payload } : c)));
+	} else if (event === 'workos:comment.deleted') {
+		comments.update((l) => l.filter((c) => c.id !== payload.id));
+	} else if (event === 'workos:activity.created') {
+		activity.update((l) => (l.some((a) => a.id === payload.id) ? l : [...l, payload]));
+	} else if (event === 'workos:attachment.created') {
+		attachments.update((l) => (l.some((a) => a.id === payload.id) ? l : [...l, payload]));
+	} else if (event === 'workos:attachment.deleted') {
+		attachments.update((l) => l.filter((a) => a.id !== payload.id));
+	}
+}
+
+export function applyNotificationEvent(payload: any): void {
+	if (!payload || !payload.id) return;
+	notifications.update((l) => (l.some((n) => n.id === payload.id) ? l : [payload, ...l]));
+	if (!payload.read) unreadCount.update((n) => n + 1);
+}
+
 /** Reconcile a realtime event into local state. Exported for tests + the socket wiring. */
 export function applyTaskEvent(event: string, payload: any): void {
 	const ws = get(currentWorkstreamId);
@@ -178,6 +280,10 @@ export function applyTaskEvent(event: string, payload: any): void {
 // ──────────────────────────── socket wiring ────────────────────────────
 
 const TASK_EVENTS = ['workos:task.created', 'workos:task.updated', 'workos:task.deleted'];
+const COLLAB_EVENTS = [
+	'workos:comment.created', 'workos:comment.updated', 'workos:comment.deleted',
+	'workos:activity.created', 'workos:attachment.created', 'workos:attachment.deleted'
+];
 
 function subscribeRoom(workstreamId: string): void {
 	const s = get(socket);
@@ -201,6 +307,12 @@ export function connectRealtime(): void {
 		handlers[ev] = (payload: any) => applyTaskEvent(ev, payload);
 		s.on(ev, handlers[ev]);
 	}
+	for (const ev of COLLAB_EVENTS) {
+		handlers[ev] = (payload: any) => applyCollabEvent(ev, payload);
+		s.on(ev, handlers[ev]);
+	}
+	handlers['workos:notification.created'] = (payload: any) => applyNotificationEvent(payload);
+	s.on('workos:notification.created', handlers['workos:notification.created']);
 	// Re-subscribe on reconnect so the room is rejoined.
 	handlers['connect'] = () => {
 		const ws = get(currentWorkstreamId);
@@ -218,7 +330,7 @@ export function disconnectRealtime(): void {
 		bound = false;
 		return;
 	}
-	for (const ev of [...TASK_EVENTS, 'connect']) {
+	for (const ev of [...TASK_EVENTS, ...COLLAB_EVENTS, 'workos:notification.created', 'connect']) {
 		if (handlers[ev]) s.off(ev, handlers[ev]);
 	}
 	const ws = get(currentWorkstreamId);

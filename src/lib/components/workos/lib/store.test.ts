@@ -70,3 +70,42 @@ describe('store optimistic add', () => {
 		expect(get(tasks).filter((t) => t.title === 'New')).toHaveLength(1); // no duplicate
 	});
 });
+
+import {
+	selectedTaskId, comments, activity, unreadCount, notifications,
+	applyCollabEvent, applyNotificationEvent
+} from './store';
+
+describe('collab realtime', () => {
+	it('applies comment.created only for the open task', () => {
+		selectedTaskId.set('task-1');
+		comments.set([]);
+		applyCollabEvent('workos:comment.created', {
+			id: 'c1', task_id: 'task-1', user_id: 'u2', body: 'hi', mentions: [],
+			edited_at: null, created_at: 1, updated_at: 1, workstream_id: 'w1', actor_id: 'u2'
+		});
+		expect(get(comments).map((c) => c.id)).toEqual(['c1']);
+
+		applyCollabEvent('workos:comment.created', {
+			id: 'c2', task_id: 'other', user_id: 'u2', body: 'x', mentions: [],
+			edited_at: null, created_at: 2, updated_at: 2, workstream_id: 'w1', actor_id: 'u2'
+		});
+		expect(get(comments).map((c) => c.id)).toEqual(['c1']); // ignored: different task
+	});
+
+	it('applies comment.deleted', () => {
+		selectedTaskId.set('task-1');
+		comments.set([{ id: 'c1', task_id: 'task-1', user_id: 'u2', body: 'hi', mentions: [],
+			edited_at: null, created_at: 1, updated_at: 1 }]);
+		applyCollabEvent('workos:comment.deleted', { id: 'c1', task_id: 'task-1' });
+		expect(get(comments)).toEqual([]);
+	});
+
+	it('increments unread on notification.created', () => {
+		unreadCount.set(0);
+		notifications.set([]);
+		applyNotificationEvent({ id: 'n1', user_id: 'u1', type: 'assigned', data: {}, read: false, created_at: 1 });
+		expect(get(unreadCount)).toBe(1);
+		expect(get(notifications).map((n) => n.id)).toEqual(['n1']);
+	});
+});
