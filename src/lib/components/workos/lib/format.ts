@@ -19,3 +19,12 @@ export function isOverdue(
 	if (status === 'done' || status === 'canceled') return false;
 	return dueDate < now;
 }
+
+/** "5 March 2024" — long day-month-year (en-GB gives day-first ordering). */
+export function formatDateLong(ts: number): string {
+	return new Date(ts).toLocaleDateString('en-GB', {
+		day: 'numeric',
+		month: 'long',
+		year: 'numeric'
+	});
+}
