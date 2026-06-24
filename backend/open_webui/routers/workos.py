@@ -606,8 +606,21 @@ async def update_task(
     task, _ = await require_task_visible(user, task_id, db)
     fields = form.model_dump(exclude_none=True)
     _validate_task_fields(fields)
+    before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)
     await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
+    # Activity log for the changed fields.
+    for act in task_change_activities(user.id, before, updated.model_dump()):
+        row = await Activity.insert(task_id, updated.team_id, user.id, act['type'], act['data'], db=db)
+        await _emit_task_room('workos:activity.created', updated,
+                              {**row.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id})
+    # Notifications: assignment + status change.
+    if 'assignee_id' in fields and updated.assignee_id and updated.assignee_id != before.get('assignee_id'):
+        await notify(request, db, recipients={updated.assignee_id}, actor=user, type='assigned', task=updated)
+    if 'status' in fields and updated.status != before.get('status'):
+        await notify(request, db, recipients={updated.created_by_id, updated.assignee_id}, actor=user,
+                     type='status_changed', task=updated,
+                     extra={'from': before.get('status'), 'to': updated.status})
     return updated
 
 
