@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.constants import ERROR_MESSAGES
+from open_webui.env import ENV
 from open_webui.internal.db import get_async_session
 from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
@@ -197,12 +198,28 @@ async def publish_checklist_draft(
 # with every checklist item `pending`. The submit gate (here and in the UI) blocks
 # submission while ANY item is pending/human, so a new policy can never be sent for
 # approval until ~100 items are answered by hand. To let testers exercise the
-# submit → approve → publish flow, we pre-mark every item `compliant` on creation.
-# Set POLICY_REVIEW_AUTOFILL=false to disable; remove this block once real review
-# (manual or AI-assisted) lands.
-AUTOFILL_RESULTS_ON_CREATE = os.getenv('POLICY_REVIEW_AUTOFILL', 'true').strip().lower() not in (
-    'false', '0', 'no', 'off', '',
-)
+# submit → approve → publish flow, this can pre-mark every item `compliant` on creation.
+#
+# This fabricates compliance evidence, so it is OPT-IN ONLY (set
+# POLICY_REVIEW_AUTOFILL=true) and is HARD-DISABLED whenever ENV=prod, so a default
+# or production deployment can never auto-approve a policy. Remove this block once
+# real review (manual or AI-assisted) lands.
+def _autofill_enabled(flag_value: Optional[str], env: str) -> bool:
+    """Autofill is opt-in (default off) and never enabled in production."""
+    requested = (flag_value or '').strip().lower() in ('true', '1', 'yes', 'on')
+    return requested and env != 'prod'
+
+
+AUTOFILL_RESULTS_ON_CREATE = _autofill_enabled(os.getenv('POLICY_REVIEW_AUTOFILL'), ENV)
+if not AUTOFILL_RESULTS_ON_CREATE and (os.getenv('POLICY_REVIEW_AUTOFILL') or '').strip().lower() in (
+    'true', '1', 'yes', 'on',
+):
+    # The flag was requested but suppressed (production) — make that visible.
+    log.warning(
+        'POLICY_REVIEW_AUTOFILL is set but ignored because ENV=%s; new reviews will '
+        'start with unresolved items and require real review before submission.',
+        ENV,
+    )
 
 
 def _autofilled_results(active_data: Optional[dict]) -> dict:
@@ -466,15 +483,6 @@ async def approve_review(
     if review.status != 'pending':
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only a pending review can be approved.')
     score = compute_scores(review.checklist_snapshot or {}, review.results or {})
-    approval = {
-        **(review.approval or {}),
-        'status': 'approved',
-        'decidedAt': _audit_now(),
-        'decidedBy': user.name,
-        'note': (form.note or '').strip() or 'Approved for issuance and published to the policy library.',
-    }
-    updated = await PolicyReviews.update_fields(review_id, {'status': 'approved', 'approval': approval}, db=db)
-    # Upsert into the library.
     meta = review.policy_meta or {}
     fn = (meta.get('code', '').split('-')[1] if '-' in meta.get('code', '') else 'GOV')
     library_data = {
@@ -489,18 +497,47 @@ async def approve_review(
         'nextReview': '—',
         'updatedDays': 0,
     }
-    # Copy the review's source document into a library-owned, immutable copy so the
-    # Library download survives later deletion of the review.
-    src_doc = await PolicyDocuments.get('review', review_id, db=db)
-    if src_doc:
-        new_path = copy_stored(src_doc.storage_path, src_doc.filename)
-        await PolicyDocuments.upsert(
-            'library', meta.get('code'), src_doc.filename, src_doc.content_type, src_doc.size, new_path, src_doc.text, db=db
-        )
-        library_data['hasDocument'] = True
-        library_data['filename'] = src_doc.filename
 
-    await PolicyLibrary.upsert(code=meta.get('code'), data=library_data, source_review_id=review_id, db=db)
+    # Publish to the library BEFORE flipping the review to `approved`. The DAO helpers
+    # each commit on their own, so if a publish step failed AFTER the status flip the
+    # review would be stranded `approved`-but-unpublished, and the `pending` guard above
+    # would then block any retry. Publishing first keeps the review `pending` (hence
+    # retryable) on failure; the library upserts are idempotent on a later retry.
+    new_path = None
+    doc_published = False
+    src_doc = await PolicyDocuments.get('review', review_id, db=db)
+    try:
+        # Copy the review's source document into a library-owned, immutable copy so the
+        # Library download survives later deletion of the review.
+        if src_doc:
+            new_path = copy_stored(src_doc.storage_path, src_doc.filename)
+            await PolicyDocuments.upsert(
+                'library', meta.get('code'), src_doc.filename, src_doc.content_type, src_doc.size, new_path, src_doc.text, db=db
+            )
+            doc_published = True
+            library_data['hasDocument'] = True
+            library_data['filename'] = src_doc.filename
+        await PolicyLibrary.upsert(code=meta.get('code'), data=library_data, source_review_id=review_id, db=db)
+    except Exception:
+        # Roll back the copied binary only when no library document row references it yet
+        # (if the row was committed, a retry overwrites it — deleting now would dangle it).
+        if new_path and not doc_published:
+            delete_stored(new_path)
+        log.exception('Policy approval publish failed for review %s; left pending for retry', review_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to publish to the policy library.',
+        )
+
+    # Publish succeeded — now commit the approval and record the audit trail.
+    approval = {
+        **(review.approval or {}),
+        'status': 'approved',
+        'decidedAt': _audit_now(),
+        'decidedBy': user.name,
+        'note': (form.note or '').strip() or 'Approved for issuance and published to the policy library.',
+    }
+    updated = await PolicyReviews.update_fields(review_id, {'status': 'approved', 'approval': approval}, db=db)
     await PolicyAudits.insert('review', review_id, 'approved', user.id, user.name, {'score': score['overall']}, db=db)
     await PolicyAudits.insert('review', review_id, 'published', user.id, user.name, {'code': meta.get('code')}, db=db)
     return updated

@@ -421,3 +421,74 @@ async def test_reactivate_requires_admin(monkeypatch):
     async with _client_keys(monkeypatch, user=approver, keys={'policy_approver'}) as c:
         res = await c.post('/api/v1/policy/checklist/versions/whatever/activate')
     assert res.status_code == 401
+
+
+# ──────────────────────── autofill scaffold: opt-in + prod guard (#2) ────────────────────────
+
+
+@pytest.mark.parametrize(
+    'flag,env,expected',
+    [
+        (None, 'dev', False),     # default OFF (opt-in)
+        ('', 'dev', False),
+        ('false', 'dev', False),
+        ('off', 'dev', False),
+        ('0', 'dev', False),
+        ('true', 'dev', True),    # opt-in honoured outside production
+        ('1', 'dev', True),
+        ('yes', 'dev', True),
+        ('on', 'dev', True),
+        ('TRUE', 'dev', True),
+        ('true', 'prod', False),  # production guard: never autofill in prod, even if requested
+        ('1', 'prod', False),
+        ('on', 'prod', False),
+    ],
+)
+def test_autofill_enabled_is_optin_and_prod_guarded(flag, env, expected):
+    assert pr_router._autofill_enabled(flag, env) is expected
+
+
+@pytest.mark.asyncio
+async def test_default_create_does_not_autofill(monkeypatch):
+    # With the real (default-off) module flag, a freshly created review must start
+    # with pending items, so the submit gate blocks until they're answered.
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    assert pr_router.AUTOFILL_RESULTS_ON_CREATE is False  # default posture
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = await _create(c)
+        blocked = await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        assert blocked.status_code == 400  # not auto-resolved
+
+
+# ──────────────────────── approval atomicity: publish-then-commit (#3) ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_approve_publish_failure_leaves_review_pending_and_cleans_storage(monkeypatch):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+
+    # Fail the library document-store step AFTER the binary copy is made. The copy
+    # must be cleaned up and the review must stay 'pending' so approval is retryable.
+    deleted: list = []
+    monkeypatch.setattr(pr_router, 'delete_stored', lambda path: deleted.append(path))
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError('document store down')
+
+    monkeypatch.setattr(pr_router.PolicyDocuments, 'upsert', _boom)
+
+    async with _client(monkeypatch, user=approver) as c:
+        res = await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})
+        assert res.status_code == 500
+        got = await c.get(f'/api/v1/policy/reviews/{rid}')
+        assert got.json()['status'] == 'pending'  # NOT stuck 'approved'
+
+    assert deleted == ['fake-copy://policy.pdf']  # orphaned copy removed
+    # Nothing was published to the library.
+    assert await PolicyLibrary.get_by_code('C-TEST') is None
