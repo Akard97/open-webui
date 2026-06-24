@@ -14,7 +14,7 @@ from open_webui.utils.access_control import has_permission
 from open_webui.storage.provider import Storage
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
-    Labels, Tasks, Comments, Activity, Attachments, Notifications,
+    Labels, Tasks, Comments, Activity, Attachments, Notifications, Subtasks,
     TeamModel, WorkspaceModel, WorkstreamModel, TaskModel, LabelModel,
     CommentModel, ActivityModel, AttachmentModel, NotificationModel,
     parse_mentions, task_change_activities, can_see_workstream,
@@ -519,6 +519,7 @@ class TaskCreateForm(BaseModel):
     status: str = 'backlog'
     priority: Optional[str] = None
     assignee_id: Optional[str] = None
+    start_date: Optional[int] = None
     due_date: Optional[int] = None
     labels: Optional[list] = None
 
@@ -529,9 +530,21 @@ class TaskUpdateForm(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     assignee_id: Optional[str] = None
+    start_date: Optional[int] = None
     due_date: Optional[int] = None
     progress: Optional[int] = None
     labels: Optional[list] = None
+    sort_key: Optional[float] = None
+
+
+class SubtaskCreateForm(BaseModel):
+    title: str
+    sort_key: Optional[float] = None
+
+
+class SubtaskUpdateForm(BaseModel):
+    title: Optional[str] = None
+    completed: Optional[bool] = None
     sort_key: Optional[float] = None
 
 
@@ -556,13 +569,17 @@ async def require_task_visible(user, task_id: str, db: AsyncSession):
     return task, stream
 
 
-def _validate_task_fields(fields: dict) -> None:
+def _validate_task_fields(fields: dict, *, current: Optional[dict] = None) -> None:
     if fields.get('status') is not None and fields['status'] not in STATUSES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid status.')
     if fields.get('priority') is not None and fields['priority'] not in PRIORITIES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid priority.')
     if fields.get('progress') is not None and not (0 <= fields['progress'] <= 100):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Progress out of range.')
+    start = fields.get('start_date', (current or {}).get('start_date'))
+    due = fields.get('due_date', (current or {}).get('due_date'))
+    if start is not None and due is not None and start > due:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Start date must be before due date.')
 
 
 # ──────────────────────────────── task endpoints ────────────────────────────────
@@ -589,7 +606,7 @@ async def create_task(
     task = await Tasks.insert(
         workstream_id, team.id, team.key, form.title, user.id,
         description=form.description, status=form.status, priority=form.priority,
-        assignee_id=form.assignee_id, due_date=form.due_date, labels=form.labels, db=db,
+        assignee_id=form.assignee_id, start_date=form.start_date, due_date=form.due_date, labels=form.labels, db=db,
     )
     await emit_event('workos:task.created', f'workos:workstream:{workstream_id}', task.model_dump())
     return task
@@ -612,7 +629,7 @@ async def update_task(
     await _require_workos(request, user, db)
     task, _ = await require_task_visible(user, task_id, db)
     fields = form.model_dump(exclude_none=True)
-    _validate_task_fields(fields)
+    _validate_task_fields(fields, current=task.model_dump())
     before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)
     await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
@@ -1033,3 +1050,91 @@ async def mark_notifications_read(
     await _require_workos(request, user, db)
     await Notifications.mark_read(user.id, ids=form.ids, all=form.all, db=db)
     return {'unread': await Notifications.unread_count(user.id, db=db)}
+
+
+# ──────────────────────────────── subtask endpoints ────────────────────────────────
+
+
+async def require_subtask_visible(user, subtask_id: str, db: AsyncSession):
+    subtask = await Subtasks.get_by_id(subtask_id, db=db)
+    if not subtask:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Subtask not found.')
+    task, stream = await require_task_visible(user, subtask.task_id, db)
+    return subtask, task, stream
+
+
+async def _emit_parent_after_subtask(task_id: str, db: AsyncSession):
+    task = await Tasks.get_by_id(task_id, db=db)
+    if task:
+        await emit_event('workos:task.updated', f'workos:workstream:{task.workstream_id}', task.model_dump())
+    return task
+
+
+@router.get('/tasks/{task_id}/subtasks')
+async def list_subtasks(
+    request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_task_visible(user, task_id, db)
+    return await Subtasks.list_for_task(task_id, db=db)
+
+
+@router.post('/tasks/{task_id}/subtasks')
+async def create_subtask(
+    request: Request, task_id: str, form: SubtaskCreateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    task, _ = await require_task_visible(user, task_id, db)
+    if not form.title.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Subtask title is required.')
+    subtask = await Subtasks.insert(task_id, form.title.strip(), user.id, sort_key=form.sort_key, db=db)
+    payload = {**subtask.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
+    await emit_event('workos:subtask.created', f'workos:workstream:{task.workstream_id}', payload)
+    await _emit_parent_after_subtask(task_id, db)
+    row = await Activity.insert(task_id, task.team_id, user.id, 'subtask_created', {'title': subtask.title}, db=db)
+    await _emit_task_room('workos:activity.created', task, {**row.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    return subtask
+
+
+@router.patch('/subtasks/{subtask_id}')
+async def update_subtask(
+    request: Request, subtask_id: str, form: SubtaskUpdateForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    subtask, task, _ = await require_subtask_visible(user, subtask_id, db)
+    fields = form.model_dump(exclude_none=True)
+    if 'title' in fields:
+        fields['title'] = fields['title'].strip()
+        if not fields['title']:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Subtask title is required.')
+    updated = await Subtasks.update_fields(subtask_id, fields, db=db)
+    payload = {**updated.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
+    await emit_event('workos:subtask.updated', f'workos:workstream:{task.workstream_id}', payload)
+    await _emit_parent_after_subtask(task.id, db)
+    if 'completed' in fields and fields['completed'] != subtask.completed:
+        row = await Activity.insert(
+            task.id, task.team_id, user.id,
+            'subtask_completed' if fields['completed'] else 'subtask_reopened',
+            {'title': updated.title},
+            db=db,
+        )
+        await _emit_task_room('workos:activity.created', task, {**row.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    return updated
+
+
+@router.delete('/subtasks/{subtask_id}')
+async def delete_subtask(
+    request: Request, subtask_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    subtask, task, _ = await require_subtask_visible(user, subtask_id, db)
+    deleted = await Subtasks.delete(subtask_id, db=db)
+    await emit_event(
+        'workos:subtask.deleted',
+        f'workos:workstream:{task.workstream_id}',
+        {'id': subtask_id, 'task_id': task.id, 'workstream_id': task.workstream_id, 'actor_id': user.id},
+    )
+    await _emit_parent_after_subtask(task.id, db)
+    return {'deleted': deleted}
