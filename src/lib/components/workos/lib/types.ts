@@ -119,7 +119,7 @@ export interface Activity {
 	team_id: string;
 	user_id: string;
 	type: ActivityType;
-	data: Record<string, unknown>;
+	data: Record<string, any>;
 	created_at: number;
 }
 
@@ -132,7 +132,7 @@ export interface Notification {
 	task_id?: string | null;
 	comment_id?: string | null;
 	type: NotificationType;
-	data: Record<string, unknown>;
+	data: Record<string, any>;
 	read: boolean;
 	created_at: number;
 }
