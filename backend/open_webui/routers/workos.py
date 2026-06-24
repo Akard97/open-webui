@@ -1,13 +1,17 @@
+import asyncio
 import logging
+import uuid as _uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import get_async_session
 from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
+from open_webui.storage.provider import Storage
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
     Labels, Tasks, Comments, Activity, Attachments, Notifications,
@@ -897,3 +901,91 @@ async def list_activity(
     await _require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
     return await Activity.list_for_task(task_id, db=db)
+
+
+# ──────────────────────────────── attachment endpoints ────────────────────────────────
+
+
+def _max_attachment_bytes(request: Request) -> int:
+    rules = request.app.state.config.WORKOS_RULES or {}
+    mb = rules.get('max_attachment_mb', 25)
+    return int(mb) * 1024 * 1024
+
+
+@router.post('/tasks/{task_id}/attachments')
+async def upload_attachment(
+    request: Request, task_id: str, file: UploadFile = File(...), comment_id: Optional[str] = None,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    task, _ = await require_task_visible(user, task_id, db)
+    contents = await file.read()
+    limit = _max_attachment_bytes(request)
+    if len(contents) > limit:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Attachment too large.')
+    import io as _io
+
+    safe_name = file.filename or 'file'
+    storage_name = f'workos/{_uuid.uuid4()}_{safe_name}'
+    _data, key = await asyncio.to_thread(
+        Storage.upload_file, _io.BytesIO(contents), storage_name,
+        {'OpenWebUI-User-Id': user.id, 'WorkOS-Task-Id': task_id},
+    )
+    att = await Attachments.insert(
+        task_id, comment_id, key, safe_name, len(contents), file.content_type, user.id, db=db,
+    )
+    activity = await Activity.insert(task_id, task.team_id, user.id, 'attachment_added',
+                                     {'name': safe_name}, db=db)
+    await _emit_task_room('workos:attachment.created',
+                          task, {**att.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    await _emit_task_room('workos:activity.created',
+                          task, {**activity.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    return att
+
+
+@router.get('/tasks/{task_id}/attachments')
+async def list_attachments(
+    request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_task_visible(user, task_id, db)
+    return await Attachments.list_for_task(task_id, db=db)
+
+
+@router.get('/attachments/{attachment_id}/content')
+async def download_attachment(
+    request: Request, attachment_id: str,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    att = await Attachments.get_by_id(attachment_id, db=db)
+    if not att:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attachment not found.')
+    await require_task_visible(user, att.task_id, db)  # 404 if the caller can't see the task
+    path = await asyncio.to_thread(Storage.get_file, att.storage_key)
+    return FileResponse(path, media_type=att.content_type or 'application/octet-stream', filename=att.name)
+
+
+@router.delete('/attachments/{attachment_id}')
+async def delete_attachment(
+    request: Request, attachment_id: str,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await _require_workos(request, user, db)
+    att = await Attachments.get_by_id(attachment_id, db=db)
+    if not att:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attachment not found.')
+    task, stream = await require_task_visible(user, att.task_id, db)
+    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
+    if not is_admin and att.created_by_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the uploader or an admin may delete.')
+    try:
+        await asyncio.to_thread(Storage.delete_file, att.storage_key)
+    except Exception as e:  # pragma: no cover - best-effort
+        log.debug(f'workos attachment storage delete failed: {e}')
+    deleted = await Attachments.delete(attachment_id, db=db)
+    await _emit_task_room('workos:attachment.deleted',
+                          task, {'id': attachment_id, 'task_id': task.id,
+                                 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    return {'deleted': deleted}
