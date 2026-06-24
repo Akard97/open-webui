@@ -9,6 +9,8 @@ node_modules
 .env
 .env.*
 !.env.example
+# Local auth tokens minted by the verify workflow (never commit)
+.vtok*
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Byte-compiled / optimized / DLL files
