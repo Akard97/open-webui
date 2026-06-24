@@ -1,3 +1,4 @@
+import re
 import time
 import uuid
 from typing import Optional
@@ -612,6 +613,177 @@ class TasksDao:
 
 Labels = LabelsDao()
 Tasks = TasksDao()
+
+
+# ──────────────────────────── Comment + Activity Tables ────────────────────────────
+
+
+class WorkosComment(Base):
+    __tablename__ = 'workos_comment'
+
+    id = Column(Text, primary_key=True, unique=True)
+    task_id = Column(Text)
+    user_id = Column(Text)
+    body = Column(Text)
+    mentions = Column(JSON, default=list)
+    edited_at = Column(BigInteger, nullable=True)
+    created_at = Column(BigInteger)
+    updated_at = Column(BigInteger)
+
+
+class WorkosActivity(Base):
+    __tablename__ = 'workos_activity'
+
+    id = Column(Text, primary_key=True, unique=True)
+    task_id = Column(Text)
+    team_id = Column(Text)
+    user_id = Column(Text)
+    type = Column(Text)
+    data = Column(JSON, default=dict)
+    created_at = Column(BigInteger)
+
+
+class CommentModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    task_id: str
+    user_id: str
+    body: str
+    mentions: list = []
+    edited_at: Optional[int] = None
+    created_at: int
+    updated_at: int
+
+
+class ActivityModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    task_id: str
+    team_id: str
+    user_id: str
+    type: str
+    data: dict = {}
+    created_at: int
+
+
+_MENTION_RE = re.compile(r'\(mention:([^)\s]+)\)')
+
+
+def parse_mentions(body: str) -> list:
+    """Extract unique user ids from `@[Name](mention:ID)` tokens, preserving order."""
+    out: list = []
+    for uid in _MENTION_RE.findall(body or ''):
+        if uid not in out:
+            out.append(uid)
+    return out
+
+
+_ACTIVITY_FIELDS = {
+    'status': 'status_changed',
+    'assignee_id': 'assignee_changed',
+    'priority': 'priority_changed',
+    'due_date': 'due_changed',
+    'title': 'title_changed',
+    'description': 'description_changed',
+}
+
+
+def task_change_activities(actor_id: str, before: dict, after: dict) -> list:
+    """Diff two task field-dicts into activity entries (pure; no DB)."""
+    acts: list = []
+    for field, atype in _ACTIVITY_FIELDS.items():
+        if field in after and after[field] != before.get(field):
+            acts.append({'type': atype, 'data': {'from': before.get(field), 'to': after[field]}})
+    # Completion transitions get their own entry in addition to status_changed.
+    if 'status' in after and after['status'] != before.get('status'):
+        if after['status'] == 'done':
+            acts.append({'type': 'completed', 'data': {}})
+        elif before.get('status') == 'done':
+            acts.append({'type': 'reopened', 'data': {}})
+    return acts
+
+
+class CommentsDao:
+    async def insert(
+        self, task_id: str, user_id: str, body: str, mentions: list,
+        db: Optional[AsyncSession] = None,
+    ) -> CommentModel:
+        async with get_async_db_context(db) as db:
+            now = _now()
+            row = WorkosComment(
+                id=_id(), task_id=task_id, user_id=user_id, body=body,
+                mentions=mentions or [], edited_at=None, created_at=now, updated_at=now,
+            )
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return CommentModel.model_validate(row)
+
+    async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[CommentModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosComment).filter_by(id=id))
+            row = res.scalars().first()
+            return CommentModel.model_validate(row) if row else None
+
+    async def list_for_task(self, task_id: str, db: Optional[AsyncSession] = None) -> list:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosComment).filter_by(task_id=task_id).order_by(WorkosComment.created_at.asc())
+            )
+            return [CommentModel.model_validate(r) for r in res.scalars().all()]
+
+    async def update_body(
+        self, id: str, body: str, mentions: list, db: Optional[AsyncSession] = None
+    ) -> Optional[CommentModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosComment).filter_by(id=id))
+            row = res.scalars().first()
+            if not row:
+                return None
+            now = _now()
+            row.body = body
+            row.mentions = mentions or []
+            row.edited_at = now
+            row.updated_at = now
+            await db.commit()
+            await db.refresh(row)
+            return CommentModel.model_validate(row)
+
+    async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosComment).filter_by(id=id))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(WorkosComment).filter_by(id=id))
+            await db.commit()
+            return True
+
+
+class ActivityDao:
+    async def insert(
+        self, task_id: str, team_id: str, user_id: str, type: str, data: dict,
+        db: Optional[AsyncSession] = None,
+    ) -> ActivityModel:
+        async with get_async_db_context(db) as db:
+            row = WorkosActivity(
+                id=_id(), task_id=task_id, team_id=team_id, user_id=user_id,
+                type=type, data=data or {}, created_at=_now(),
+            )
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return ActivityModel.model_validate(row)
+
+    async def list_for_task(self, task_id: str, db: Optional[AsyncSession] = None) -> list:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosActivity).filter_by(task_id=task_id).order_by(WorkosActivity.created_at.asc())
+            )
+            return [ActivityModel.model_validate(r) for r in res.scalars().all()]
+
+
+Comments = CommentsDao()
+Activity = ActivityDao()
 
 
 async def can_see_team(user_id: str, is_admin: bool, team_id: str, db: Optional[AsyncSession] = None) -> bool:
