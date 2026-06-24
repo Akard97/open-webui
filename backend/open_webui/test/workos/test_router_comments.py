@@ -1,5 +1,6 @@
 import pytest
 
+import open_webui.routers.workos as wr
 from open_webui.test.workos.test_router_teams import _client, U1, U2
 from open_webui.test.workos.test_router_task import _stream
 
@@ -52,3 +53,20 @@ async def test_non_member_cannot_comment(monkeypatch):
     async with _client(monkeypatch, user=U2) as c:
         r = await c.post(f"/api/v1/workos/tasks/{t['id']}/comments", json={'body': 'x'})
         assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_comment_mention_notifies_mentioned_user(monkeypatch):
+    sent = []
+
+    async def _eu(event, payload, user_ids):
+        sent.append((event, tuple(user_ids), payload.get('type')))
+
+    monkeypatch.setattr(wr, 'emit_users', _eu)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        await c.post(f"/api/v1/workos/teams/{t['team_id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        await c.post(f"/api/v1/workos/tasks/{t['id']}/comments",
+                     json={'body': 'hey @[Yusuf](mention:u2) look'})
+    assert ('workos:notification.created', ('u2',), 'mentioned') in sent
+    assert all('u1' not in ids for _e, ids, _t in sent)  # actor never notified

@@ -740,7 +740,7 @@ def _notif_enabled(request: Request, type: str) -> bool:
     return cfg.get(type, True)
 
 
-async def _actor_name(user) -> str:
+def _actor_name(user) -> str:
     return getattr(user, 'name', None) or user.id
 
 
@@ -755,7 +755,7 @@ async def notify(
         return []
     data = {
         'task_id': task.id, 'task_key': task.key, 'task_title': task.title,
-        'workstream_id': task.workstream_id, 'actor_name': await _actor_name(actor),
+        'workstream_id': task.workstream_id, 'actor_name': _actor_name(actor),
     }
     if snippet is not None:
         data['snippet'] = snippet[:140]
@@ -816,7 +816,10 @@ async def create_comment(
     await _emit_task_room('workos:activity.created',
                           task, {**activity.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
     # Notification fan-out: mentioned first, then commented (minus those mentioned).
-    mentioned = {m for m in mentions if await can_see_workstream(m, False, task.workstream_id, db=db)}
+    mentioned = set()
+    for m in mentions:
+        if await can_see_workstream(m, False, task.workstream_id, db=db):
+            mentioned.add(m)
     await notify(request, db, recipients=mentioned, actor=user, type='mentioned', task=task,
                  comment_id=comment.id, snippet=body)
     participants = await _participants(task, db) - mentioned
@@ -845,8 +848,10 @@ async def update_comment(
     payload = {**updated.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
     await _emit_task_room('workos:comment.updated', task, payload)
     # Only notify mentions that are newly added on this edit.
-    fresh = {m for m in new_mentions if m not in (existing.mentions or [])
-             and await can_see_workstream(m, False, task.workstream_id, db=db)}
+    fresh = set()
+    for m in new_mentions:
+        if m not in (existing.mentions or []) and await can_see_workstream(m, False, task.workstream_id, db=db):
+            fresh.add(m)
     await notify(request, db, recipients=fresh, actor=user, type='mentioned', task=task,
                  comment_id=comment_id, snippet=body)
     return updated
