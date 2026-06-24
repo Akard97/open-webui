@@ -60,9 +60,9 @@
 </script>
 
 {#if t}
-	<div class="absolute inset-0 z-30 flex justify-end">
+	<div class="fixed inset-0 z-[70] flex justify-end">
 		<div class="absolute inset-0 bg-black/30" onclick={closeTask} role="presentation"></div>
-		<div class="relative w-[460px] max-w-[92%] h-full bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col">
+		<div class="relative w-[700px] max-w-[92%] h-full bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col">
 			<DetailHeader task={t} onEditTitle={startTitle} />
 
 			<div class="flex-1 overflow-y-auto p-4">
