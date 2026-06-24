@@ -166,7 +166,7 @@
 								<Pills label={l} />
 							{/each}
 							<DropdownMenu.Root>
-								<DropdownMenu.Trigger class="inline-flex items-center gap-1 text-xs text-gray-400 rounded-md px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-gray-700 hover:border-teal-500 hover:text-teal-600">
+								<DropdownMenu.Trigger class="inline-flex items-center gap-1 text-xs text-gray-400 rounded-md px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-gray-700 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400">
 									<Icon name="plus" size={12} />{#if !t.labels.length}<span>Add tags</span>{/if}
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content class="max-h-64 overflow-y-auto">
