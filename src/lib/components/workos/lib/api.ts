@@ -1,7 +1,8 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type {
 	Bootstrap, Team, Workspace, Workstream, Label, Task, Member, WorkosRules,
-	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole
+	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole,
+	Comment, Attachment, Activity, Notification
 } from './types';
 
 const BASE = `${WEBUI_API_BASE_URL}/workos`;
@@ -114,3 +115,44 @@ export const adminListTeams = (token: string) =>
 export const getAdminSettings = (token: string) => request<WorkosRules>(token, '/admin/settings');
 export const updateAdminSettings = (token: string, body: Partial<WorkosRules>) =>
 	request<WorkosRules>(token, '/admin/settings', 'PATCH', body);
+
+// Comments
+export const listComments = (token: string, taskId: string) =>
+	request<Comment[]>(token, `/tasks/${taskId}/comments`);
+export const createComment = (token: string, taskId: string, body: { body: string }) =>
+	request<Comment>(token, `/tasks/${taskId}/comments`, 'POST', body);
+export const updateComment = (token: string, id: string, body: { body: string }) =>
+	request<Comment>(token, `/comments/${id}`, 'PATCH', body);
+export const deleteComment = (token: string, id: string) =>
+	request<{ deleted: boolean }>(token, `/comments/${id}`, 'DELETE');
+
+// Activity
+export const listActivity = (token: string, taskId: string) =>
+	request<Activity[]>(token, `/tasks/${taskId}/activity`);
+
+// Attachments
+export const listAttachments = (token: string, taskId: string) =>
+	request<Attachment[]>(token, `/tasks/${taskId}/attachments`);
+export const deleteAttachment = (token: string, id: string) =>
+	request<{ deleted: boolean }>(token, `/attachments/${id}`, 'DELETE');
+export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}/content`;
+export async function uploadAttachment(
+	token: string, taskId: string, file: File, commentId?: string
+): Promise<Attachment> {
+	const fd = new FormData();
+	fd.append('file', file);
+	const qs = commentId ? `?comment_id=${encodeURIComponent(commentId)}` : '';
+	const res = await fetch(`${BASE}/tasks/${taskId}/attachments${qs}`, {
+		method: 'POST',
+		headers: { authorization: `Bearer ${token}` },
+		body: fd
+	});
+	if (!res.ok) throw await res.json().catch(() => ({ detail: 'Upload failed' }));
+	return (await res.json()) as Attachment;
+}
+
+// Notifications
+export const listNotifications = (token: string, unreadOnly = false) =>
+	request<Notification[]>(token, `/notifications?unread_only=${unreadOnly}`);
+export const markNotificationsRead = (token: string, body: { ids?: string[]; all?: boolean }) =>
+	request<{ unread: number }>(token, '/notifications/read', 'POST', body);
