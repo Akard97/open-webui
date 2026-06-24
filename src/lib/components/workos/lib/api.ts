@@ -2,7 +2,7 @@ import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type {
 	Bootstrap, Team, Workspace, Workstream, Label, Task, Member, WorkosRules,
 	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole,
-	Comment, Attachment, Activity, Notification
+	Comment, Attachment, Activity, Notification, Subtask
 } from './types';
 
 const BASE = `${WEBUI_API_BASE_URL}/workos`;
@@ -88,12 +88,12 @@ export const listTasks = (token: string, workstreamId: string) =>
 export const createTask = (
 	token: string, workstreamId: string,
 	body: { title: string; description?: string; status?: TaskStatus; priority?: TaskPriority | null;
-		assignee_id?: string | null; due_date?: number | null; labels?: string[] }
+		assignee_id?: string | null; start_date?: number | null; due_date?: number | null; labels?: string[] }
 ) => request<Task>(token, `/workstreams/${workstreamId}/tasks`, 'POST', body);
 export const getTask = (token: string, id: string) => request<Task>(token, `/tasks/${id}`);
 export const updateTask = (
 	token: string, id: string,
-	body: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'due_date'
+	body: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'start_date' | 'due_date'
 		| 'progress' | 'labels' | 'sort_key'>>
 ) => request<Task>(token, `/tasks/${id}`, 'PATCH', body);
 export const deleteTask = (token: string, id: string) => request<{ deleted: boolean }>(token, `/tasks/${id}`, 'DELETE');
@@ -150,6 +150,17 @@ export async function uploadAttachment(
 	if (!res.ok) throw await res.json().catch(() => ({ detail: 'Upload failed' }));
 	return (await res.json()) as Attachment;
 }
+
+// Subtasks
+export const listSubtasks = (token: string, taskId: string) =>
+	request<Subtask[]>(token, `/tasks/${taskId}/subtasks`);
+export const createSubtask = (token: string, taskId: string, body: { title: string; sort_key?: number }) =>
+	request<Subtask>(token, `/tasks/${taskId}/subtasks`, 'POST', body);
+export const updateSubtask = (
+	token: string, id: string, body: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key'>>
+) => request<Subtask>(token, `/subtasks/${id}`, 'PATCH', body);
+export const deleteSubtask = (token: string, id: string) =>
+	request<{ deleted: boolean }>(token, `/subtasks/${id}`, 'DELETE');
 
 // Notifications
 export const listNotifications = (token: string, unreadOnly = false) =>

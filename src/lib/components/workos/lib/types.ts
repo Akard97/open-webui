@@ -58,8 +58,11 @@ export interface Task {
 	status: TaskStatus;
 	priority?: TaskPriority | null;
 	assignee_id?: string | null;
+	start_date?: number | null;
 	due_date?: number | null;
 	progress: number;
+	subtask_total?: number;
+	subtask_completed?: number;
 	labels: string[];
 	sort_key: number;
 	created_by_id?: string | null;
@@ -108,10 +111,23 @@ export interface Attachment {
 	created_at: number;
 }
 
+export interface Subtask {
+	id: string;
+	task_id: string;
+	title: string;
+	completed: boolean;
+	sort_key: number;
+	created_by_id?: string | null;
+	completed_at?: number | null;
+	created_at: number;
+	updated_at: number;
+}
+
 export type ActivityType =
 	| 'created' | 'status_changed' | 'assignee_changed' | 'priority_changed'
 	| 'due_changed' | 'completed' | 'reopened' | 'comment_added'
-	| 'attachment_added' | 'title_changed' | 'description_changed';
+	| 'attachment_added' | 'title_changed' | 'description_changed'
+	| 'start_changed' | 'subtask_created' | 'subtask_completed' | 'subtask_reopened';
 
 export interface Activity {
 	id: string;

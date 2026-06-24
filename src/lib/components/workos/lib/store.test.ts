@@ -11,7 +11,14 @@ vi.mock('./api', () => ({
 		labels: [], sort_key: 5, created_by_id: 'u1', created_at: 0, updated_at: 0
 	})),
 	updateTask: vi.fn(async (t, id, body) => ({ id, ...body })),
-	deleteTask: vi.fn(async () => ({ deleted: true }))
+	deleteTask: vi.fn(async () => ({ deleted: true })),
+	listSubtasks: vi.fn(async () => []),
+	createSubtask: vi.fn(async (t, taskId, body) => ({
+		id: 'sub-1', task_id: taskId, title: body.title, completed: false,
+		sort_key: 1, created_by_id: 'u1', completed_at: null, created_at: 1, updated_at: 1
+	})),
+	updateSubtask: vi.fn(async (t, id, body) => ({ id, task_id: 'task-1', title: 'Sub', completed: !!body.completed, sort_key: 1, created_at: 1, updated_at: 2 })),
+	deleteSubtask: vi.fn(async () => ({ deleted: true })),
 }));
 
 vi.mock('$lib/stores', () => {
@@ -73,8 +80,29 @@ describe('store optimistic add', () => {
 
 import {
 	selectedTaskId, comments, activity, unreadCount, notifications,
-	applyCollabEvent, applyNotificationEvent
+	applyCollabEvent, applyNotificationEvent, subtasks
 } from './store';
+
+describe('subtask realtime', () => {
+	it('applies subtask events only for the open task', () => {
+		selectedTaskId.set('task-1');
+		subtasks.set([]);
+		applyCollabEvent('workos:subtask.created', {
+			id: 's1', task_id: 'task-1', title: 'Draft', completed: false,
+			sort_key: 1, created_by_id: 'u1', completed_at: null, created_at: 1, updated_at: 1
+		});
+		expect(get(subtasks).map((s) => s.id)).toEqual(['s1']);
+
+		applyCollabEvent('workos:subtask.updated', {
+			id: 's1', task_id: 'task-1', title: 'Draft', completed: true,
+			sort_key: 1, created_by_id: 'u1', completed_at: 2, created_at: 1, updated_at: 2
+		});
+		expect(get(subtasks)[0].completed).toBe(true);
+
+		applyCollabEvent('workos:subtask.deleted', { id: 's1', task_id: 'task-1' });
+		expect(get(subtasks)).toEqual([]);
+	});
+});
 
 describe('collab realtime', () => {
 	it('applies comment.created only for the open task', () => {

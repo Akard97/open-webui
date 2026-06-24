@@ -7,7 +7,7 @@ import {
 	STATUS_ORDER,
 	type Team, type Workspace, type Workstream, type Label, type Task, type Member,
 	type TeamRole, type TaskStatus, type TaskPriority,
-	type Comment, type Activity, type Attachment, type Notification, type FeedItem
+	type Comment, type Activity, type Attachment, type Notification, type FeedItem, type Subtask
 } from './types';
 
 export type ViewKey = 'board' | 'list' | 'admin' | 'inbox';
@@ -36,6 +36,7 @@ export const directory: Writable<Record<string, { name: string }>> = writable({}
 export const comments: Writable<Comment[]> = writable([]);
 export const activity: Writable<Activity[]> = writable([]);
 export const attachments: Writable<Attachment[]> = writable([]);
+export const subtasks: Writable<Subtask[]> = writable([]);
 export const notifications: Writable<Notification[]> = writable([]);
 export const unreadCount: Writable<number> = writable(0);
 
@@ -126,6 +127,7 @@ export function closeTask(): void {
 	comments.set([]);
 	activity.set([]);
 	attachments.set([]);
+	subtasks.set([]);
 }
 
 export async function addTask(
@@ -182,15 +184,17 @@ export async function removeTask(id: string): Promise<void> {
 }
 
 export async function loadTaskDetail(taskId: string): Promise<void> {
-	const [c, a, at] = await Promise.all([
+	const [c, a, at, st] = await Promise.all([
 		api.listComments(token(), taskId).catch(() => []),
 		api.listActivity(token(), taskId).catch(() => []),
-		api.listAttachments(token(), taskId).catch(() => [])
+		api.listAttachments(token(), taskId).catch(() => []),
+		api.listSubtasks(token(), taskId).catch(() => [])
 	]);
 	if (get(selectedTaskId) !== taskId) return; // user moved on
 	comments.set(c);
 	activity.set(a);
 	attachments.set(at);
+	subtasks.set(st);
 }
 
 export async function postComment(taskId: string, body: string): Promise<void> {
@@ -220,6 +224,43 @@ export async function uploadFiles(taskId: string, files: FileList | File[], comm
 export async function removeAttachment(id: string): Promise<void> {
 	attachments.update((list) => list.filter((a) => a.id !== id));
 	await api.deleteAttachment(token(), id);
+}
+
+export async function addSubtask(taskId: string, title: string): Promise<void> {
+	const saved = await api.createSubtask(token(), taskId, { title });
+	subtasks.update((list) => (list.some((s) => s.id === saved.id) ? list : [...list, saved]));
+	const refreshed = await api.getTask(token(), taskId).catch(() => null);
+	if (refreshed) tasks.update((list) => list.map((t) => (t.id === taskId ? refreshed : t)));
+}
+
+export async function editSubtask(id: string, fields: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key'>>): Promise<void> {
+	const before = get(subtasks);
+	subtasks.update((list) => list.map((s) => (s.id === id ? { ...s, ...fields } : s)));
+	try {
+		const saved = await api.updateSubtask(token(), id, fields);
+		subtasks.update((list) => list.map((s) => (s.id === id ? saved : s)));
+		const refreshed = await api.getTask(token(), saved.task_id).catch(() => null);
+		if (refreshed) tasks.update((list) => list.map((t) => (t.id === saved.task_id ? refreshed : t)));
+	} catch (e) {
+		subtasks.set(before);
+		throw e;
+	}
+}
+
+export async function removeSubtask(id: string): Promise<void> {
+	const existing = get(subtasks).find((s) => s.id === id);
+	const before = get(subtasks);
+	subtasks.update((list) => list.filter((s) => s.id !== id));
+	try {
+		await api.deleteSubtask(token(), id);
+		if (existing) {
+			const refreshed = await api.getTask(token(), existing.task_id).catch(() => null);
+			if (refreshed) tasks.update((list) => list.map((t) => (t.id === existing.task_id ? refreshed : t)));
+		}
+	} catch (e) {
+		subtasks.set(before);
+		throw e;
+	}
 }
 
 export async function loadNotifications(): Promise<void> {
@@ -254,6 +295,12 @@ export function applyCollabEvent(event: string, payload: any): void {
 		attachments.update((l) => (l.some((a) => a.id === payload.id) ? l : [...l, payload]));
 	} else if (event === 'workos:attachment.deleted') {
 		attachments.update((l) => l.filter((a) => a.id !== payload.id));
+	} else if (event === 'workos:subtask.created') {
+		subtasks.update((l) => (l.some((s) => s.id === payload.id) ? l : [...l, payload]));
+	} else if (event === 'workos:subtask.updated') {
+		subtasks.update((l) => l.map((s) => (s.id === payload.id ? { ...s, ...payload } : s)));
+	} else if (event === 'workos:subtask.deleted') {
+		subtasks.update((l) => l.filter((s) => s.id !== payload.id));
 	}
 }
 
@@ -282,7 +329,8 @@ export function applyTaskEvent(event: string, payload: any): void {
 const TASK_EVENTS = ['workos:task.created', 'workos:task.updated', 'workos:task.deleted'];
 const COLLAB_EVENTS = [
 	'workos:comment.created', 'workos:comment.updated', 'workos:comment.deleted',
-	'workos:activity.created', 'workos:attachment.created', 'workos:attachment.deleted'
+	'workos:activity.created', 'workos:attachment.created', 'workos:attachment.deleted',
+	'workos:subtask.created', 'workos:subtask.updated', 'workos:subtask.deleted'
 ];
 
 function subscribeRoom(workstreamId: string): void {
