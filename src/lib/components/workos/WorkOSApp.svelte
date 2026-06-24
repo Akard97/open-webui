@@ -7,6 +7,7 @@
 	import ListView from './views/ListView.svelte';
 	import TaskDetail from './views/TaskDetail.svelte';
 	import AdminApp from './views/admin/AdminApp.svelte';
+	import InboxView from './views/InboxView.svelte';
 	import ModalHost from './views/ModalHost.svelte';
 	import { canUseAdmin } from './lib/roles';
 	import { user } from '$lib/stores';
@@ -34,6 +35,8 @@
 				<div class="h-full flex items-center justify-center text-sm text-gray-400">Loading…</div>
 			{:else if $view === 'admin'}
 				<AdminApp />
+			{:else if $view === 'inbox'}
+				<InboxView />
 			{:else if !$teams.length}
 				<div class="h-full flex flex-col items-center justify-center gap-2 text-center px-6">
 					<div class="text-lg font-medium">You're not in any teams yet</div>

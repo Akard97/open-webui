@@ -10,7 +10,7 @@ import {
 	type Comment, type Activity, type Attachment, type Notification, type FeedItem
 } from './types';
 
-export type ViewKey = 'board' | 'list' | 'admin';
+export type ViewKey = 'board' | 'list' | 'admin' | 'inbox';
 
 export type ModalRequest =
 	| { kind: 'team' }

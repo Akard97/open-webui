@@ -5,7 +5,7 @@
 	import { canUseAdmin, canCreateWorkspace, canManageMembers } from '../lib/roles';
 	import {
 		teams, workspaces, workstreams, roles, currentTeam, currentTeamId, currentWorkstreamId,
-		selectTeam, selectWorkstream, view, openModal
+		selectTeam, selectWorkstream, view, openModal, unreadCount
 	} from '../lib/store';
 
 	let teamMenuOpen = false;
@@ -57,6 +57,17 @@
 
 	<!-- Workspaces -->
 	<div class="flex-1 overflow-y-auto px-2 pb-2">
+		<button
+			class="flex items-center gap-2 w-full h-8 px-2 mb-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-900"
+			class:bg-teal-50={$view === 'inbox'}
+			onclick={() => view.set('inbox')}
+		>
+			<Icon name="message-square" size={15} />
+			<span class="flex-1 text-left">Inbox</span>
+			{#if $unreadCount > 0}
+				<span class="text-[11px] min-w-5 h-5 px-1.5 rounded-full bg-teal-600 text-white flex items-center justify-center">{$unreadCount}</span>
+			{/if}
+		</button>
 		<div class="flex items-center justify-between px-2 py-1.5">
 			<span class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Workspaces</span>
 			{#if canCreateWorkspace(myRole) && $currentTeamId}
