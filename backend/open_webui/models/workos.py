@@ -15,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     select,
     delete,
+    func,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -467,9 +468,24 @@ class WorkosTask(Base):
     status = Column(Text, default='backlog')
     priority = Column(Text, nullable=True)
     assignee_id = Column(Text, nullable=True)
+    start_date = Column(BigInteger, nullable=True)
     due_date = Column(BigInteger, nullable=True)
     progress = Column(Integer, default=0)
     labels = Column(JSON, default=list)
+    sort_key = Column(Float, default=0.0)
+    created_by_id = Column(Text, nullable=True)
+    completed_at = Column(BigInteger, nullable=True)
+    created_at = Column(BigInteger)
+    updated_at = Column(BigInteger)
+
+
+class WorkosSubtask(Base):
+    __tablename__ = 'workos_subtask'
+
+    id = Column(Text, primary_key=True, unique=True)
+    task_id = Column(Text)
+    title = Column(Text)
+    completed = Column(Boolean, default=False)
     sort_key = Column(Float, default=0.0)
     created_by_id = Column(Text, nullable=True)
     completed_at = Column(BigInteger, nullable=True)
@@ -501,9 +517,25 @@ class TaskModel(BaseModel):
     status: str
     priority: Optional[str] = None
     assignee_id: Optional[str] = None
+    start_date: Optional[int] = None
     due_date: Optional[int] = None
     progress: int
+    subtask_total: int = 0
+    subtask_completed: int = 0
     labels: list = []
+    sort_key: float
+    created_by_id: Optional[str] = None
+    completed_at: Optional[int] = None
+    created_at: int
+    updated_at: int
+
+
+class SubtaskModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    task_id: str
+    title: str
+    completed: bool = False
     sort_key: float
     created_by_id: Optional[str] = None
     completed_at: Optional[int] = None
@@ -551,10 +583,34 @@ class LabelsDao:
 
 
 class TasksDao:
+    async def _with_counts(self, rows: list[WorkosTask], db: AsyncSession) -> list[TaskModel]:
+        if not rows:
+            return []
+        ids = [r.id for r in rows]
+        res = await db.execute(
+            select(
+                WorkosSubtask.task_id,
+                func.count(WorkosSubtask.id),
+                func.sum(WorkosSubtask.completed.cast(Integer)),
+            )
+            .where(WorkosSubtask.task_id.in_(ids))
+            .group_by(WorkosSubtask.task_id)
+        )
+        counts = {task_id: (total or 0, completed or 0) for task_id, total, completed in res.all()}
+        out = []
+        for row in rows:
+            model = TaskModel.model_validate(row)
+            total, completed = counts.get(row.id, (0, 0))
+            model.subtask_total = int(total)
+            model.subtask_completed = int(completed)
+            out.append(model)
+        return out
+
     async def insert(
         self, workstream_id: str, team_id: str, team_key: str, title: str, created_by_id: Optional[str],
         *, description: Optional[str] = None, status: str = 'backlog', priority: Optional[str] = None,
-        assignee_id: Optional[str] = None, due_date: Optional[int] = None, labels: Optional[list] = None,
+        assignee_id: Optional[str] = None, start_date: Optional[int] = None,
+        due_date: Optional[int] = None, labels: Optional[list] = None,
         db: Optional[AsyncSession] = None,
     ) -> TaskModel:
         number = await Teams.next_task_number(team_id, db=db)
@@ -563,20 +619,23 @@ class TasksDao:
             row = WorkosTask(
                 id=_id(), workstream_id=workstream_id, team_id=team_id, number=number,
                 key=f'{team_key}-{number}', title=title, description=description, status=status,
-                priority=priority, assignee_id=assignee_id, due_date=due_date, progress=0,
+                priority=priority, assignee_id=assignee_id, start_date=start_date,
+                due_date=due_date, progress=0,
                 labels=labels or [], sort_key=float(now), created_by_id=created_by_id,
                 completed_at=now if status == 'done' else None, created_at=now, updated_at=now,
             )
             db.add(row)
             await db.commit()
             await db.refresh(row)
-            return TaskModel.model_validate(row)
+            return (await self._with_counts([row], db))[0]
 
     async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[TaskModel]:
         async with get_async_db_context(db) as db:
             res = await db.execute(select(WorkosTask).filter_by(id=id))
             row = res.scalars().first()
-            return TaskModel.model_validate(row) if row else None
+            if not row:
+                return None
+            return (await self._with_counts([row], db))[0]
 
     async def list_for_workstream(self, workstream_id: str, db: Optional[AsyncSession] = None) -> list[TaskModel]:
         async with get_async_db_context(db) as db:
@@ -584,7 +643,8 @@ class TasksDao:
                 select(WorkosTask).filter_by(workstream_id=workstream_id)
                 .order_by(WorkosTask.status.asc(), WorkosTask.sort_key.asc())
             )
-            return [TaskModel.model_validate(r) for r in res.scalars().all()]
+            rows = res.scalars().all()
+            return await self._with_counts(rows, db)
 
     async def update_fields(self, id: str, fields: dict, db: Optional[AsyncSession] = None) -> Optional[TaskModel]:
         async with get_async_db_context(db) as db:
@@ -599,7 +659,7 @@ class TasksDao:
             row.updated_at = _now()
             await db.commit()
             await db.refresh(row)
-            return TaskModel.model_validate(row)
+            return (await self._with_counts([row], db))[0]
 
     async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
         async with get_async_db_context(db) as db:
@@ -613,6 +673,64 @@ class TasksDao:
 
 Labels = LabelsDao()
 Tasks = TasksDao()
+
+
+class SubtasksDao:
+    async def insert(
+        self, task_id: str, title: str, created_by_id: Optional[str],
+        *, sort_key: Optional[float] = None, db: Optional[AsyncSession] = None,
+    ) -> SubtaskModel:
+        async with get_async_db_context(db) as db:
+            now = _now()
+            row = WorkosSubtask(
+                id=_id(), task_id=task_id, title=title, completed=False,
+                sort_key=sort_key if sort_key is not None else float(now),
+                created_by_id=created_by_id, completed_at=None, created_at=now, updated_at=now,
+            )
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+            return SubtaskModel.model_validate(row)
+
+    async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[SubtaskModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosSubtask).filter_by(id=id))
+            row = res.scalars().first()
+            return SubtaskModel.model_validate(row) if row else None
+
+    async def list_for_task(self, task_id: str, db: Optional[AsyncSession] = None) -> list[SubtaskModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosSubtask).filter_by(task_id=task_id).order_by(WorkosSubtask.sort_key.asc())
+            )
+            return [SubtaskModel.model_validate(r) for r in res.scalars().all()]
+
+    async def update_fields(self, id: str, fields: dict, db: Optional[AsyncSession] = None) -> Optional[SubtaskModel]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosSubtask).filter_by(id=id))
+            row = res.scalars().first()
+            if not row:
+                return None
+            if 'completed' in fields:
+                row.completed_at = _now() if fields['completed'] else None
+            for k, v in fields.items():
+                setattr(row, k, v)
+            row.updated_at = _now()
+            await db.commit()
+            await db.refresh(row)
+            return SubtaskModel.model_validate(row)
+
+    async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosSubtask).filter_by(id=id))
+            if not res.scalars().first():
+                return False
+            await db.execute(delete(WorkosSubtask).filter_by(id=id))
+            await db.commit()
+            return True
+
+
+Subtasks = SubtasksDao()
 
 
 # ──────────────────────────── Comment + Activity Tables ────────────────────────────
@@ -682,6 +800,7 @@ _ACTIVITY_FIELDS = {
     'status': 'status_changed',
     'assignee_id': 'assignee_changed',
     'priority': 'priority_changed',
+    'start_date': 'start_changed',
     'due_date': 'due_changed',
     'title': 'title_changed',
     'description': 'description_changed',
