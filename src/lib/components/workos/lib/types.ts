@@ -82,11 +82,70 @@ export interface Bootstrap {
 	workspaces: Workspace[];
 	workstreams: Workstream[];
 	roles: Record<string, TeamRole>;
+	notifications_unread: number;
 }
+
+export interface Comment {
+	id: string;
+	task_id: string;
+	user_id: string;
+	body: string;
+	mentions: string[];
+	edited_at?: number | null;
+	created_at: number;
+	updated_at: number;
+}
+
+export interface Attachment {
+	id: string;
+	task_id: string;
+	comment_id?: string | null;
+	storage_key: string;
+	name: string;
+	size: number;
+	content_type?: string | null;
+	created_by_id?: string | null;
+	created_at: number;
+}
+
+export type ActivityType =
+	| 'created' | 'status_changed' | 'assignee_changed' | 'priority_changed'
+	| 'due_changed' | 'completed' | 'reopened' | 'comment_added'
+	| 'attachment_added' | 'title_changed' | 'description_changed';
+
+export interface Activity {
+	id: string;
+	task_id: string;
+	team_id: string;
+	user_id: string;
+	type: ActivityType;
+	data: Record<string, unknown>;
+	created_at: number;
+}
+
+export type NotificationType = 'assigned' | 'mentioned' | 'commented' | 'status_changed';
+
+export interface Notification {
+	id: string;
+	user_id: string;
+	actor_id?: string | null;
+	task_id?: string | null;
+	comment_id?: string | null;
+	type: NotificationType;
+	data: Record<string, unknown>;
+	read: boolean;
+	created_at: number;
+}
+
+export type FeedItem =
+	| { kind: 'comment'; at: number; comment: Comment }
+	| { kind: 'activity'; at: number; activity: Activity };
 
 export interface WorkosRules {
 	team_creation: 'all_users' | 'admins_only';
 	default_workspace_visibility: Visibility;
+	notifications?: Partial<Record<NotificationType, boolean>>;
+	max_attachment_mb?: number;
 }
 
 export const STATUS_ORDER: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'in_review', 'done'];
