@@ -48,6 +48,15 @@
 	$: actual = t ? actualProgress(t) : 0;
 	$: planned = t ? plannedProgress(t.start_date, t.due_date, now) : null;
 	$: health = t ? taskHealth(t, now) : null;
+	// Color-code the actual progress bar by schedule health (green = good, red = overdue).
+	$: actualBarColor =
+		t?.status === 'done' ? 'bg-emerald-500'
+		: t?.status === 'canceled' ? 'bg-gray-400'
+		: health === 'overdue' ? 'bg-red-500'
+		: health === 'behind' ? 'bg-orange-500'
+		: health === 'at_risk' ? 'bg-amber-500'
+		: health === 'on_track' ? 'bg-emerald-500'
+		: 'bg-teal-500';
 
 	function startTitle() {
 		if (t) {
@@ -228,18 +237,24 @@
 						<!-- Progress -->
 						<PropertyRow icon="loader" label="Progress">
 							<div class="w-full space-y-2">
+								<!-- Combined progress: planned (wide, behind) + actual (thin teal, on top), vertically centered -->
 								<div class="flex items-center gap-2">
-									<span class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
-										<span class="block h-full bg-teal-500 rounded-full" style="width:{actual}%"></span>
-									</span>
+									<div class="relative flex-1 h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+										{#if planned !== null}
+											<div class="absolute inset-y-0 left-0 bg-gray-300 dark:bg-gray-600 rounded-full" style="width:{planned}%"></div>
+										{/if}
+										<div class="absolute left-0 top-1/2 -translate-y-1/2 h-1 {actualBarColor} rounded-full" style="width:{actual}%"></div>
+									</div>
 									<span class="text-sm text-gray-500 w-10 text-right">{actual}%</span>
 								</div>
 								{#if planned !== null}
-									<div class="flex items-center gap-2">
-										<span class="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-900 overflow-hidden">
-											<span class="block h-full bg-gray-400 dark:bg-gray-600 rounded-full" style="width:{planned}%"></span>
+									<div class="flex items-center gap-4 text-xs">
+										<span class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
+											<span class="inline-block w-2.5 h-1 rounded-full {actualBarColor}"></span>Actual {actual}%
 										</span>
-										<span class="text-xs text-gray-400 w-20 text-right">Planned {planned}%</span>
+										<span class="inline-flex items-center gap-1.5 text-gray-400">
+											<span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>Planned {planned}%
+										</span>
 									</div>
 								{/if}
 								{#if health}
@@ -256,7 +271,14 @@
 										<button class="text-xs text-teal-600 dark:text-teal-400" onclick={() => (editingProgress = false)}>Done</button>
 									</div>
 								{:else if (t.subtask_total ?? 0) === 0}
-									<button class="text-xs text-gray-400 hover:text-teal-600" onclick={() => (editingProgress = true)}>Edit manual progress</button>
+									<button
+										type="button"
+										class="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 dark:text-teal-400 rounded-md border border-teal-200 dark:border-teal-800 px-2 py-1 cursor-pointer transition-colors hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-teal-950 dark:hover:text-teal-300"
+										onclick={() => (editingProgress = true)}
+									>
+										<Icon name="pencil" size={12} />
+										Edit progress
+									</button>
 								{:else}
 									<div class="text-xs text-gray-400">{t.subtask_completed ?? 0}/{t.subtask_total ?? 0} subtasks complete</div>
 								{/if}
