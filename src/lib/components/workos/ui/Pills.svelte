@@ -11,8 +11,8 @@
 		urgent: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#6b7280'
 	};
 	const STATUS_COLOR: Record<string, string> = {
-		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#2563eb',
-		in_review: '#7c3aed', done: '#16a34a', canceled: '#9ca3af'
+		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#00a5ba',
+		in_review: '#d97706', done: '#769a4a', canceled: '#9ca3af'
 	};
 </script>
 

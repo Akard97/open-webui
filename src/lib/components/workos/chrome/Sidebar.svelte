@@ -46,7 +46,7 @@
 					</button>
 				{/if}
 				<button
-					class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm text-teal-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+					class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
 					onclick={() => { openModal.set({ kind: 'team' }); teamMenuOpen = false; }}
 				>
 					<Icon name="plus" size={14} /> New team
@@ -59,13 +59,13 @@
 	<div class="flex-1 overflow-y-auto px-2 pb-2">
 		<button
 			class="flex items-center gap-2 w-full h-8 px-2 mb-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-900"
-			class:bg-teal-50={$view === 'inbox'}
+			class:bg-accent={$view === 'inbox'}
 			onclick={() => view.set('inbox')}
 		>
 			<Icon name="message-square" size={15} />
 			<span class="flex-1 text-left">Inbox</span>
 			{#if $unreadCount > 0}
-				<span class="text-[11px] min-w-5 h-5 px-1.5 rounded-full bg-teal-600 text-white flex items-center justify-center">{$unreadCount}</span>
+				<span class="text-[11px] min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">{$unreadCount}</span>
 			{/if}
 		</button>
 		<div class="flex items-center justify-between px-2 py-1.5">
@@ -89,10 +89,10 @@
 					{#each streamsByWs(ws.id) as s (s.id)}
 						<button
 							class="flex items-center gap-2 w-full h-8 pl-8 pr-2 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-900"
-							class:bg-teal-50={$currentWorkstreamId === s.id}
+							class:bg-accent={$currentWorkstreamId === s.id}
 							onclick={() => { selectWorkstream(s.id); view.set('board'); }}
 						>
-							<span class="w-1.5 h-1.5 rounded-sm bg-teal-500 flex-none"></span>
+							<span class="w-1.5 h-1.5 rounded-sm bg-primary flex-none"></span>
 							<span class="flex-1 text-left truncate">{s.name}</span>
 						</button>
 					{/each}

@@ -26,8 +26,8 @@
 	$: sortedActivity = [...$activity].sort((a, b) => a.created_at - b.created_at);
 
 	const STATUS_COLOR: Record<string, string> = {
-		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#2563eb',
-		in_review: '#7c3aed', done: '#16a34a', canceled: '#9ca3af'
+		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#00a5ba',
+		in_review: '#d97706', done: '#769a4a', canceled: '#9ca3af'
 	};
 	function statusShape(s: TaskStatus): 'check' | 'half' | 'x' | 'ring' {
 		if (s === 'done') return 'check';
@@ -50,13 +50,13 @@
 	$: health = t ? taskHealth(t, now) : null;
 	// Color-code the actual progress bar by schedule health (green = good, red = overdue).
 	$: actualBarColor =
-		t?.status === 'done' ? 'bg-emerald-500'
+		t?.status === 'done' ? 'bg-success'
 		: t?.status === 'canceled' ? 'bg-gray-400'
 		: health === 'overdue' ? 'bg-red-500'
 		: health === 'behind' ? 'bg-orange-500'
 		: health === 'at_risk' ? 'bg-amber-500'
-		: health === 'on_track' ? 'bg-emerald-500'
-		: 'bg-teal-500';
+		: health === 'on_track' ? 'bg-success'
+		: 'bg-primary';
 
 	function startTitle() {
 		if (t) {
@@ -93,7 +93,7 @@
 					{#if editingTitle}
 						<!-- svelte-ignore a11y_autofocus -->
 						<input
-							class="w-full text-xl font-semibold bg-transparent mb-5 focus:outline-none border-b border-teal-500"
+							class="w-full text-xl font-semibold bg-transparent mb-5 focus:outline-none border-b border-primary"
 							bind:value={titleDraft}
 							onblur={commitTitle}
 							onkeydown={(e) => {
@@ -215,7 +215,7 @@
 									<Pills label={l} size="md" />
 								{/each}
 								<DropdownMenu.Root>
-									<DropdownMenu.Trigger class="inline-flex items-center gap-1 text-xs text-gray-400 rounded-md px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-gray-700 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400">
+									<DropdownMenu.Trigger class="inline-flex items-center gap-1 text-xs text-gray-400 rounded-md px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:text-primary">
 										<Icon name="plus" size={12} />{#if !t.labels.length}<span>Add tags</span>{/if}
 									</DropdownMenu.Trigger>
 									<DropdownMenu.Content class="max-h-64 overflow-y-auto">
@@ -268,12 +268,12 @@
 											type="range" min="0" max="100" step="5" value={t.progress}
 											onchange={(e) => editTask(t.id, { progress: parseInt((e.target as HTMLInputElement).value, 10) })}
 										/>
-										<button class="text-xs text-teal-600 dark:text-teal-400" onclick={() => (editingProgress = false)}>Done</button>
+										<button class="text-xs text-primary" onclick={() => (editingProgress = false)}>Done</button>
 									</div>
 								{:else if (t.subtask_total ?? 0) === 0}
 									<button
 										type="button"
-										class="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 dark:text-teal-400 rounded-md border border-teal-200 dark:border-teal-800 px-2 py-1 cursor-pointer transition-colors hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-teal-950 dark:hover:text-teal-300"
+										class="inline-flex items-center gap-1.5 text-xs font-medium text-primary rounded-md border border-brand-200 dark:border-brand-800 px-2 py-1 cursor-pointer transition-colors hover:bg-accent"
 										onclick={() => (editingProgress = true)}
 									>
 										<Icon name="pencil" size={12} />
@@ -294,7 +294,7 @@
 						{#if editingDesc}
 							<textarea class="w-full text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg p-2.5 min-h-24" bind:value={descDraft}></textarea>
 							<div class="flex gap-2 mt-2">
-								<button class="text-sm px-3 py-1 rounded-md bg-teal-600 text-white" onclick={() => { editTask(t.id, { description: descDraft }); editingDesc = false; }}>Save</button>
+								<button class="text-sm px-3 py-1 rounded-md bg-primary text-primary-foreground" onclick={() => { editTask(t.id, { description: descDraft }); editingDesc = false; }}>Save</button>
 								<button class="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-gray-700" onclick={() => (editingDesc = false)}>Cancel</button>
 							</div>
 						{:else}

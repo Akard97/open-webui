@@ -21,7 +21,7 @@
 					{:else}
 						<Icon name="paperclip" size={16} />
 					{/if}
-					<a class="text-sm text-teal-600 truncate flex-1" href={api.attachmentUrl(a.id)} target="_blank" rel="noreferrer">{a.name}</a>
+					<a class="text-sm text-primary truncate flex-1" href={api.attachmentUrl(a.id)} target="_blank" rel="noreferrer">{a.name}</a>
 					<span class="text-[11px] text-gray-400">{Math.max(1, Math.round(a.size / 1024))} KB</span>
 					{#if canDeleteAttachment(a, $user?.id ?? '', myRole)}
 						<button class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500" title="Remove" onclick={() => removeAttachment(a.id)}><Icon name="trash" size={13} /></button>

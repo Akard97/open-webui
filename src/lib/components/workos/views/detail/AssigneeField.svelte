@@ -10,7 +10,7 @@
 	$: assigned = task.assignee_id ?? null;
 	$: members = Object.entries($directory).map(([id, u]) => ({ id, name: u.name }));
 
-	const fallback = 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300';
+	const fallback = 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300';
 
 	function assign(id: string | null) {
 		editTask(task.id, { assignee_id: id });

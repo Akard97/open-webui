@@ -115,7 +115,7 @@
 						<option value="admin">admin</option>
 						<option value="owner">owner</option>
 					</select>
-					<button class="text-sm px-3 py-1 rounded bg-teal-600 text-white" onclick={() => addMember(req.teamId)}>Add</button>
+					<button class="text-sm px-3 py-1 rounded bg-primary text-primary-foreground" onclick={() => addMember(req.teamId)}>Add</button>
 				</div>
 			{:else}
 				<div class="space-y-3">
@@ -132,7 +132,7 @@
 				</div>
 				<div class="flex justify-end gap-2 mt-5">
 					<button class="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onclick={close}>Cancel</button>
-					<button class="text-sm px-3 py-1.5 rounded bg-teal-600 text-white disabled:opacity-50" disabled={busy || !name.trim() || (req.kind === 'team' && !key.trim())} onclick={submit}>Create</button>
+					<button class="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50" disabled={busy || !name.trim() || (req.kind === 'team' && !key.trim())} onclick={submit}>Create</button>
 				</div>
 			{/if}
 		</div>

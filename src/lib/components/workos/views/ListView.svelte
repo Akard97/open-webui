@@ -31,7 +31,7 @@
 						<span class="text-xs text-gray-500">
 							{task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
 						</span>
-						<span class="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-[10px] flex items-center justify-center" title={task.assignee_id ?? ''}>
+						<span class="w-6 h-6 rounded-full bg-brand-100 text-brand-800 text-[10px] flex items-center justify-center" title={task.assignee_id ?? ''}>
 							{initials(task.assignee_id)}
 						</span>
 					</div>

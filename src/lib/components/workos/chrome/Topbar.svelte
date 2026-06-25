@@ -54,14 +54,14 @@
 						autofocus
 					/>
 				{:else}
-					<button class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center gap-1" onclick={() => (creating = true)}>
+					<button class="text-sm px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground inline-flex items-center gap-1" onclick={() => (creating = true)}>
 						<Icon name="plus" size={15} /> New task
 					</button>
 				{/if}
 			{/if}
 			<div class="flex -space-x-2">
 				{#each assignees as id (id)}
-					<span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
+					<span class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
 				{/each}
 			</div>
 			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true" tabindex="-1"><Icon name="share-2" size={14} /> Share</button>
@@ -74,7 +74,7 @@
 		<div class="flex items-center gap-1 px-4">
 			{#each TABS as t (t.key)}
 				<button
-					class="px-3 py-2.5 text-sm inline-flex items-center gap-1.5 border-b-2 -mb-px {$view === t.key ? 'border-indigo-600 text-indigo-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}"
+					class="px-3 py-2.5 text-sm inline-flex items-center gap-1.5 border-b-2 -mb-px {$view === t.key ? 'border-primary text-primary font-medium' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}"
 					class:opacity-60={!t.live}
 					onclick={() => selectTab(t)}
 					aria-disabled={!t.live}

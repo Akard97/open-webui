@@ -17,6 +17,27 @@
 	--color-gray-850: oklch(0.27 0 0);
 	--color-gray-900: oklch(0.2 0 0);
 	--color-gray-950: oklch(0.16 0 0);
+
+	/*
+	  Osool brand ramp (Pantone 309/315/3125 C teal family + 576 C green).
+	  Generates "brand" and "success" utilities for the WorkOS tool only — no
+	  other route references these classes, so they are inert elsewhere, like
+	  the semantic tokens below. 500 = 3125 C, 600 = 315 C, 700 = 309 C.
+	*/
+	--color-brand-50: oklch(0.975 0.012 216.54);
+	--color-brand-100: oklch(0.945 0.028 216.54);
+	--color-brand-200: oklch(0.9 0.055 216.54);
+	--color-brand-300: oklch(0.84 0.085 216.54);
+	--color-brand-400: oklch(0.73 0.11 210.62);
+	--color-brand-500: oklch(0.6618 0.1147 210.62);
+	--color-brand-600: oklch(0.4899 0.0868 216.54);
+	--color-brand-700: oklch(0.3263 0.0599 221.22);
+	--color-brand-800: oklch(0.3 0.055 221.22);
+	--color-brand-900: oklch(0.23 0.045 221.22);
+	--color-brand-950: oklch(0.18 0.035 221.22);
+	--color-success: oklch(0.6409 0.1158 129.21);
+	--color-success-foreground: oklch(0.985 0 0);
+
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -136,32 +157,32 @@
 	--card-foreground: oklch(0.145 0 0);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
+	--primary: oklch(0.3263 0.0599 221.22); /* Osool 309 C */
 	--primary-foreground: oklch(0.985 0 0);
 	--secondary: oklch(0.97 0 0);
 	--secondary-foreground: oklch(0.205 0 0);
 	--muted: oklch(0.97 0 0);
 	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
+	--accent: oklch(0.945 0.028 216.54); /* light Osool teal tint */
+	--accent-foreground: oklch(0.3263 0.0599 221.22); /* Osool 309 C */
 	--destructive: oklch(0.577 0.245 27.325);
 	--border: oklch(0.922 0 0);
 	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.87 0 0);
-	--chart-2: oklch(0.556 0 0);
-	--chart-3: oklch(0.439 0 0);
-	--chart-4: oklch(0.371 0 0);
-	--chart-5: oklch(0.269 0 0);
+	--ring: oklch(0.4899 0.0868 216.54); /* Osool 315 C */
+	--chart-1: oklch(0.3263 0.0599 221.22); /* Osool 309 C */
+	--chart-2: oklch(0.4899 0.0868 216.54); /* Osool 315 C */
+	--chart-3: oklch(0.6618 0.1147 210.62); /* Osool 3125 C */
+	--chart-4: oklch(0.6409 0.1158 129.21); /* Osool 576 C */
+	--chart-5: oklch(0.84 0.085 216.54);
 	--radius: 0.625rem;
 	--sidebar: oklch(0.985 0 0);
 	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.205 0 0);
+	--sidebar-primary: oklch(0.3263 0.0599 221.22); /* Osool 309 C */
 	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
+	--sidebar-accent: oklch(0.945 0.028 216.54); /* light Osool teal tint */
+	--sidebar-accent-foreground: oklch(0.3263 0.0599 221.22); /* Osool 309 C */
 	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
+	--sidebar-ring: oklch(0.4899 0.0868 216.54); /* Osool 315 C */
 }
 
 /*
@@ -175,31 +196,31 @@
 	--card-foreground: oklch(0.985 0 0);
 	--popover: oklch(0.205 0 0);
 	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.922 0 0);
-	--primary-foreground: oklch(0.205 0 0);
+	--primary: oklch(0.6618 0.1147 210.62); /* Osool 3125 C — pops on dark */
+	--primary-foreground: oklch(0.18 0.035 221.22); /* deep Osool teal */
 	--secondary: oklch(0.269 0 0);
 	--secondary-foreground: oklch(0.985 0 0);
 	--muted: oklch(0.269 0 0);
 	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.269 0 0);
+	--accent: oklch(0.3 0.05 221.22); /* dark Osool teal tint */
 	--accent-foreground: oklch(0.985 0 0);
 	--destructive: oklch(0.704 0.191 22.216);
 	--border: oklch(1 0 0 / 10%);
 	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.87 0 0);
-	--chart-2: oklch(0.556 0 0);
-	--chart-3: oklch(0.439 0 0);
-	--chart-4: oklch(0.371 0 0);
-	--chart-5: oklch(0.269 0 0);
+	--ring: oklch(0.6618 0.1147 210.62); /* Osool 3125 C */
+	--chart-1: oklch(0.6618 0.1147 210.62); /* Osool 3125 C */
+	--chart-2: oklch(0.4899 0.0868 216.54); /* Osool 315 C */
+	--chart-3: oklch(0.73 0.11 210.62);
+	--chart-4: oklch(0.6409 0.1158 129.21); /* Osool 576 C */
+	--chart-5: oklch(0.84 0.085 216.54);
 	--sidebar: oklch(0.205 0 0);
 	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.488 0.243 264.376);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.269 0 0);
+	--sidebar-primary: oklch(0.6618 0.1147 210.62); /* Osool 3125 C */
+	--sidebar-primary-foreground: oklch(0.18 0.035 221.22); /* deep Osool teal */
+	--sidebar-accent: oklch(0.3 0.05 221.22); /* dark Osool teal tint */
 	--sidebar-accent-foreground: oklch(0.985 0 0);
 	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	--sidebar-ring: oklch(0.6618 0.1147 210.62); /* Osool 3125 C */
 }
 
 /*

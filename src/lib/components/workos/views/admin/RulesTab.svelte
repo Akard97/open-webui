@@ -64,7 +64,7 @@
 		/>
 	</div>
 	<div class="flex items-center gap-3">
-		<button class="text-sm px-3 py-1.5 rounded bg-teal-600 text-white" onclick={save}>Save</button>
-		{#if toast}<span class="text-sm text-green-600">{toast}</span>{/if}
+		<button class="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground" onclick={save}>Save</button>
+		{#if toast}<span class="text-sm text-success">{toast}</span>{/if}
 	</div>
 </div>

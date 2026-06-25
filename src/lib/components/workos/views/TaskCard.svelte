@@ -39,7 +39,7 @@
 	<div class="flex items-start gap-2 mb-3">
 		<div class="text-[15px] font-semibold leading-snug flex-1">{task.title}</div>
 		{#if task.status === 'in_progress'}
-			<span class="workos-spin text-indigo-500 flex-none mt-0.5"><Icon name="loader" size={15} /></span>
+			<span class="workos-spin text-brand-500 flex-none mt-0.5"><Icon name="loader" size={15} /></span>
 		{/if}
 		<button
 			class="text-gray-300 hover:text-gray-500 flex-none -mr-1"
@@ -56,7 +56,7 @@
 	<div class="flex items-center gap-2 mb-2.5 text-[13px]">
 		<span class="text-gray-400 flex-none"><Icon name="user" size={15} /></span>
 		{#if task.assignee_id}
-			<span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 text-[10px] font-semibold inline-flex items-center justify-center">{initials(task.assignee_id)}</span>
+			<span class="w-6 h-6 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 text-[10px] font-semibold inline-flex items-center justify-center">{initials(task.assignee_id)}</span>
 		{:else}
 			<span class="text-gray-400">–</span>
 		{/if}

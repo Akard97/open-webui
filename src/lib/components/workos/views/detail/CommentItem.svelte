@@ -34,7 +34,7 @@
 	{#if editing}
 		<textarea class="w-full text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded p-2 min-h-16" bind:value={draft}></textarea>
 		<div class="flex gap-2 mt-1">
-			<button class="text-sm px-3 py-1 rounded bg-teal-600 text-white" onclick={save}>Save</button>
+			<button class="text-sm px-3 py-1 rounded bg-primary text-primary-foreground" onclick={save}>Save</button>
 			<button class="text-sm px-3 py-1 rounded border border-gray-300 dark:border-gray-700" onclick={() => (editing = false)}>Cancel</button>
 		</div>
 	{:else}

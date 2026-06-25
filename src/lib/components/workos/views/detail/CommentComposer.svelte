@@ -41,7 +41,7 @@
 		<button class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-500" title="Attach file" onclick={() => fileInput.click()}><Icon name="plus" size={15} /></button>
 		<input type="file" multiple class="hidden" bind:this={fileInput} onchange={onFiles} />
 		<div class="flex-1"></div>
-		<button class="text-sm px-3 py-1 rounded bg-teal-600 text-white disabled:opacity-50" disabled={!body.trim()} onclick={send}>Comment</button>
+		<button class="text-sm px-3 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50" disabled={!body.trim()} onclick={send}>Comment</button>
 		{#if showMentions}
 			<div class="absolute bottom-9 left-0 z-10 w-56 max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1">
 				{#each members as m (m.id)}

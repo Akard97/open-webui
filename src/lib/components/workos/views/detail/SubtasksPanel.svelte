@@ -51,7 +51,7 @@
 		/>
 	{:else}
 		<button
-			class="inline-flex items-center gap-1.5 text-sm text-teal-600 dark:text-teal-400 hover:underline"
+			class="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
 			onclick={() => (creating = true)}
 		>
 			<Icon name="plus" size={14} /> Add subtask

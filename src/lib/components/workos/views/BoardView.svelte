@@ -12,9 +12,9 @@
 	const STATUS_META: Record<TaskStatus, { color: string; shape: 'dashed' | 'ring' | 'half' | 'check' | 'x' }> = {
 		backlog: { color: '#9ca3af', shape: 'dashed' },
 		todo: { color: '#6b7280', shape: 'ring' },
-		in_progress: { color: '#2563eb', shape: 'half' },
-		in_review: { color: '#7c3aed', shape: 'half' },
-		done: { color: '#16a34a', shape: 'check' },
+		in_progress: { color: '#00a5ba', shape: 'half' }, /* Osool 3125 C */
+		in_review: { color: '#d97706', shape: 'half' }, /* amber — pending review */
+		done: { color: '#769a4a', shape: 'check' }, /* Osool 576 C */
 		canceled: { color: '#9ca3af', shape: 'x' }
 	};
 
@@ -160,7 +160,7 @@
 			/>
 		{:else}
 			<button
-				class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium"
+				class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium"
 				onclick={() => (creatingTop = true)}
 			>
 				<Icon name="plus" size={15} /> Add New
