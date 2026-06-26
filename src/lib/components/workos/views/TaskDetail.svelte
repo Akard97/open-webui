@@ -48,6 +48,7 @@
 	let editingPercent = false;
 	let percentDraft: string | number | null = '';
 	let suppressPercentCommit = false;
+	let focusSink: HTMLElement;
 	let editingDesc = false;
 	let descDraft = '';
 	$: if (t && !editingDesc) descDraft = t.description ?? '';
@@ -148,33 +149,31 @@
 		editingPercent = true;
 	}
 
+	// Single commit funnel for every way the input loses focus (blur, Enter, Escape,
+	// click-outside). Always closes the editor; only saves when not canceled.
 	function commitPercent() {
+		editingPercent = false;
 		if (suppressPercentCommit) {
 			suppressPercentCommit = false;
-			return;
+			return; // Escape: canceled, no save
 		}
-		if (!t) {
-			editingPercent = false;
-			return;
-		}
+		if (!t) return;
 		const v = parsePercentInput(percentDraft);
-		editingPercent = false;
 		if (v === null) return; // empty/invalid: revert, no save
 		if (v !== t.progress) editTask(t.id, { progress: v });
 	}
 
-	function cancelPercent() {
-		suppressPercentCommit = true; // stop the blur that follows from committing
-		editingPercent = false;
-	}
-
+	// Enter/Escape redirect focus to an in-dialog sink BEFORE the input unmounts, so the
+	// dialog's focus trap never reclaims focus to the header (it stays "on nothing").
+	// The blur triggered by focusing the sink runs commitPercent via the input's onblur.
 	function onPercentKey(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			e.preventDefault();
-			commitPercent();
+			focusSink?.focus();
 		} else if (e.key === 'Escape') {
 			e.preventDefault();
-			cancelPercent();
+			suppressPercentCommit = true;
+			focusSink?.focus();
 		}
 	}
 
@@ -401,6 +400,9 @@
 											onclick={startPercentEdit}
 										>{barValue}%</button>
 									{/if}
+									<!-- Off-screen focus sink: receives focus when the percent input closes via Enter/Esc,
+									     so the dialog's focus trap doesn't jump focus to the header. -->
+									<span bind:this={focusSink} tabindex="-1" class="sr-only"></span>
 								</div>
 								{#if planned !== null}
 									<div class="flex items-center gap-4 text-xs">
