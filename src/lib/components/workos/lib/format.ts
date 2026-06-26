@@ -20,6 +20,28 @@ export function isOverdue(
 	return dueDate < now;
 }
 
+/** "Jun 23" — month + day, never any time component. */
+export function formatDateShort(ts: number): string {
+	return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/**
+ * Compact planned window without time. Both ends → "Jun 12 – Jun 20". When only
+ * one side is set, label it so it's unambiguous: "Starts Jun 12" / "Due Jun 20".
+ * Returns null when neither date exists.
+ */
+export function formatDateRange(
+	start: number | null | undefined,
+	end: number | null | undefined
+): string | null {
+	const s = start != null ? formatDateShort(start) : null;
+	const e = end != null ? formatDateShort(end) : null;
+	if (s && e) return `${s} – ${e}`;
+	if (s) return `Starts ${s}`;
+	if (e) return `Due ${e}`;
+	return null;
+}
+
 /** "5 March 2024" — long day-month-year (en-GB gives day-first ordering). */
 export function formatDateLong(ts: number): string {
 	return new Date(ts).toLocaleDateString('en-GB', {
