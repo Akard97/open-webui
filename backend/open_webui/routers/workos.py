@@ -19,6 +19,7 @@ from open_webui.models.workos import (
     CommentModel, ActivityModel, AttachmentModel, NotificationModel,
     parse_mentions, task_change_activities, can_see_workstream,
 )
+from open_webui.models.users import Users
 
 log = logging.getLogger(__name__)
 
@@ -814,6 +815,11 @@ def _actor_name(user) -> str:
     return getattr(user, 'name', None) or user.id
 
 
+async def _recipient_is_admin(uid: str, db) -> bool:
+    u = await Users.get_user_by_id(uid, db=db)
+    return bool(u and u.role == 'admin')
+
+
 async def notify(
     request: Request, db, *, recipients: set, actor, type: str, task, comment_id=None, snippet=None, extra=None,
 ):
@@ -821,6 +827,11 @@ async def notify(
     if not _notif_enabled(request, type):
         return []
     targets = {r for r in recipients if r and r != actor.id}
+    visible = set()
+    for uid in targets:
+        if await can_see_workstream(uid, await _recipient_is_admin(uid, db), task.workstream_id, db=db):
+            visible.add(uid)
+    targets = visible
     if not targets:
         return []
     data = {
