@@ -6,7 +6,7 @@
 	$: parentWorkspace = ws ? $workspaces.find((w) => w.id === ws.workspace_id) : null;
 
 	// Decorative avatar stack: unique assignees on the current board (max 3).
-	$: assignees = Array.from(new Set($tasks.map((t) => t.assignee_id).filter(Boolean))).slice(0, 3) as string[];
+	$: assignees = Array.from(new Set($tasks.flatMap((t) => t.assignee_ids ?? []))).slice(0, 3) as string[];
 
 	const TABS = [
 		{ key: 'overview', label: 'Overview', icon: 'layers', live: false },

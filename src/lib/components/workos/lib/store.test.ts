@@ -7,7 +7,7 @@ vi.mock('./api', () => ({
 	listLabels: vi.fn(async () => []),
 	createTask: vi.fn(async (t, ws, body) => ({
 		id: 'srv-1', workstream_id: ws, team_id: 'tm', number: 1, key: 'OSL-1',
-		title: body.title, status: body.status ?? 'backlog', priority: null, progress: 0,
+		title: body.title, status: body.status ?? 'backlog', priority: null, assignee_ids: [], progress: 0,
 		labels: [], sort_key: 5, created_by_id: 'u1', created_at: 0, updated_at: 0
 	})),
 	updateTask: vi.fn(async (t, id, body) => ({ id, ...body })),
@@ -31,7 +31,7 @@ import type { Task } from './types';
 
 const mk = (over: Partial<Task>): Task => ({
 	id: 'x', workstream_id: 'w1', team_id: 'tm', number: 1, key: 'OSL-1', title: 't',
-	status: 'todo', progress: 0, labels: [], sort_key: 1, created_by_id: 'u1',
+	status: 'todo', assignee_ids: [], progress: 0, labels: [], sort_key: 1, created_by_id: 'u1',
 	created_at: 0, updated_at: 0, ...over
 });
 

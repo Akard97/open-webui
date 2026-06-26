@@ -1,7 +1,8 @@
 <script lang="ts">
 	import Pills from '../ui/Pills.svelte';
+	import AssigneeAvatars from './AssigneeAvatars.svelte';
 	import { STATUS_ORDER, STATUS_LABEL } from '../lib/types';
-	import { tasksByStatus, openTask, directory, initials } from '../lib/store';
+	import { tasksByStatus, openTask, directory } from '../lib/store';
 
 	$: byStatus = $tasksByStatus;
 	$: void $directory; // re-render when names load
@@ -31,9 +32,7 @@
 						<span class="text-xs text-gray-500">
 							{task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
 						</span>
-						<span class="w-6 h-6 rounded-full bg-brand-100 text-brand-800 text-[10px] flex items-center justify-center" title={task.assignee_id ?? ''}>
-							{initials(task.assignee_id)}
-						</span>
+						<AssigneeAvatars ids={task.assignee_ids} size={24} max={3} />
 					</div>
 				{/each}
 			</div>

@@ -151,13 +151,13 @@ export function closeTask(): void {
 
 export async function addTask(
 	workstreamId: string,
-	fields: { title: string; status?: TaskStatus; priority?: TaskPriority | null; assignee_id?: string | null }
+	fields: { title: string; status?: TaskStatus; priority?: TaskPriority | null; assignee_ids?: string[] }
 ): Promise<void> {
 	const tempId = `temp-${Date.now()}-${Math.round(performance.now())}`;
 	const optimistic: Task = {
 		id: tempId, workstream_id: workstreamId, team_id: get(currentTeam)?.id ?? '', number: 0, key: '…',
 		title: fields.title, status: fields.status ?? 'backlog', priority: fields.priority ?? null,
-		assignee_id: fields.assignee_id ?? null, due_date: null, progress: 0, labels: [],
+		assignee_ids: fields.assignee_ids ?? [], due_date: null, progress: 0, labels: [],
 		sort_key: Date.now(), created_by_id: get(user)?.id ?? null, completed_at: null,
 		created_at: Date.now(), updated_at: Date.now()
 	};

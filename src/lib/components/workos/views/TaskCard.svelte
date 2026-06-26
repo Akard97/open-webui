@@ -4,7 +4,8 @@
 	import { cn } from '$lib/components/ui/utils.js';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import type { Task, Label } from '../lib/types';
-	import { initials, displayName, openTask, removeTask, roles, currentTeam } from '../lib/store';
+	import AssigneeAvatars from './AssigneeAvatars.svelte';
+	import { displayName, openTask, removeTask, roles, currentTeam } from '../lib/store';
 	import { user } from '$lib/stores';
 	import { canDeleteTask } from '../lib/roles';
 	import { formatDateRange } from '../lib/format';
@@ -137,9 +138,11 @@
 
 	<!-- Footer: assignee · subtasks · health -->
 	<div class="flex items-center gap-2 pt-2.5 border-t border-gray-100 dark:border-gray-800 text-[12px]">
-		{#if task.assignee_id}
-			<span class="w-6 h-6 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 text-[10px] font-semibold inline-flex items-center justify-center flex-none">{initials(task.assignee_id)}</span>
-			<span class="text-gray-600 dark:text-gray-300 truncate">{displayName(task.assignee_id)}</span>
+		{#if task.assignee_ids?.length}
+			<AssigneeAvatars ids={task.assignee_ids} size={24} max={4} />
+			<span class="text-gray-600 dark:text-gray-300 truncate">
+				{task.assignee_ids.length === 1 ? displayName(task.assignee_ids[0]) : `${task.assignee_ids.length} assignees`}
+			</span>
 		{:else}
 			<span class="text-gray-400">Unassigned</span>
 		{/if}
