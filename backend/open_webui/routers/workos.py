@@ -1124,6 +1124,7 @@ async def list_notifications(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await _require_workos(request, user, db)
+    limit = max(1, min(limit, 200))
     return await Notifications.list_for_user(user.id, unread_only=unread_only, limit=limit, before=before, db=db)
 
 

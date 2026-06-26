@@ -45,3 +45,18 @@ async def test_cannot_demote_last_owner(monkeypatch):
         team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
         r = await c.patch(f"/api/v1/workos/teams/{team['id']}/members/u1", json={'role': 'admin'})
         assert r.status_code == 400, r.text
+
+
+@pytest.mark.asyncio
+async def test_notifications_limit_is_clamped(monkeypatch):
+    from open_webui.models.workos import Notifications
+    captured = {}
+
+    async def _fake_list(user_id, *, unread_only=False, limit=50, before=None, db=None):
+        captured['limit'] = limit
+        return []
+
+    monkeypatch.setattr(Notifications, 'list_for_user', _fake_list)
+    async with _client(monkeypatch, user=U1) as c:
+        await c.get('/api/v1/workos/notifications?limit=99999')
+    assert captured['limit'] == 200
