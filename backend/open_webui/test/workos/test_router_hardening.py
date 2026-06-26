@@ -60,3 +60,40 @@ async def test_notifications_limit_is_clamped(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         await c.get('/api/v1/workos/notifications?limit=99999')
     assert captured['limit'] == 200
+
+
+import io
+
+import open_webui.routers.workos as wr
+from open_webui.test.workos.test_router_teams import U2
+from open_webui.test.workos.test_router_attachments import _FakeStorage, _task as _att_task
+
+
+@pytest.mark.asyncio
+async def test_attachment_rejects_disallowed_mime(monkeypatch):
+    monkeypatch.setattr(wr, 'Storage', _FakeStorage)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _att_task(c)
+        files = {'file': ('x.exe', io.BytesIO(b'MZ'), 'application/x-msdownload')}
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments", files=files)
+        assert r.status_code == 400, r.text
+
+
+@pytest.mark.asyncio
+async def test_attachment_allows_whitelisted_mime(monkeypatch):
+    monkeypatch.setattr(wr, 'Storage', _FakeStorage)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _att_task(c)
+        files = {'file': ('notes.txt', io.BytesIO(b'hi'), 'text/plain')}
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments", files=files)
+        assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_attachment_rejects_foreign_comment_id(monkeypatch):
+    monkeypatch.setattr(wr, 'Storage', _FakeStorage)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _att_task(c)
+        files = {'file': ('notes.txt', io.BytesIO(b'hi'), 'text/plain')}
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments?comment_id=nope", files=files)
+        assert r.status_code == 400, r.text
