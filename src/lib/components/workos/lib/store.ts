@@ -1,4 +1,5 @@
 import { writable, derived, get, type Writable } from 'svelte/store';
+import { toast } from 'svelte-sonner';
 import { browser } from '$app/environment';
 import { socket, user } from '$lib/stores';
 import * as api from './api';
@@ -215,8 +216,14 @@ export async function deleteCommentAction(id: string): Promise<void> {
 
 export async function uploadFiles(taskId: string, files: FileList | File[], commentId?: string): Promise<void> {
 	for (const f of Array.from(files)) {
-		const saved = await api.uploadAttachment(token(), taskId, f, commentId);
-		attachments.update((list) => [...list, saved]);
+		try {
+			const saved = await api.uploadAttachment(token(), taskId, f, commentId);
+			attachments.update((list) => [...list, saved]);
+		} catch (e: any) {
+			const detail = typeof e === 'string' ? e : (e?.detail ?? 'Upload failed');
+			toast.error(`Couldn't upload "${f.name}": ${detail}`);
+			console.error('[workos] attachment upload failed', e);
+		}
 	}
 	void loadTaskDetail(taskId);
 }

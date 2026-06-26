@@ -62,6 +62,9 @@ class LocalStorageProvider(StorageProvider):
         if not contents:
             raise ValueError(ERROR_MESSAGES.EMPTY_CONTENT)
         file_path = os.path.join(UPLOAD_DIR, filename)
+        # Filenames may be namespaced into a subdirectory (e.g. 'workos/<id>_name'),
+        # so ensure the parent directory exists before writing.
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'wb') as f:
             f.write(contents)
         return contents, file_path
@@ -74,12 +77,19 @@ class LocalStorageProvider(StorageProvider):
     @staticmethod
     def delete_file(file_path: str) -> None:
         """Handles deletion of the file from local storage."""
-        filename = os.path.basename(file_path)
-        file_path = os.path.join(UPLOAD_DIR, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
+        # Keys may be namespaced into a subdirectory (e.g. 'workos/<id>_name'),
+        # so resolve the path relative to UPLOAD_DIR while refusing anything that
+        # escapes it (guards against path traversal).
+        upload_root = os.path.abspath(UPLOAD_DIR)
+        rel = os.path.relpath(file_path, UPLOAD_DIR) if os.path.isabs(file_path) else file_path
+        target = os.path.abspath(os.path.join(UPLOAD_DIR, rel))
+        if os.path.commonpath([upload_root, target]) != upload_root:
+            log.warning(f'Refusing to delete {file_path}: outside upload directory.')
+            return
+        if os.path.isfile(target):
+            os.remove(target)
         else:
-            log.warning(f'File {file_path} not found in local storage.')
+            log.warning(f'File {target} not found in local storage.')
 
     @staticmethod
     def delete_all_files() -> None:

@@ -56,6 +56,58 @@ async def test_attachment_upload_list_download_delete(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_attachment_upload_real_local_storage_creates_subdir(monkeypatch, tmp_path):
+    # Reproduces the production bug: the router stores attachments under a
+    # 'workos/<uuid>_<name>' key, but LocalStorageProvider.upload_file did not
+    # create the parent directory, so the real (non-mocked) filesystem write
+    # raised FileNotFoundError -> 500. The fake-storage tests above masked it by
+    # never touching disk; this one exercises the real local provider.
+    from open_webui.storage import provider as sp
+
+    upload_dir = tmp_path / 'uploads'
+    upload_dir.mkdir()
+    monkeypatch.setattr(sp, 'UPLOAD_DIR', str(upload_dir))
+    monkeypatch.setattr(wr, 'Storage', sp.LocalStorageProvider())
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        files = {'file': ('notes.txt', io.BytesIO(b'hello bytes'), 'text/plain')}
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments", files=files)
+        assert r.status_code == 200, r.text
+        # The file must land under the workos/ subdirectory the provider creates.
+        workos_dir = upload_dir / 'workos'
+        assert workos_dir.is_dir(), 'provider must create the nested storage dir'
+        written = list(workos_dir.iterdir())
+        assert len(written) == 1 and written[0].read_bytes() == b'hello bytes'
+
+
+@pytest.mark.asyncio
+async def test_attachment_delete_removes_real_local_file(monkeypatch, tmp_path):
+    # Deleting an attachment must also remove the file from the upload folder.
+    # The real local provider stores under 'workos/<id>_name'; delete_file used to
+    # strip the subdirectory (basename) and so left the file orphaned on disk.
+    from open_webui.storage import provider as sp
+
+    upload_dir = tmp_path / 'uploads'
+    upload_dir.mkdir()
+    monkeypatch.setattr(sp, 'UPLOAD_DIR', str(upload_dir))
+    monkeypatch.setattr(wr, 'Storage', sp.LocalStorageProvider())
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        files = {'file': ('notes.txt', io.BytesIO(b'hello bytes'), 'text/plain')}
+        att = (await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments", files=files)).json()
+        workos_dir = upload_dir / 'workos'
+        written = list(workos_dir.iterdir())
+        assert len(written) == 1
+        on_disk = written[0]
+        assert on_disk.exists()
+
+        r = await c.delete(f"/api/v1/workos/attachments/{att['id']}")
+        assert r.status_code == 200 and r.json()['deleted'] is True
+        assert not on_disk.exists(), 'delete must remove the file from the upload folder'
+        assert list(workos_dir.iterdir()) == []
+
+
+@pytest.mark.asyncio
 async def test_attachment_download_denied_for_non_member(monkeypatch):
     monkeypatch.setattr(wr, 'Storage', _FakeStorage)
     async with _client(monkeypatch, user=U1) as c:
