@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actualProgress, plannedProgress, taskHealth } from './progress';
+import { actualProgress, plannedProgress, taskHealth, pointerToPercent } from './progress';
 import type { Task } from './types';
 
 const baseTask: Task = {
@@ -50,5 +50,38 @@ describe('taskHealth', () => {
 
 	it('marks on track when actual is close enough to planned', () => {
 		expect(taskHealth({ ...baseTask, start_date: 0, due_date: 100, progress: 45 }, 50)).toBe('on_track');
+	});
+});
+
+describe('pointerToPercent', () => {
+	const rect = { left: 100, width: 200 }; // spans clientX 100..300
+
+	it('returns 0 at the left edge', () => {
+		expect(pointerToPercent(100, rect)).toBe(0);
+	});
+
+	it('returns 100 at the right edge', () => {
+		expect(pointerToPercent(300, rect)).toBe(100);
+	});
+
+	it('returns 50 at the midpoint', () => {
+		expect(pointerToPercent(200, rect)).toBe(50);
+	});
+
+	it('clamps to 0 left of the bar', () => {
+		expect(pointerToPercent(40, rect)).toBe(0);
+	});
+
+	it('clamps to 100 right of the bar', () => {
+		expect(pointerToPercent(999, rect)).toBe(100);
+	});
+
+	it('rounds to the nearest integer', () => {
+		expect(pointerToPercent(101, rect)).toBe(1); // 0.5% -> rounds to 1 (Math.round)
+		expect(pointerToPercent(102, { left: 0, width: 300 })).toBe(34); // 102/300=0.34
+	});
+
+	it('returns 0 for a zero-width rect', () => {
+		expect(pointerToPercent(50, { left: 0, width: 0 })).toBe(0);
 	});
 });

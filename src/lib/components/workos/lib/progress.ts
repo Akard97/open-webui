@@ -43,3 +43,12 @@ export const HEALTH_LABEL: Record<TaskHealth, string> = {
 	behind: 'Behind',
 	overdue: 'Overdue'
 };
+
+export function pointerToPercent(
+	clientX: number,
+	rect: { left: number; width: number }
+): number {
+	if (rect.width <= 0) return 0;
+	const fraction = (clientX - rect.left) / rect.width;
+	return Math.max(0, Math.min(100, Math.round(fraction * 100)));
+}
