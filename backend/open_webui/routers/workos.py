@@ -147,11 +147,14 @@ async def directory(request: Request, user=Depends(get_verified_user), db: Async
 
 
 @router.get('/users')
-async def list_users(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
-    # Every app user, so a team owner/admin can add anyone to a team. Unlike
-    # /directory (scoped to your team co-members), this is the full roster — it
-    # powers the "Add a user…" picker that bootstraps team membership.
+async def list_users(
+    request: Request, team_id: str,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    # Full app roster for the team "Add a user…" picker — gated to the people who
+    # can actually add members (team owners/admins, or a global admin).
     await _require_workos(request, user, db)
+    await require_team_role(user, team_id, db, {'owner', 'admin'})
     return await list_all_users()
 
 

@@ -38,7 +38,7 @@
 		if (r.kind === 'members') {
 			[teamMembers, allUsers] = await Promise.all([
 				api.listTeamMembers(token(), r.teamId).catch(() => []).then((ms) => ms.map((m) => ({ user_id: m.user_id, role: m.role }))),
-				api.listAllUsers(token()).catch(() => [])
+				api.listAllUsers(token(), r.teamId).catch(() => [])
 			]);
 		}
 	}
