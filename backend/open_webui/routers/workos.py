@@ -316,12 +316,16 @@ async def require_workspace_visible(user, workspace_id: str, db: AsyncSession):
     return ws
 
 
+async def _is_workspace_manager(user, workspace, db: AsyncSession) -> bool:
+    if (await team_role(user, workspace.team_id, db)) in {'owner', 'admin'}:
+        return True
+    wm = await WorkspaceMembers.get(workspace.id, user.id, db=db)
+    return bool(wm and wm.role == 'admin')
+
+
 async def require_workspace_manage(user, workspace_id: str, db: AsyncSession):
     ws = await require_workspace_visible(user, workspace_id, db)
-    if (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}:
-        return ws
-    wm = await WorkspaceMembers.get(ws.id, user.id, db=db)
-    if wm and wm.role == 'admin':
+    if await _is_workspace_manager(user, ws, db):
         return ws
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Workspace management requires admin.')
 
@@ -612,6 +616,20 @@ async def _validate_assignees(assignee_ids, workstream_id, db):
             )
 
 
+async def require_task_writable(user, task, stream, db: AsyncSession) -> None:
+    if user.role == 'admin':
+        return
+    if task.created_by_id == user.id:
+        return
+    if user.id in (task.assignee_ids or []):
+        return
+    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    if await _is_workspace_manager(user, ws, db):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                        detail='You do not have permission to edit this task.')
+
+
 @router.get('/workstreams/{workstream_id}/tasks')
 async def list_tasks(
     request: Request, workstream_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
@@ -657,7 +675,8 @@ async def update_task(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await _require_workos(request, user, db)
-    task, _ = await require_task_visible(user, task_id, db)
+    task, stream = await require_task_visible(user, task_id, db)
+    await require_task_writable(user, task, stream, db)
     fields = form.model_dump(exclude_none=True)
     _validate_task_fields(fields, current=task.model_dump())
     if 'assignee_ids' in fields:
