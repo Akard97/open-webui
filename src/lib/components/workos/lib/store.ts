@@ -103,6 +103,13 @@ export async function loadBootstrap(): Promise<void> {
 	}
 }
 
+// Refresh just the team-scoped directory (assignee picker source) — e.g. after
+// team membership changes, so newly added members become assignable immediately.
+export async function reloadDirectory(): Promise<void> {
+	const dir = await api.getDirectory(token()).catch(() => []);
+	directory.set(Object.fromEntries(dir.map((u) => [u.id, { name: u.name }])));
+}
+
 export async function selectTeam(id: string): Promise<void> {
 	currentTeamId.set(id);
 	currentWorkstreamId.set(null);

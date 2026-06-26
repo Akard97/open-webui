@@ -125,6 +125,14 @@ async def resolve_user_names(ids: list) -> list:
     return out
 
 
+async def list_all_users() -> list:
+    # Wrapper around the Users DAO so tests can monkeypatch a fast stub.
+    from open_webui.models.users import Users
+
+    result = await Users.get_users()
+    return [{'id': u.id, 'name': u.name} for u in result['users']]
+
+
 @router.get('/directory')
 async def directory(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
     await _require_workos(request, user, db)
@@ -135,6 +143,15 @@ async def directory(request: Request, user=Depends(get_verified_user), db: Async
             ids.add(m.user_id)
     ids.add(user.id)
     return await resolve_user_names(sorted(ids))
+
+
+@router.get('/users')
+async def list_users(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+    # Every app user, so a team owner/admin can add anyone to a team. Unlike
+    # /directory (scoped to your team co-members), this is the full roster — it
+    # powers the "Add a user…" picker that bootstraps team membership.
+    await _require_workos(request, user, db)
+    return await list_all_users()
 
 
 # ──────────────────────────────── bootstrap ────────────────────────────────

@@ -2,7 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import * as api from '../lib/api';
 	import {
-		openModal, token, loadBootstrap, directory
+		openModal, token, loadBootstrap, directory, reloadDirectory
 	} from '../lib/store';
 	import { canManageMembers } from '../lib/roles';
 	import type { TeamRole } from '../lib/types';
@@ -15,19 +15,31 @@
 
 	// Members manager state
 	let teamMembers: { user_id: string; role: string }[] = [];
+	let allUsers: { id: string; name: string }[] = [];
 	let addUserId = '';
 	let addRole: TeamRole = 'member';
 
 	$: req = $openModal;
 	$: if (req) reset(req);
 
+	// Resolve a name from the full roster first (covers just-added members), then
+	// the team-scoped directory, then fall back to the raw id.
+	$: nameOf = (id: string) =>
+		allUsers.find((u) => u.id === id)?.name ?? $directory[id]?.name ?? id;
+	// Users not yet on the team — the only ones worth offering in "Add a user…".
+	$: addableUsers = allUsers.filter((u) => !teamMembers.some((m) => m.user_id === u.id));
+
 	async function reset(r: NonNullable<typeof req>) {
 		name = '';
 		key = '';
 		visibility = 'team';
 		err = '';
+		addUserId = '';
 		if (r.kind === 'members') {
-			teamMembers = (await api.listTeamMembers(token(), r.teamId).catch(() => [])).map((m) => ({ user_id: m.user_id, role: m.role }));
+			[teamMembers, allUsers] = await Promise.all([
+				api.listTeamMembers(token(), r.teamId).catch(() => []).then((ms) => ms.map((m) => ({ user_id: m.user_id, role: m.role }))),
+				api.listAllUsers(token()).catch(() => [])
+			]);
 		}
 	}
 
@@ -62,6 +74,7 @@
 			await api.addTeamMember(token(), teamId, { user_id: addUserId, role: addRole });
 			teamMembers = (await api.listTeamMembers(token(), teamId)).map((m) => ({ user_id: m.user_id, role: m.role }));
 			addUserId = '';
+			await reloadDirectory();
 		} catch (e: any) {
 			err = typeof e === 'string' ? e : (e?.detail ?? 'Could not add member.');
 		}
@@ -75,6 +88,7 @@
 	async function removeMember(teamId: string, userId: string) {
 		await api.removeTeamMember(token(), teamId, userId).catch(() => {});
 		teamMembers = teamMembers.filter((m) => m.user_id !== userId);
+		await reloadDirectory();
 	}
 
 	const TITLES = { team: 'New team', workspace: 'New workspace', workstream: 'New workstream', members: 'Team members' };
@@ -95,7 +109,7 @@
 				<div class="space-y-2 max-h-72 overflow-y-auto">
 					{#each teamMembers as m (m.user_id)}
 						<div class="flex items-center gap-2">
-							<span class="flex-1 text-sm truncate">{$directory[m.user_id]?.name ?? m.user_id}</span>
+							<span class="flex-1 text-sm truncate">{nameOf(m.user_id)}</span>
 							<select class="text-xs border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 bg-transparent" value={m.role} onchange={(e) => changeRole(req.teamId, m.user_id, (e.target as HTMLSelectElement).value as TeamRole)}>
 								<option value="owner">owner</option>
 								<option value="admin">admin</option>
@@ -107,8 +121,8 @@
 				</div>
 				<div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
 					<select class="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-transparent" bind:value={addUserId}>
-						<option value="">Add a user…</option>
-						{#each Object.entries($directory) as [id, u] (id)}<option value={id}>{u.name}</option>{/each}
+						<option value="">{addableUsers.length ? 'Add a user…' : 'No more users to add'}</option>
+						{#each addableUsers as u (u.id)}<option value={u.id}>{u.name}</option>{/each}
 					</select>
 					<select class="text-sm border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-transparent" bind:value={addRole}>
 						<option value="member">member</option>

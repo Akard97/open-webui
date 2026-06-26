@@ -110,6 +110,8 @@ export const deleteLabel = (token: string, id: string) => request<{ deleted: boo
 
 // Directory
 export const getDirectory = (token: string) => request<{ id: string; name: string }[]>(token, '/directory');
+// All app users — for the team-member "Add a user…" picker (bootstraps membership).
+export const listAllUsers = (token: string) => request<{ id: string; name: string }[]>(token, '/users');
 
 // Admin
 export const adminListTeams = (token: string) =>
