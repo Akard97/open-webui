@@ -7,7 +7,7 @@
 	import AssigneeField from './detail/AssigneeField.svelte';
 	import AttachmentsPanel from './detail/AttachmentsPanel.svelte';
 	import SubtasksPanel from './detail/SubtasksPanel.svelte';
-	import { plannedProgress, actualProgress, taskHealth, HEALTH_LABEL } from '../lib/progress';
+	import { plannedProgress, actualProgress, taskHealth, HEALTH_LABEL, pointerToPercent } from '../lib/progress';
 	import CommentItem from './detail/CommentItem.svelte';
 	import CommentComposer from './detail/CommentComposer.svelte';
 	import ActivityItem from './detail/ActivityItem.svelte';
@@ -40,7 +40,11 @@
 	let titleDraft = '';
 	let editingStart = false;
 	let editingDue = false;
-	let editingProgress = false;
+	let barArmed = false;
+	let dragValue: number | null = null;
+	let dragging = false;
+	let barEl: HTMLDivElement | null = null;
+	let lastTaskId: string | null = null;
 	let editingDesc = false;
 	let descDraft = '';
 	$: if (t && !editingDesc) descDraft = t.description ?? '';
@@ -58,6 +62,80 @@
 		: health === 'on_track' ? 'bg-success'
 		: 'bg-primary';
 
+	$: editable = !!t && (t.subtask_total ?? 0) === 0;
+	$: barValue = dragValue ?? actual;
+
+	// Reset interaction state when switching tasks so an armed bar never leaks across tasks.
+	$: if (t && t.id !== lastTaskId) {
+		lastTaskId = t.id;
+		barArmed = false;
+		dragging = false;
+		dragValue = null;
+	}
+
+	function armBar() {
+		if (editable) barArmed = true;
+	}
+
+	function setProgressFromEvent(e: PointerEvent) {
+		if (!barEl) return;
+		dragValue = pointerToPercent(e.clientX, barEl.getBoundingClientRect());
+	}
+
+	function commitDrag() {
+		if (!t || dragValue === null) return;
+		const v = dragValue;
+		dragValue = null;
+		if (v !== t.progress) editTask(t.id, { progress: v });
+	}
+
+	function onBarPointerDown(e: PointerEvent) {
+		if (!editable) return;
+		if (!barArmed) {
+			barArmed = true; // first click only arms; does not change the value
+			return;
+		}
+		dragging = true;
+		(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+		setProgressFromEvent(e);
+	}
+
+	function onBarPointerMove(e: PointerEvent) {
+		if (dragging) setProgressFromEvent(e);
+	}
+
+	function onBarPointerUp(e: PointerEvent) {
+		if (!dragging) return;
+		dragging = false;
+		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+		commitDrag();
+	}
+
+	function onBarKeyDown(e: KeyboardEvent) {
+		if (!editable || !t) return;
+		if (e.key === 'Escape' || e.key === 'Enter') {
+			barArmed = false;
+			return;
+		}
+		if (!barArmed) {
+			if (e.key === ' ' || e.key === 'Spacebar') {
+				e.preventDefault();
+				barArmed = true;
+			}
+			return;
+		}
+		if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+			e.preventDefault();
+			const delta = e.key === 'ArrowRight' ? 1 : -1;
+			const next = Math.max(0, Math.min(100, t.progress + delta));
+			if (next !== t.progress) editTask(t.id, { progress: next });
+		}
+	}
+
+	function onWindowPointerDown(e: PointerEvent) {
+		if (barArmed && barEl && !barEl.contains(e.target as Node)) barArmed = false;
+	}
+
 	function startTitle() {
 		if (t) {
 			titleDraft = t.title;
@@ -74,6 +152,8 @@
 		editTask(t.id, { labels: has ? t.labels.filter((x) => x !== id) : [...t.labels, id] });
 	}
 </script>
+
+<svelte:window onpointerdown={onWindowPointerDown} />
 
 {#if t}
 	<Dialog.Root open={true} onOpenChange={(o) => { if (!o) closeTask(); }}>
@@ -239,18 +319,33 @@
 							<div class="w-full space-y-2">
 								<!-- Combined progress: planned (wide, behind) + actual (thin teal, on top), vertically centered -->
 								<div class="flex items-center gap-2">
-									<div class="relative flex-1 h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+									<div
+										bind:this={barEl}
+										role={editable ? 'slider' : undefined}
+										aria-valuenow={editable ? barValue : undefined}
+										aria-valuemin={editable ? 0 : undefined}
+										aria-valuemax={editable ? 100 : undefined}
+										tabindex={editable ? 0 : undefined}
+										class="relative flex-1 h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 {barArmed ? 'overflow-visible ring-2 ring-primary/40' : 'overflow-hidden'} {editable ? 'cursor-pointer touch-none select-none' : ''}"
+										onpointerdown={editable ? onBarPointerDown : undefined}
+										onpointermove={editable ? onBarPointerMove : undefined}
+										onpointerup={editable ? onBarPointerUp : undefined}
+										onkeydown={editable ? onBarKeyDown : undefined}
+									>
 										{#if planned !== null}
 											<div class="absolute inset-y-0 left-0 bg-gray-300 dark:bg-gray-600 rounded-full" style="width:{planned}%"></div>
 										{/if}
-										<div class="absolute left-0 top-1/2 -translate-y-1/2 h-1 {actualBarColor} rounded-full" style="width:{actual}%"></div>
+										<div class="absolute left-0 top-1/2 -translate-y-1/2 h-1 {actualBarColor} rounded-full" style="width:{barValue}%"></div>
+										{#if barArmed}
+											<div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-primary shadow" style="left:{barValue}%"></div>
+										{/if}
 									</div>
 									<span class="text-sm text-gray-500 w-10 text-right">{actual}%</span>
 								</div>
 								{#if planned !== null}
 									<div class="flex items-center gap-4 text-xs">
 										<span class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
-											<span class="inline-block w-2.5 h-1 rounded-full {actualBarColor}"></span>Actual {actual}%
+											<span class="inline-block w-2.5 h-1 rounded-full {actualBarColor}"></span>Actual {barValue}%
 										</span>
 										<span class="inline-flex items-center gap-1.5 text-gray-400">
 											<span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>Planned {planned}%
@@ -262,23 +357,19 @@
 										{HEALTH_LABEL[health]}
 									</span>
 								{/if}
-								{#if (t.subtask_total ?? 0) === 0 && editingProgress}
-									<div class="flex items-center gap-2">
-										<input
-											type="range" min="0" max="100" step="5" value={t.progress}
-											onchange={(e) => editTask(t.id, { progress: parseInt((e.target as HTMLInputElement).value, 10) })}
-										/>
-										<button class="text-xs text-primary" onclick={() => (editingProgress = false)}>Done</button>
-									</div>
-								{:else if (t.subtask_total ?? 0) === 0}
-									<button
-										type="button"
-										class="inline-flex items-center gap-1.5 text-xs font-medium text-primary rounded-md border border-brand-200 dark:border-brand-800 px-2 py-1 cursor-pointer transition-colors hover:bg-accent"
-										onclick={() => (editingProgress = true)}
-									>
-										<Icon name="pencil" size={12} />
-										Edit progress
-									</button>
+								{#if (t.subtask_total ?? 0) === 0}
+									{#if barArmed}
+										<div class="text-xs text-gray-400">Click or drag the bar to set progress. Press Esc or Enter when done.</div>
+									{:else}
+										<button
+											type="button"
+											class="inline-flex items-center gap-1.5 text-xs font-medium text-primary rounded-md border border-brand-200 dark:border-brand-800 px-2 py-1 cursor-pointer transition-colors hover:bg-accent"
+											onclick={armBar}
+										>
+											<Icon name="pencil" size={12} />
+											Edit progress
+										</button>
+									{/if}
 								{:else}
 									<div class="text-xs text-gray-400">{t.subtask_completed ?? 0}/{t.subtask_total ?? 0} subtasks complete</div>
 								{/if}
