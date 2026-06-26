@@ -45,6 +45,9 @@
 	let dragging = false;
 	let barEl: HTMLDivElement | null = null;
 	let lastTaskId: string | null = null;
+	let editingPercent = false;
+	let percentDraft = '';
+	let suppressPercentCommit = false;
 	let editingDesc = false;
 	let descDraft = '';
 	$: if (t && !editingDesc) descDraft = t.description ?? '';
@@ -71,6 +74,7 @@
 		barArmed = false;
 		dragging = false;
 		dragValue = null;
+		editingPercent = false;
 	}
 
 	function armBar() {
@@ -134,6 +138,50 @@
 
 	function onWindowPointerDown(e: PointerEvent) {
 		if (barArmed && barEl && !barEl.contains(e.target as Node)) barArmed = false;
+	}
+
+	function focusSelect(node: HTMLInputElement) {
+		node.focus();
+		node.select();
+	}
+
+	function startPercentEdit() {
+		if (!editable || !t) return;
+		percentDraft = String(t.progress);
+		suppressPercentCommit = false;
+		editingPercent = true;
+	}
+
+	function commitPercent() {
+		if (suppressPercentCommit) {
+			suppressPercentCommit = false;
+			return;
+		}
+		if (!t) {
+			editingPercent = false;
+			return;
+		}
+		const trimmed = percentDraft.trim();
+		const n = Number(trimmed);
+		editingPercent = false;
+		if (trimmed === '' || Number.isNaN(n)) return; // revert, no save
+		const v = Math.max(0, Math.min(100, Math.round(n)));
+		if (v !== t.progress) editTask(t.id, { progress: v });
+	}
+
+	function cancelPercent() {
+		suppressPercentCommit = true; // stop the blur that follows from saving
+		editingPercent = false;
+	}
+
+	function onPercentKey(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			commitPercent();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			cancelPercent();
+		}
 	}
 
 	function startTitle() {
@@ -340,7 +388,25 @@
 											<div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-primary shadow" style="left:{barValue}%"></div>
 										{/if}
 									</div>
-									<span class="text-sm text-gray-500 w-10 text-right">{actual}%</span>
+									{#if editingPercent}
+										<input
+											type="number"
+											min="0"
+											max="100"
+											class="w-12 text-sm text-right rounded border border-brand-200 dark:border-brand-800 bg-transparent px-1 py-0.5 tabular-nums"
+											bind:value={percentDraft}
+											use:focusSelect
+											onkeydown={onPercentKey}
+											onblur={commitPercent}
+										/>
+									{:else}
+										<button
+											type="button"
+											disabled={!editable}
+											class="text-sm text-gray-500 w-10 text-right tabular-nums {editable ? 'cursor-text hover:text-primary' : 'cursor-default'}"
+											onclick={startPercentEdit}
+										>{barValue}%</button>
+									{/if}
 								</div>
 								{#if planned !== null}
 									<div class="flex items-center gap-4 text-xs">
