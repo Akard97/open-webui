@@ -2,6 +2,7 @@ import pytest
 
 import open_webui.routers.workos as wr
 from open_webui.test.workos.test_router_teams import _client, U1, U2
+from open_webui.test.workos.test_router_task import _stream
 
 
 async def _restricted_task(c):
@@ -54,9 +55,6 @@ async def test_commented_notification_reaches_visible_participant(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         await c.post(f"/api/v1/workos/tasks/{t['id']}/comments", json={'body': 'reply'})
     assert 'u2' in sent
-
-
-from open_webui.test.workos.test_router_task import _stream
 
 
 @pytest.mark.asyncio
