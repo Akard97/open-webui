@@ -603,6 +603,15 @@ def _validate_task_fields(fields: dict, *, current: Optional[dict] = None) -> No
 # ──────────────────────────────── task endpoints ────────────────────────────────
 
 
+async def _validate_assignees(assignee_ids, workstream_id, db):
+    for uid in assignee_ids or []:
+        if not await can_see_workstream(uid, await _recipient_is_admin(uid, db), workstream_id, db=db):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='One or more assignees cannot access this workstream.',
+            )
+
+
 @router.get('/workstreams/{workstream_id}/tasks')
 async def list_tasks(
     request: Request, workstream_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
@@ -621,6 +630,7 @@ async def create_task(
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     _validate_task_fields(form.model_dump())
     team = await require_team_visible(user, (await Workspaces.get_by_id(stream.workspace_id, db=db)).team_id, db)
+    await _validate_assignees(form.assignee_ids, workstream_id, db)
     task = await Tasks.insert(
         workstream_id, team.id, team.key, form.title, user.id,
         description=form.description, status=form.status, priority=form.priority,
@@ -650,6 +660,8 @@ async def update_task(
     task, _ = await require_task_visible(user, task_id, db)
     fields = form.model_dump(exclude_none=True)
     _validate_task_fields(fields, current=task.model_dump())
+    if 'assignee_ids' in fields:
+        await _validate_assignees(fields['assignee_ids'], task.workstream_id, db)
     before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)
     # Auto-delete tags that this edit orphaned (removed here and used by no other task).

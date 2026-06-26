@@ -7,6 +7,8 @@ from open_webui.test.workos.test_router_task import _stream
 
 async def _task(c, **body):
     team, ws, s = await _stream(c)
+    for uid in ('u2', 'u3'):
+        await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': uid, 'role': 'member'})
     t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
                       json={'title': 'T', **body})).json()
     return team, ws, s, t

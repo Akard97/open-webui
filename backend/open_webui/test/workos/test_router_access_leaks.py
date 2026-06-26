@@ -54,3 +54,34 @@ async def test_commented_notification_reaches_visible_participant(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         await c.post(f"/api/v1/workos/tasks/{t['id']}/comments", json={'body': 'reply'})
     assert 'u2' in sent
+
+
+from open_webui.test.workos.test_router_task import _stream
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_assignee_who_cannot_see_workstream(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)  # team-visible; u2 is NOT a member
+        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                         json={'title': 'T', 'assignee_ids': ['u2']})
+        assert r.status_code == 400, r.text
+
+
+@pytest.mark.asyncio
+async def test_create_task_allows_assignee_who_is_team_member(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)
+        await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                         json={'title': 'T', 'assignee_ids': ['u2']})
+        assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_update_task_rejects_unseeable_assignee(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'T'})).json()
+        r = await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u2']})
+        assert r.status_code == 400, r.text
