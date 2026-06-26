@@ -15,15 +15,17 @@ def test_parse_mentions_empty_when_none():
 
 
 def test_task_change_activities_diffs_relevant_fields():
-    before = {'status': 'todo', 'assignee_id': None, 'priority': None,
+    before = {'status': 'todo', 'assignee_ids': [], 'priority': None,
               'due_date': None, 'title': 'A', 'description': None}
-    after = {'status': 'in_progress', 'assignee_id': 'u2', 'priority': 'high',
+    after = {'status': 'in_progress', 'assignee_ids': ['u2'], 'priority': 'high',
              'due_date': 123, 'title': 'A', 'description': None}
     acts = task_change_activities('u1', before, after)
     types = {a['type'] for a in acts}
     assert types == {'status_changed', 'assignee_changed', 'priority_changed', 'due_changed'}
     status = next(a for a in acts if a['type'] == 'status_changed')
     assert status['data'] == {'from': 'todo', 'to': 'in_progress'}
+    assignee = next(a for a in acts if a['type'] == 'assignee_changed')
+    assert assignee['data'] == {'added': ['u2'], 'removed': []}
 
 
 def test_task_change_activities_marks_completed_and_reopened():

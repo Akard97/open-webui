@@ -467,7 +467,7 @@ class WorkosTask(Base):
     description = Column(Text, nullable=True)
     status = Column(Text, default='backlog')
     priority = Column(Text, nullable=True)
-    assignee_id = Column(Text, nullable=True)
+    assignee_ids = Column(JSON, default=list)
     start_date = Column(BigInteger, nullable=True)
     due_date = Column(BigInteger, nullable=True)
     progress = Column(Integer, default=0)
@@ -516,7 +516,7 @@ class TaskModel(BaseModel):
     description: Optional[str] = None
     status: str
     priority: Optional[str] = None
-    assignee_id: Optional[str] = None
+    assignee_ids: list = []
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     progress: int
@@ -638,7 +638,7 @@ class TasksDao:
     async def insert(
         self, workstream_id: str, team_id: str, team_key: str, title: str, created_by_id: Optional[str],
         *, description: Optional[str] = None, status: str = 'backlog', priority: Optional[str] = None,
-        assignee_id: Optional[str] = None, start_date: Optional[int] = None,
+        assignee_ids: Optional[list] = None, start_date: Optional[int] = None,
         due_date: Optional[int] = None, labels: Optional[list] = None,
         db: Optional[AsyncSession] = None,
     ) -> TaskModel:
@@ -648,7 +648,7 @@ class TasksDao:
             row = WorkosTask(
                 id=_id(), workstream_id=workstream_id, team_id=team_id, number=number,
                 key=f'{team_key}-{number}', title=title, description=description, status=status,
-                priority=priority, assignee_id=assignee_id, start_date=start_date,
+                priority=priority, assignee_ids=assignee_ids or [], start_date=start_date,
                 due_date=due_date, progress=0,
                 labels=labels or [], sort_key=float(now), created_by_id=created_by_id,
                 completed_at=now if status == 'done' else None, created_at=now, updated_at=now,
@@ -827,7 +827,7 @@ def parse_mentions(body: str) -> list:
 
 _ACTIVITY_FIELDS = {
     'status': 'status_changed',
-    'assignee_id': 'assignee_changed',
+    'assignee_ids': 'assignee_changed',
     'priority': 'priority_changed',
     'start_date': 'start_changed',
     'due_date': 'due_changed',
@@ -841,7 +841,12 @@ def task_change_activities(actor_id: str, before: dict, after: dict) -> list:
     acts: list = []
     for field, atype in _ACTIVITY_FIELDS.items():
         if field in after and after[field] != before.get(field):
-            acts.append({'type': atype, 'data': {'from': before.get(field), 'to': after[field]}})
+            if field == 'assignee_ids':
+                b, a = before.get(field) or [], after[field] or []
+                data = {'added': [x for x in a if x not in b], 'removed': [x for x in b if x not in a]}
+            else:
+                data = {'from': before.get(field), 'to': after[field]}
+            acts.append({'type': atype, 'data': data})
     # Completion transitions get their own entry in addition to status_changed.
     if 'status' in after and after['status'] != before.get('status'):
         if after['status'] == 'done':

@@ -60,7 +60,7 @@ async def seed_workos_demo() -> None:
 
     for title, st, prio, prog in DEMO_TASKS:
         t = await Tasks.insert(
-            platform.id, team.id, team.key, title, owner_id, status=st, priority=prio, assignee_id=owner_id
+            platform.id, team.id, team.key, title, owner_id, status=st, priority=prio, assignee_ids=[owner_id]
         )
         if prog:
             await Tasks.update_fields(t.id, {'progress': prog})

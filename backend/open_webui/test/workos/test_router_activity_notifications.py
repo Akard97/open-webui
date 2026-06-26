@@ -32,7 +32,7 @@ async def test_assigning_user_notifies_assignee(monkeypatch):
     monkeypatch.setattr(wr, 'emit_users', _eu)
     async with _client(monkeypatch, user=U1) as c:
         _, _, _, t = await _task(c)
-        await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_id': 'u2'})
+        await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u2']})
     assert ('workos:notification.created', ('u2',), 'assigned') in sent
 
 

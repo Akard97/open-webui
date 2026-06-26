@@ -518,7 +518,7 @@ class TaskCreateForm(BaseModel):
     description: Optional[str] = None
     status: str = 'backlog'
     priority: Optional[str] = None
-    assignee_id: Optional[str] = None
+    assignee_ids: Optional[list] = None
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     labels: Optional[list] = None
@@ -529,7 +529,7 @@ class TaskUpdateForm(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     priority: Optional[str] = None
-    assignee_id: Optional[str] = None
+    assignee_ids: Optional[list] = None
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     progress: Optional[int] = None
@@ -606,9 +606,11 @@ async def create_task(
     task = await Tasks.insert(
         workstream_id, team.id, team.key, form.title, user.id,
         description=form.description, status=form.status, priority=form.priority,
-        assignee_id=form.assignee_id, start_date=form.start_date, due_date=form.due_date, labels=form.labels, db=db,
+        assignee_ids=form.assignee_ids, start_date=form.start_date, due_date=form.due_date, labels=form.labels, db=db,
     )
     await emit_event('workos:task.created', f'workos:workstream:{workstream_id}', task.model_dump())
+    if task.assignee_ids:
+        await notify(request, db, recipients=set(task.assignee_ids), actor=user, type='assigned', task=task)
     return task
 
 
@@ -645,10 +647,11 @@ async def update_task(
         await _emit_task_room('workos:activity.created', updated,
                               {**row.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id})
     # Notifications: assignment + status change.
-    if 'assignee_id' in fields and updated.assignee_id and updated.assignee_id != before.get('assignee_id'):
-        await notify(request, db, recipients={updated.assignee_id}, actor=user, type='assigned', task=updated)
+    if 'assignee_ids' in fields and (updated.assignee_ids or []) != (before.get('assignee_ids') or []):
+        if updated.assignee_ids:
+            await notify(request, db, recipients=set(updated.assignee_ids), actor=user, type='assigned', task=updated)
     if 'status' in fields and updated.status != before.get('status'):
-        await notify(request, db, recipients={updated.created_by_id, updated.assignee_id}, actor=user,
+        await notify(request, db, recipients={updated.created_by_id, *(updated.assignee_ids or [])}, actor=user,
                      type='status_changed', task=updated,
                      extra={'from': before.get('status'), 'to': updated.status})
     return {**updated.model_dump(), 'deleted_label_ids': deleted_label_ids}
@@ -820,12 +823,11 @@ async def notify(
 
 
 async def _participants(task, db) -> set:
-    """Creator + assignee + distinct comment authors + users mentioned on existing comments."""
+    """Creator + assignees + distinct comment authors + users mentioned on existing comments."""
     out: set = set()
     if task.created_by_id:
         out.add(task.created_by_id)
-    if task.assignee_id:
-        out.add(task.assignee_id)
+    out.update(task.assignee_ids or [])
     for com in await Comments.list_for_task(task.id, db=db):
         out.add(com.user_id)
         out.update(com.mentions or [])
