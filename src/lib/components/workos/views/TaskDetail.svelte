@@ -19,7 +19,7 @@
 		STATUS_ORDER, STATUS_LABEL, PRIORITY_ORDER, type TaskStatus, type TaskPriority
 	} from '../lib/types';
 	import { formatDateLong } from '../lib/format';
-	import { selectedTask, closeTask, editTask, labels, comments, activity } from '../lib/store';
+	import { selectedTask, closeTask, editTask, labels, comments, activity, createLabel } from '../lib/store';
 
 	$: t = $selectedTask;
 	$: sortedComments = [...$comments].sort((a, b) => a.created_at - b.created_at);
@@ -192,6 +192,35 @@
 		const has = t.labels.includes(id);
 		editTask(t.id, { labels: has ? t.labels.filter((x) => x !== id) : [...t.labels, id] });
 	}
+
+	// Tag picker search + create-new state.
+	let labelQuery = '';
+	$: filteredLabels = $labels.filter((l) =>
+		l.name.toLowerCase().includes(labelQuery.trim().toLowerCase())
+	);
+	let creatingLabel = false;
+	async function createTagFromQuery() {
+		const name = labelQuery.trim();
+		if (!name || creatingLabel) return;
+		creatingLabel = true;
+		try {
+			const created = await createLabel(name);
+			if (created && t) {
+				toggleLabel(created.id);
+				labelQuery = '';
+			}
+		} finally {
+			creatingLabel = false;
+		}
+	}
+	function onLabelSearchKey(e: KeyboardEvent) {
+		// Block the menu's typeahead from stealing focus/keystrokes from the input.
+		e.stopPropagation();
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			createTagFromQuery();
+		}
+	}
 </script>
 
 <svelte:window onpointerdown={onWindowPointerDown} />
@@ -336,27 +365,54 @@
 									<Pills label={l} size="md" />
 								{/each}
 								<DropdownMenu.Root>
-									<DropdownMenu.Trigger class="inline-flex items-center gap-1 text-xs text-gray-400 rounded-md px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:text-primary">
+									<DropdownMenu.Trigger class="inline-flex items-center justify-center gap-1 text-xs text-gray-400 rounded-md border border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:text-primary {t.labels.length ? 'h-6 w-6 p-0' : 'h-6 px-1.5'}">
 										<Icon name="plus" size={12} />{#if !t.labels.length}<span>Add tags</span>{/if}
 									</DropdownMenu.Trigger>
-									<DropdownMenu.Content class="max-h-64 overflow-y-auto">
-										{#each $labels as l (l.id)}
-											<DropdownMenu.Item closeOnSelect={false} onSelect={() => toggleLabel(l.id)}>
-												<span class="inline-flex items-center gap-2">
-													<span class="w-3.5 inline-flex">{#if t.labels.includes(l.id)}<Icon name="check" size={13} />{/if}</span>
-													<span class="w-2 h-2 rounded-full" style="background:{l.color}"></span>
-													{l.name}
-												</span>
-											</DropdownMenu.Item>
-										{/each}
-										{#if !$labels.length}<DropdownMenu.Item disabled>No labels yet</DropdownMenu.Item>{/if}
+									<DropdownMenu.Content class="w-64 p-0">
+										<!-- Sticky top: search + always-present create button -->
+										<div class="p-1.5 border-b border-gray-100 dark:border-gray-800">
+											<input
+												type="text"
+												placeholder="Search or create a tag…"
+												class="w-full text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1 outline-none focus:border-primary"
+												bind:value={labelQuery}
+												onkeydown={onLabelSearchKey}
+											/>
+										</div>
+										<button
+											type="button"
+											disabled={!labelQuery.trim() || creatingLabel}
+											class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+											onclick={createTagFromQuery}
+										>
+											<Icon name="plus" size={14} />
+											<span class="truncate">
+												{#if labelQuery.trim()}Create “{labelQuery.trim()}”{:else}Type a name to create a tag{/if}
+											</span>
+										</button>
+										<div class="max-h-56 overflow-y-auto border-t border-gray-100 dark:border-gray-800 py-1">
+											{#each filteredLabels as l (l.id)}
+												<DropdownMenu.Item closeOnSelect={false} onSelect={() => toggleLabel(l.id)}>
+													<span class="inline-flex items-center gap-2">
+														<span class="w-3.5 inline-flex">{#if t.labels.includes(l.id)}<Icon name="check" size={13} />{/if}</span>
+														<span class="w-2 h-2 rounded-full" style="background:{l.color}"></span>
+														{l.name}
+													</span>
+												</DropdownMenu.Item>
+											{/each}
+											{#if $labels.length && !filteredLabels.length}
+												<DropdownMenu.Item disabled>No matching tags</DropdownMenu.Item>
+											{:else if !$labels.length}
+												<DropdownMenu.Item disabled>No tags yet</DropdownMenu.Item>
+											{/if}
+										</div>
 									</DropdownMenu.Content>
 								</DropdownMenu.Root>
 							</div>
 						</PropertyRow>
 
 						<!-- Progress -->
-						<PropertyRow icon="loader" label="Progress">
+						<PropertyRow icon="loader" label="Progress" align="start">
 							<div class="w-full space-y-2">
 								<!-- Combined progress: planned (wide, behind) + actual (thin teal, on top), vertically centered -->
 								<div class="flex items-center gap-2">

@@ -110,6 +110,24 @@ export async function selectTeam(id: string): Promise<void> {
 	labels.set(await api.listLabels(token(), id).catch(() => []));
 }
 
+// Rotating palette so freshly created tags don't all share one color.
+const LABEL_PALETTE = ['#00a5ba', '#769a4a', '#d97706', '#dc2626', '#7c3aed', '#0ea5e9', '#db2777', '#ca8a04'];
+
+export async function createLabel(name: string): Promise<Label | null> {
+	const team = get(currentTeam);
+	const trimmed = name.trim();
+	if (!team || !trimmed) return null;
+	const color = LABEL_PALETTE[get(labels).length % LABEL_PALETTE.length];
+	try {
+		const created = await api.createLabel(token(), team.id, { name: trimmed, color });
+		labels.update((ls) => [...ls, created]);
+		return created;
+	} catch {
+		toast.error('Failed to create tag');
+		return null;
+	}
+}
+
 export async function selectWorkstream(id: string): Promise<void> {
 	const prev = get(currentWorkstreamId);
 	if (prev && prev !== id) unsubscribeRoom(prev);
@@ -158,11 +176,20 @@ export async function editTask(id: string, fields: Partial<Task>): Promise<void>
 	tasks.update((list) => list.map((t) => (t.id === id ? { ...t, ...fields } : t)));
 	try {
 		const saved = await api.updateTask(token(), id, fields as any);
-		tasks.update((list) => list.map((t) => (t.id === id ? saved : t)));
+		const { deleted_label_ids, ...task } = saved;
+		dropLabels(deleted_label_ids);
+		tasks.update((list) => list.map((t) => (t.id === id ? (task as Task) : t)));
 	} catch (e) {
 		if (before) tasks.update((list) => list.map((t) => (t.id === id ? before : t)));
 		throw e;
 	}
+}
+
+// Drop tags the server auto-deleted (orphaned by an unassign or task delete) from the picker.
+function dropLabels(ids: string[] | undefined): void {
+	if (!ids?.length) return;
+	const gone = new Set(ids);
+	labels.update((ls) => ls.filter((l) => !gone.has(l.id)));
 }
 
 export async function moveTask(
@@ -177,7 +204,8 @@ export async function removeTask(id: string): Promise<void> {
 	tasks.update((list) => list.filter((t) => t.id !== id));
 	if (get(selectedTaskId) === id) selectedTaskId.set(null);
 	try {
-		await api.deleteTask(token(), id);
+		const res = await api.deleteTask(token(), id);
+		dropLabels(res.deleted_label_ids);
 	} catch (e) {
 		tasks.set(before); // rollback
 		throw e;

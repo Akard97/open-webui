@@ -581,6 +581,35 @@ class LabelsDao:
             await db.commit()
             return True
 
+    async def prune_unused(
+        self, team_id: str, candidate_ids: list[str], db: Optional[AsyncSession] = None
+    ) -> list[str]:
+        """Delete any of ``candidate_ids`` no longer referenced by a task in the team.
+
+        Drives auto-cleanup of tags that become orphaned when unassigned from a task
+        or when a task is deleted. One scan of the team's task-label arrays (bounded by
+        team size, portable across SQLite/Postgres) decides which candidates survive.
+        Returns the ids actually deleted.
+        """
+        candidates = [c for c in dict.fromkeys(candidate_ids) if c]
+        if not candidates:
+            return []
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosTask.labels).filter_by(team_id=team_id))
+            used: set = set()
+            for labels in res.scalars().all():
+                if labels:
+                    used.update(labels)
+            orphans = [c for c in candidates if c not in used]
+            if orphans:
+                await db.execute(
+                    delete(WorkosLabel).where(
+                        WorkosLabel.id.in_(orphans), WorkosLabel.team_id == team_id
+                    )
+                )
+                await db.commit()
+            return orphans
+
 
 class TasksDao:
     async def _with_counts(self, rows: list[WorkosTask], db: AsyncSession) -> list[TaskModel]:

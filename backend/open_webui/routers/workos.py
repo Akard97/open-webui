@@ -632,6 +632,12 @@ async def update_task(
     _validate_task_fields(fields, current=task.model_dump())
     before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)
+    # Auto-delete tags that this edit orphaned (removed here and used by no other task).
+    deleted_label_ids: list[str] = []
+    if 'labels' in fields:
+        removed = [l for l in (before.get('labels') or []) if l not in (updated.labels or [])]
+        if removed:
+            deleted_label_ids = await Labels.prune_unused(updated.team_id, removed, db=db)
     await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
     # Activity log for the changed fields.
     for act in task_change_activities(user.id, before, updated.model_dump()):
@@ -645,7 +651,7 @@ async def update_task(
         await notify(request, db, recipients={updated.created_by_id, updated.assignee_id}, actor=user,
                      type='status_changed', task=updated,
                      extra={'from': before.get('status'), 'to': updated.status})
-    return updated
+    return {**updated.model_dump(), 'deleted_label_ids': deleted_label_ids}
 
 
 @router.delete('/tasks/{task_id}')
@@ -659,8 +665,10 @@ async def delete_task(
     if not is_admin and task.created_by_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the creator or an admin may delete.')
     deleted = await Tasks.delete(task_id, db=db)
+    # Auto-delete tags this task held that no surviving task references.
+    deleted_label_ids = await Labels.prune_unused(task.team_id, task.labels or [], db=db)
     await emit_event('workos:task.deleted', f'workos:workstream:{task.workstream_id}', {'id': task_id, 'workstream_id': task.workstream_id})
-    return {'deleted': deleted}
+    return {'deleted': deleted, 'deleted_label_ids': deleted_label_ids}
 
 
 # ──────────────────────────────── label endpoints ────────────────────────────────
@@ -681,7 +689,8 @@ async def create_label(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await _require_workos(request, user, db)
-    await require_team_role(user, team_id, db, {'owner', 'admin'})
+    # Any member who can see the team may create tags (tags are a shared, lightweight resource).
+    await require_team_visible(user, team_id, db)
     return await Labels.insert(team_id, form.name, form.color, db=db)
 
 

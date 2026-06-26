@@ -95,8 +95,10 @@ export const updateTask = (
 	token: string, id: string,
 	body: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'start_date' | 'due_date'
 		| 'progress' | 'labels' | 'sort_key'>>
-) => request<Task>(token, `/tasks/${id}`, 'PATCH', body);
-export const deleteTask = (token: string, id: string) => request<{ deleted: boolean }>(token, `/tasks/${id}`, 'DELETE');
+	// `deleted_label_ids`: tags this edit orphaned and the server auto-removed.
+) => request<Task & { deleted_label_ids?: string[] }>(token, `/tasks/${id}`, 'PATCH', body);
+export const deleteTask = (token: string, id: string) =>
+	request<{ deleted: boolean; deleted_label_ids?: string[] }>(token, `/tasks/${id}`, 'DELETE');
 
 // Labels
 export const listLabels = (token: string, teamId: string) => request<Label[]>(token, `/teams/${teamId}/labels`);

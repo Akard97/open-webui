@@ -48,6 +48,61 @@ async def test_labels_crud(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_any_member_can_create_tag(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
+        assert (await c.post(f"/api/v1/workos/teams/{team['id']}/members",
+                             json={'user_id': 'u2', 'role': 'member'})).status_code == 200
+    # u2 is a plain member (not owner/admin) and may still create a tag.
+    async with _client(monkeypatch, user=U2) as c:
+        r = await c.post(f"/api/v1/workos/teams/{team['id']}/labels", json={'name': 'frontend', 'color': 'green'})
+        assert r.status_code == 200, r.text
+        assert r.json()['name'] == 'frontend'
+
+
+@pytest.mark.asyncio
+async def test_unused_tag_auto_deleted_on_unassign(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)
+        lab = (await c.post(f"/api/v1/workos/teams/{team['id']}/labels",
+                            json={'name': 'backend', 'color': 'cyan'})).json()
+        a = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'A', 'labels': [lab['id']]})).json()
+        b = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'B', 'labels': [lab['id']]})).json()
+
+        # Removing the tag from A leaves it on B, so it survives.
+        r = await c.patch(f"/api/v1/workos/tasks/{a['id']}", json={'labels': []})
+        assert r.json()['deleted_label_ids'] == []
+        assert [x['id'] for x in (await c.get(f"/api/v1/workos/teams/{team['id']}/labels")).json()] == [lab['id']]
+
+        # Removing it from B orphans it -> auto-deleted and reported back.
+        r = await c.patch(f"/api/v1/workos/tasks/{b['id']}", json={'labels': []})
+        assert r.json()['deleted_label_ids'] == [lab['id']]
+        assert (await c.get(f"/api/v1/workos/teams/{team['id']}/labels")).json() == []
+
+
+@pytest.mark.asyncio
+async def test_unused_tag_auto_deleted_on_task_delete(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)
+        shared = (await c.post(f"/api/v1/workos/teams/{team['id']}/labels",
+                               json={'name': 'shared', 'color': 'cyan'})).json()
+        solo = (await c.post(f"/api/v1/workos/teams/{team['id']}/labels",
+                             json={'name': 'solo', 'color': 'green'})).json()
+        keep = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                             json={'title': 'Keep', 'labels': [shared['id']]})).json()
+        gone = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                             json={'title': 'Gone', 'labels': [shared['id'], solo['id']]})).json()
+
+        # Deleting 'Gone' orphans only 'solo'; 'shared' is still on 'Keep'.
+        r = await c.delete(f"/api/v1/workos/tasks/{gone['id']}")
+        assert r.json()['deleted'] is True
+        assert r.json()['deleted_label_ids'] == [solo['id']]
+        assert [x['id'] for x in (await c.get(f"/api/v1/workos/teams/{team['id']}/labels")).json()] == [shared['id']]
+
+
+@pytest.mark.asyncio
 async def test_non_member_cannot_create_task(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
