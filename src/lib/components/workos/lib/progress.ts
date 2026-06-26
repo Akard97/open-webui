@@ -52,3 +52,15 @@ export function pointerToPercent(
 	const fraction = (clientX - rect.left) / rect.width;
 	return Math.max(0, Math.min(100, Math.round(fraction * 100)));
 }
+
+// Parse a progress value typed into the percent input. The input is bound to a
+// `type="number"` field, so the raw value may already be a number (or null when
+// empty) — accept string, number, null, or undefined. Returns an integer clamped
+// to 0-100, or null when the input is empty/non-numeric (caller should revert).
+export function parsePercentInput(raw: unknown): number | null {
+	const text = String(raw ?? '').trim();
+	if (text === '') return null;
+	const n = Number(text);
+	if (Number.isNaN(n)) return null;
+	return clampPercent(n);
+}

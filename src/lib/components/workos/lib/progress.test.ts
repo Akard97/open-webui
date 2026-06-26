@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actualProgress, plannedProgress, taskHealth, pointerToPercent } from './progress';
+import { actualProgress, plannedProgress, taskHealth, pointerToPercent, parsePercentInput } from './progress';
 import type { Task } from './types';
 
 const baseTask: Task = {
@@ -83,5 +83,40 @@ describe('pointerToPercent', () => {
 
 	it('returns 0 for a zero-width rect', () => {
 		expect(pointerToPercent(50, { left: 0, width: 0 })).toBe(0);
+	});
+});
+
+describe('parsePercentInput', () => {
+	it('parses a numeric string', () => {
+		expect(parsePercentInput('50')).toBe(50);
+	});
+
+	it('trims surrounding whitespace', () => {
+		expect(parsePercentInput('  80 ')).toBe(80);
+	});
+
+	it('accepts a number (number-input bindings coerce to number)', () => {
+		expect(parsePercentInput(73)).toBe(73);
+	});
+
+	it('clamps above 100 and below 0', () => {
+		expect(parsePercentInput('150')).toBe(100);
+		expect(parsePercentInput('-5')).toBe(0);
+	});
+
+	it('rounds fractional input', () => {
+		expect(parsePercentInput('50.7')).toBe(51);
+		expect(parsePercentInput('50.4')).toBe(50);
+	});
+
+	it('returns null for empty, whitespace, or non-numeric input', () => {
+		expect(parsePercentInput('')).toBeNull();
+		expect(parsePercentInput('   ')).toBeNull();
+		expect(parsePercentInput('abc')).toBeNull();
+	});
+
+	it('returns null for null/undefined (empty number input)', () => {
+		expect(parsePercentInput(null)).toBeNull();
+		expect(parsePercentInput(undefined)).toBeNull();
 	});
 });

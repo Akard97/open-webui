@@ -7,7 +7,7 @@
 	import AssigneeField from './detail/AssigneeField.svelte';
 	import AttachmentsPanel from './detail/AttachmentsPanel.svelte';
 	import SubtasksPanel from './detail/SubtasksPanel.svelte';
-	import { plannedProgress, actualProgress, taskHealth, HEALTH_LABEL, pointerToPercent } from '../lib/progress';
+	import { plannedProgress, actualProgress, taskHealth, HEALTH_LABEL, pointerToPercent, parsePercentInput } from '../lib/progress';
 	import CommentItem from './detail/CommentItem.svelte';
 	import CommentComposer from './detail/CommentComposer.svelte';
 	import ActivityItem from './detail/ActivityItem.svelte';
@@ -46,7 +46,7 @@
 	let barEl: HTMLDivElement | null = null;
 	let lastTaskId: string | null = null;
 	let editingPercent = false;
-	let percentDraft = '';
+	let percentDraft: string | number | null = '';
 	let suppressPercentCommit = false;
 	let editingDesc = false;
 	let descDraft = '';
@@ -75,10 +75,6 @@
 		dragging = false;
 		dragValue = null;
 		editingPercent = false;
-	}
-
-	function armBar() {
-		if (editable) barArmed = true;
 	}
 
 	function setProgressFromEvent(e: PointerEvent) {
@@ -161,11 +157,9 @@
 			editingPercent = false;
 			return;
 		}
-		const trimmed = percentDraft.trim();
-		const n = Number(trimmed);
+		const v = parsePercentInput(percentDraft);
 		editingPercent = false;
-		if (trimmed === '' || Number.isNaN(n)) return; // revert, no save
-		const v = Math.max(0, Math.min(100, Math.round(n)));
+		if (v === null) return; // empty/invalid: revert, no save
 		if (v !== t.progress) editTask(t.id, { progress: v });
 	}
 
@@ -426,15 +420,6 @@
 								{#if (t.subtask_total ?? 0) === 0}
 									{#if barArmed}
 										<div class="text-xs text-gray-400">Click or drag the bar to set progress. Press Esc or Enter when done.</div>
-									{:else}
-										<button
-											type="button"
-											class="inline-flex items-center gap-1.5 text-xs font-medium text-primary rounded-md border border-brand-200 dark:border-brand-800 px-2 py-1 cursor-pointer transition-colors hover:bg-accent"
-											onclick={armBar}
-										>
-											<Icon name="pencil" size={12} />
-											Edit progress
-										</button>
 									{/if}
 								{:else}
 									<div class="text-xs text-gray-400">{t.subtask_completed ?? 0}/{t.subtask_total ?? 0} subtasks complete</div>
