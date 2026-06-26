@@ -944,7 +944,7 @@ async def create_comment(
     # Notification fan-out: mentioned first, then commented (minus those mentioned).
     mentioned = set()
     for m in mentions:
-        if await can_see_workstream(m, False, task.workstream_id, db=db):
+        if await can_see_workstream(m, await _recipient_is_admin(m, db), task.workstream_id, db=db):
             mentioned.add(m)
     await notify(request, db, recipients=mentioned, actor=user, type='mentioned', task=task,
                  comment_id=comment.id, snippet=body)
