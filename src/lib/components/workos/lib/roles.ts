@@ -43,3 +43,26 @@ export function canDeleteAttachment(
 ): boolean {
 	return att.created_by_id === userId || role === 'owner' || role === 'admin';
 }
+
+export function canEditTask(
+	task: Task,
+	userId: string,
+	teamRole: TeamRole | undefined,
+	workspaceRole: WorkspaceRole | undefined
+): boolean {
+	return (
+		task.created_by_id === userId ||
+		(task.assignee_ids ?? []).includes(userId) ||
+		canManageWorkspace(teamRole, workspaceRole)
+	);
+}
+
+export function canEditSubtask(
+	subtask: { created_by_id?: string | null },
+	task: Task,
+	userId: string,
+	teamRole: TeamRole | undefined,
+	workspaceRole: WorkspaceRole | undefined
+): boolean {
+	return subtask.created_by_id === userId || canEditTask(task, userId, teamRole, workspaceRole);
+}

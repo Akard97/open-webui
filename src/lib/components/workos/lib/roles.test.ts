@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
-	canManageTeam, canManageMembers, canCreateWorkspace, canManageWorkspace, canDeleteTask, canUseAdmin
+	canManageTeam, canManageMembers, canCreateWorkspace, canManageWorkspace, canDeleteTask, canUseAdmin,
+	canEditTask, canEditSubtask
 } from './roles';
 import type { Task } from './types';
 
 const task = (over: Partial<Task> = {}): Task => ({
 	id: 't', workstream_id: 'w', team_id: 'tm', number: 1, key: 'OSL-1', title: 'x',
 	status: 'todo', progress: 0, labels: [], sort_key: 1, created_by_id: 'u1',
-	created_at: 0, updated_at: 0, ...over
+	assignee_ids: [], created_at: 0, updated_at: 0, ...over
 });
 
 describe('roles', () => {
@@ -36,5 +37,15 @@ describe('roles', () => {
 		expect(canUseAdmin({ role: 'admin', permissions: {} })).toBe(true);
 		expect(canUseAdmin({ role: 'user', permissions: { features: { workos_admin: true } } })).toBe(true);
 		expect(canUseAdmin({ role: 'user', permissions: { features: { workos_admin: false } } })).toBe(false);
+	});
+	it('task editing: creator, assignee, or workspace manager', () => {
+		expect(canEditTask(task({ created_by_id: 'u1' }), 'u1', 'member', undefined)).toBe(true);
+		expect(canEditTask(task({ created_by_id: 'u9', assignee_ids: ['u1'] }), 'u1', 'member', undefined)).toBe(true);
+		expect(canEditTask(task({ created_by_id: 'u9', assignee_ids: [] }), 'u1', 'member', 'member')).toBe(false);
+		expect(canEditTask(task({ created_by_id: 'u9' }), 'u1', 'admin', undefined)).toBe(true);
+	});
+	it('subtask editing: subtask author or task editor', () => {
+		expect(canEditSubtask({ created_by_id: 'u1' }, task({ created_by_id: 'u9' }), 'u1', 'member', undefined)).toBe(true);
+		expect(canEditSubtask({ created_by_id: 'u9' }, task({ created_by_id: 'u9' }), 'u1', 'member', undefined)).toBe(false);
 	});
 });
