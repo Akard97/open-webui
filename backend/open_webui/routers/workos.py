@@ -256,6 +256,12 @@ async def add_member(
     return await TeamMembers.add(team_id, form.user_id, form.role, db=db)
 
 
+async def _is_last_owner(team_id: str, user_id: str, db: AsyncSession) -> bool:
+    members = await TeamMembers.list_for_team(team_id, db=db)
+    owners = [m for m in members if m.role == 'owner']
+    return len(owners) == 1 and owners[0].user_id == user_id
+
+
 @router.patch('/teams/{team_id}/members/{user_id}')
 async def update_member(
     request: Request, team_id: str, user_id: str, form: MemberRoleForm,
@@ -266,6 +272,8 @@ async def update_member(
     await require_team_role(user, team_id, db, {'owner'} if form.role in {'owner', 'admin'} else {'owner', 'admin'})
     if form.role not in TEAM_ROLES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
+    if form.role != 'owner' and await _is_last_owner(team_id, user_id, db):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Cannot demote the last team owner.')
     updated = await TeamMembers.update_role(team_id, user_id, form.role, db=db)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Member not found.')
@@ -279,6 +287,8 @@ async def remove_member(
 ):
     await _require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
+    if await _is_last_owner(team_id, user_id, db):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Cannot remove the last team owner.')
     return {'removed': await TeamMembers.remove(team_id, user_id, db=db)}
 
 

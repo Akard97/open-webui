@@ -20,3 +20,28 @@ async def test_explicit_visibility_overrides_default(monkeypatch):
         ws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces",
                            json={'name': 'Eng', 'visibility': 'team'})).json()
         assert ws['visibility'] == 'team'
+
+
+@pytest.mark.asyncio
+async def test_cannot_remove_last_owner(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
+        r = await c.delete(f"/api/v1/workos/teams/{team['id']}/members/u1")
+        assert r.status_code == 400, r.text
+
+
+@pytest.mark.asyncio
+async def test_can_remove_owner_when_another_owner_exists(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
+        await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'owner'})
+        r = await c.delete(f"/api/v1/workos/teams/{team['id']}/members/u1")
+        assert r.json()['removed'] is True
+
+
+@pytest.mark.asyncio
+async def test_cannot_demote_last_owner(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
+        r = await c.patch(f"/api/v1/workos/teams/{team['id']}/members/u1", json={'role': 'admin'})
+        assert r.status_code == 400, r.text
