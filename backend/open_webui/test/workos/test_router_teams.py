@@ -10,22 +10,22 @@ import open_webui.routers.workos as wr
 from open_webui.utils.auth import get_verified_user
 
 
-def _make_app(user):
+def _make_app(user, rules=None):
     app = FastAPI()
     app.state.config = SimpleNamespace(
         USER_PERMISSIONS={},
-        WORKOS_RULES={'team_creation': 'all_users', 'default_workspace_visibility': 'team'},
+        WORKOS_RULES=rules or {'team_creation': 'all_users', 'default_workspace_visibility': 'team'},
     )
     app.include_router(wr.router, prefix='/api/v1/workos')
     app.dependency_overrides[get_verified_user] = lambda: user
     return app
 
 
-def _client(monkeypatch, *, user, allow=True):
+def _client(monkeypatch, *, user, allow=True, rules=None):
     async def _hp(user_id, key, permissions, db=None):
         return allow
     monkeypatch.setattr(wr, 'has_permission', _hp)
-    return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user)), base_url='http://test')
+    return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user, rules)), base_url='http://test')
 
 
 U1 = SimpleNamespace(id='u1', name='Lara', role='user')

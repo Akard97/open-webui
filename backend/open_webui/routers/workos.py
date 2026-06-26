@@ -291,7 +291,7 @@ WORKSPACE_ROLES = {'admin', 'member'}
 class WorkspaceForm(BaseModel):
     name: str
     icon: Optional[str] = None
-    visibility: str = 'team'
+    visibility: Optional[str] = None
 
 
 class WorkspaceUpdateForm(BaseModel):
@@ -356,10 +356,12 @@ async def create_workspace(
 ):
     await _require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
-    if form.visibility not in {'team', 'restricted'}:
+    rules = request.app.state.config.WORKOS_RULES or {}
+    visibility = form.visibility or rules.get('default_workspace_visibility') or 'team'
+    if visibility not in {'team', 'restricted'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid visibility.')
-    ws = await Workspaces.insert(team_id, form.name, form.icon, form.visibility, user.id, db=db)
-    if form.visibility == 'restricted':
+    ws = await Workspaces.insert(team_id, form.name, form.icon, visibility, user.id, db=db)
+    if visibility == 'restricted':
         await WorkspaceMembers.add(ws.id, user.id, 'admin', db=db)
     await emit_event('workos:workspace.created', f'workos:team:{team_id}', ws.model_dump())
     return ws
