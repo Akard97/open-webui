@@ -1167,13 +1167,28 @@ async def create_subtask(
     return subtask
 
 
+async def require_subtask_writable(user, subtask, task, stream, db: AsyncSession) -> None:
+    if user.role == 'admin':
+        return
+    if subtask.created_by_id == user.id:
+        return
+    if task.created_by_id == user.id or user.id in (task.assignee_ids or []):
+        return
+    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
+    if await _is_workspace_manager(user, ws, db):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                        detail='You do not have permission to modify this subtask.')
+
+
 @router.patch('/subtasks/{subtask_id}')
 async def update_subtask(
     request: Request, subtask_id: str, form: SubtaskUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await _require_workos(request, user, db)
-    subtask, task, _ = await require_subtask_visible(user, subtask_id, db)
+    subtask, task, stream = await require_subtask_visible(user, subtask_id, db)
+    await require_subtask_writable(user, subtask, task, stream, db)
     fields = form.model_dump(exclude_none=True)
     if 'title' in fields:
         fields['title'] = fields['title'].strip()
@@ -1199,7 +1214,8 @@ async def delete_subtask(
     request: Request, subtask_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await _require_workos(request, user, db)
-    subtask, task, _ = await require_subtask_visible(user, subtask_id, db)
+    subtask, task, stream = await require_subtask_visible(user, subtask_id, db)
+    await require_subtask_writable(user, subtask, task, stream, db)
     deleted = await Subtasks.delete(subtask_id, db=db)
     await emit_event(
         'workos:subtask.deleted',
