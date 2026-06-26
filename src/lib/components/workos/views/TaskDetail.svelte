@@ -170,7 +170,7 @@
 	}
 
 	function cancelPercent() {
-		suppressPercentCommit = true; // stop the blur that follows from saving
+		suppressPercentCommit = true; // stop the blur that follows from committing
 		editingPercent = false;
 	}
 
