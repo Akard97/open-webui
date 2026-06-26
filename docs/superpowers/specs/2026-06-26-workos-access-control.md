@@ -98,6 +98,13 @@ Roles are unvalidated free text at the model layer; a typo'd value is silently s
 | `require_workstream_visible` | [workos.py:463](backend/open_webui/routers/workos.py:463) | `404` if missing, then delegates to `require_workspace_visible`. Returns `(stream, ws)`. No own visibility flag. |
 | `require_task_visible` | [workos.py:581](backend/open_webui/routers/workos.py:581) | `404` if missing, then `require_workstream_visible`. Returns `(task, stream)`. **No per-task ACL; assignees get no extra read access.** |
 | `require_subtask_visible` | [workos.py:1086](backend/open_webui/routers/workos.py:1086) | `404` if missing, then `require_task_visible`. Returns `(subtask, task, stream)`. |
+| `_recipient_is_admin` | [workos.py](backend/open_webui/routers/workos.py) | bool predicate: `True` if recipient's `role == 'admin'`; used by `notify()` to let platform admins always receive notifications regardless of workstream visibility. |
+| `_validate_assignees` | [workos.py](backend/open_webui/routers/workos.py) | validates each id in `assignee_ids` via `can_see_workstream`; rejects the whole request if any id fails. Closes G1. |
+| `_is_workspace_manager` | [workos.py](backend/open_webui/routers/workos.py) | bool predicate: `True` if `team_role ∈ {'owner','admin'}` OR workspace-member `role == 'admin'`; used by write-gate helpers. |
+| `require_task_writable` | [workos.py](backend/open_webui/routers/workos.py) | `403` unless caller is creator, an assignee, or `_is_workspace_manager`. Called after `require_task_visible`. Closes G2. |
+| `require_subtask_writable` | [workos.py](backend/open_webui/routers/workos.py) | `403` unless caller is subtask creator or `_is_workspace_manager`. Called after `require_subtask_visible`. Closes G5 + G6. |
+| `_is_last_owner` | [workos.py](backend/open_webui/routers/workos.py) | `True` if `user_id` is the sole owner-role member of `team_id`; used by `remove_member` guard. Closes G9. |
+| `ATTACHMENT_MIME_ALLOW` | [workos.py](backend/open_webui/routers/workos.py) | Frozenset of permitted MIME types for uploaded attachments; upload rejected if `file.content_type` not in set. Closes G11. |
 
 All `require_*_visible` helpers return **`404` (not `403`)** when a row is missing *or* invisible, so non-members cannot distinguish "doesn't exist" from "you can't see it."
 
@@ -113,7 +120,7 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 | Route / Helper | Gate applied | Location |
 |---|---|---|
 | `GET /directory` | `_require_workos`; result scoped to caller's team co-members (`Teams.list_for_user` → `TeamMembers.list_for_team`), admin sees all | [workos.py:136](backend/open_webui/routers/workos.py:136) |
-| `GET /users` | `_require_workos` **only** — returns the **full app roster** (id+name) by design (member picker) | [workos.py:148](backend/open_webui/routers/workos.py:148) |
+| `GET /users` | `_require_workos` + `team_id` query-param required + `require_team_role({'owner','admin'})` — returns team-scoped roster (id+name); non-owner/admin gets `403` (closes G7) | [workos.py:148](backend/open_webui/routers/workos.py:148) |
 | `GET /bootstrap` | `_require_workos`; teams scoped to user; **inline workspace visibility filter** (`visibility=='team'` OR admin OR `WorkspaceMembers.get`) at [:170](backend/open_webui/routers/workos.py:170) | [workos.py:160](backend/open_webui/routers/workos.py:160) |
 
 ### Teams
@@ -127,7 +134,7 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 | `GET /teams/{id}/members` | `_require_workos` + `require_team_visible` | [workos.py:232](backend/open_webui/routers/workos.py:232) |
 | `POST /teams/{id}/members` | `_require_workos` + `require_team_role({'owner','admin'})`; role validated; dup check | [workos.py:241](backend/open_webui/routers/workos.py:241) |
 | `PATCH /teams/{id}/members/{uid}` | `_require_workos` + `require_team_role({'owner'})` when granting owner/admin else `{'owner','admin'}` | [workos.py:255](backend/open_webui/routers/workos.py:255) |
-| `DELETE /teams/{id}/members/{uid}` | `_require_workos` + `require_team_role({'owner','admin'})` (no last-owner guard) | [workos.py:271](backend/open_webui/routers/workos.py:271) |
+| `DELETE /teams/{id}/members/{uid}` | `_require_workos` + `require_team_role({'owner','admin'})`; rejects if `_is_last_owner(team_id, uid)` (closes G9) | [workos.py:271](backend/open_webui/routers/workos.py:271) |
 
 ### Workspaces
 | Route / Helper | Gate applied | Location |
@@ -154,9 +161,9 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 | Route / Helper | Gate applied | Location |
 |---|---|---|
 | `GET /workstreams/{id}/tasks` | `_require_workos` + `require_workstream_visible` | [workos.py:605](backend/open_webui/routers/workos.py:605) |
-| `POST /workstreams/{id}/tasks` | `_require_workos` + `require_workstream_visible` + `require_team_visible`; field validation. **`assignee_ids` NOT validated against visibility** (gap §8) | [workos.py:614](backend/open_webui/routers/workos.py:614) |
+| `POST /workstreams/{id}/tasks` | `_require_workos` + `require_workstream_visible` + `require_team_visible`; field validation; `assignee_ids` validated via `_validate_assignees` (closes G1) | [workos.py:614](backend/open_webui/routers/workos.py:614) |
 | `GET /tasks/{id}` | `_require_workos` + `require_task_visible` | [workos.py:634](backend/open_webui/routers/workos.py:634) |
-| `PATCH /tasks/{id}` | `_require_workos` + `require_task_visible` **ONLY — no write/role gate** (gap §8) | [workos.py:643](backend/open_webui/routers/workos.py:643) |
+| `PATCH /tasks/{id}` | `_require_workos` + `require_task_visible` + `require_task_writable`; `assignee_ids` validated via `_validate_assignees` (closes G1 + G2) | [workos.py:643](backend/open_webui/routers/workos.py:643) |
 | `DELETE /tasks/{id}` | `_require_workos` + `require_task_visible` + creator-or-team-owner/admin (`403` else) | [workos.py:677](backend/open_webui/routers/workos.py:677) |
 
 ### Labels
@@ -179,7 +186,7 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 ### Attachments
 | Route / Helper | Gate applied | Location |
 |---|---|---|
-| `POST /tasks/{id}/attachments` | `_require_workos` + `require_task_visible`; size limit; no MIME allowlist; `comment_id` not validated against task | [workos.py:967](backend/open_webui/routers/workos.py:967) |
+| `POST /tasks/{id}/attachments` | `_require_workos` + `require_task_visible`; size limit; MIME checked against `ATTACHMENT_MIME_ALLOW`; `comment_id` validated against `task_id` before insert (closes G11) | [workos.py:967](backend/open_webui/routers/workos.py:967) |
 | `GET /tasks/{id}/attachments` | `_require_workos` + `require_task_visible` | [workos.py:998](backend/open_webui/routers/workos.py:998) |
 | `GET /attachments/{id}/content` | `_require_workos`; fetch (`404`); `require_task_visible` on `att.task_id` — visibility-gated, OK | [workos.py:1007](backend/open_webui/routers/workos.py:1007) |
 | `DELETE /attachments/{id}` | `_require_workos`; fetch (`404`); `require_task_visible`; **uploader OR team owner/admin** (`403` else) | [workos.py:1031](backend/open_webui/routers/workos.py:1031) |
@@ -189,13 +196,13 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 |---|---|---|
 | `GET /tasks/{id}/subtasks` | `_require_workos` + `require_task_visible` | [workos.py:1101](backend/open_webui/routers/workos.py:1101) |
 | `POST /tasks/{id}/subtasks` | `_require_workos` + `require_task_visible`; title required | [workos.py:1110](backend/open_webui/routers/workos.py:1110) |
-| `PATCH /subtasks/{id}` | `_require_workos` + `require_subtask_visible` **ONLY — no author/role gate** (gap §8) | [workos.py:1128](backend/open_webui/routers/workos.py:1128) |
-| `DELETE /subtasks/{id}` | `_require_workos` + `require_subtask_visible` **ONLY — no author/role gate** (gap §8) | [workos.py:1155](backend/open_webui/routers/workos.py:1155) |
+| `PATCH /subtasks/{id}` | `_require_workos` + `require_subtask_visible` + `require_subtask_writable` (closes G5) | [workos.py:1128](backend/open_webui/routers/workos.py:1128) |
+| `DELETE /subtasks/{id}` | `_require_workos` + `require_subtask_visible` + `require_subtask_writable` (closes G6) | [workos.py:1155](backend/open_webui/routers/workos.py:1155) |
 
 ### Notifications
 | Route / Helper | Gate applied | Location |
 |---|---|---|
-| `GET /notifications` | `_require_workos`; intrinsically scoped to `user.id`; **`limit` unbounded** (gap §8) | [workos.py:1064](backend/open_webui/routers/workos.py:1064) |
+| `GET /notifications` | `_require_workos`; intrinsically scoped to `user.id`; `limit` clamped to ≤ 200 (closes G10) | [workos.py:1064](backend/open_webui/routers/workos.py:1064) |
 | `POST /notifications/read` | `_require_workos`; `Notifications.mark_read` passed `user.id` | [workos.py:1073](backend/open_webui/routers/workos.py:1073) |
 
 ### Admin
@@ -234,18 +241,18 @@ Three room namespaces: `workos:team:{team_id}`, `workos:workstream:{workstream_i
 ### Channel B — Per-user notification fan-out (NOT consistently gated)
 `notify()` ([workos.py:817](backend/open_webui/routers/workos.py:817)) builds `targets = {r for r in recipients if r and r != actor.id}`, inserts a `Notification` row per target, and calls `emit_users('workos:notification.created', …)` to that user's `user:{id}` room ([:838](backend/open_webui/routers/workos.py:838)). `emit_to_users` ([socket/main.py:283](backend/open_webui/socket/main.py:283)) just loops `sio.emit` to `user:{id}` with **no visibility check**. The payload carries `task_id, task_key, task_title, workstream_id, actor_name` ([:826–828](backend/open_webui/routers/workos.py:826)) plus a **140-char body snippet** only on comment paths ([:830–831](backend/open_webui/routers/workos.py:830)).
 
-`notify()` has **no internal `can_see_workstream` check** — gating is the caller's responsibility, applied inconsistently:
+`notify()` now filters every recipient through `can_see_workstream` (or `_recipient_is_admin`) before inserting a notification row or emitting to the per-user room (closes G3 + G4). Gating is **consistent** across all callers:
 
 | Caller | Type | Visibility-filtered? |
 |---|---|---|
 | `create_comment` mentions ([:889–892](backend/open_webui/routers/workos.py:889)) | `mentioned` | **YES** — filtered via `can_see_workstream` |
 | `update_comment` new mentions ([:920–923](backend/open_webui/routers/workos.py:920)) | `mentioned` | **YES** |
-| `create_comment` participants ([:894–896](backend/open_webui/routers/workos.py:894)) | `commented` | **NO** — `_participants` ([:842–851](backend/open_webui/routers/workos.py:842)) not re-checked |
-| `create_task` ([:629–630](backend/open_webui/routers/workos.py:629)) | `assigned` | **NO** |
-| `update_task` ([:668–669](backend/open_webui/routers/workos.py:668)) | `assigned` | **NO** |
-| `update_task` ([:670–673](backend/open_webui/routers/workos.py:670)) | `status_changed` | **NO** |
+| `create_comment` participants ([:894–896](backend/open_webui/routers/workos.py:894)) | `commented` | **YES** — `_participants` set filtered by `can_see_workstream` before `notify()` (closes G4) |
+| `create_task` ([:629–630](backend/open_webui/routers/workos.py:629)) | `assigned` | **YES** — `_validate_assignees` ensures only visible members reach `notify()` (closes G3) |
+| `update_task` ([:668–669](backend/open_webui/routers/workos.py:668)) | `assigned` | **YES** |
+| `update_task` ([:670–673](backend/open_webui/routers/workos.py:670)) | `status_changed` | **YES** |
 
-Because the notification also rides Channel B (the per-user room), these leaks reach a **connected non-member in real time**, not just as a persisted row — the "realtime is safe" conclusion holds **only** for the workstream/team rooms, not the per-user notification channel. The `commented` leak is the most sensitive (it carries comment text); `_participants` also accumulates **every historical mentioner** over a task's life, widening the recipient set with no re-validation.
+The per-user notification channel is now consistent with Channel A: non-members do not receive task metadata or comment snippets for workstreams they cannot see.
 
 ---
 
@@ -258,7 +265,7 @@ The WorkOS frontend has **no authoritative access model of its own** — it is a
 - **Predicates:** `lib/roles.ts` exposes pure predicates — `canManageTeam` (owner only), `canManageMembers` / `canCreateWorkspace` (owner||admin), `canDeleteTask` (creator OR owner/admin), `canDeleteComment` / `canDeleteAttachment` (author OR owner/admin), `canUseAdmin` (reads OWUI `user.role==='admin' || permissions.features.workos_admin`). `canManageWorkspace` is defined+tested but **unused** (dead predicate).
 - **Nav gate:** `railItems.ts` shows the WorkOS item if `user.role==='admin' || permissions.features.workos ?? true` (defaults visible, mirroring backend default-ON).
 - **Admin view guard** is client-side only — `WorkOSApp.svelte:20` snaps the view from `admin` back to `board` when `!canUseAdmin`.
-- **Pickers source the team-wide `directory` store** — both `AssigneeField` and the `@mention` composer offer users who may not see a restricted workspace; the backend accepts such assignees silently (gap §8) and only the mention *notification* is filtered.
+- **Pickers source the team-wide `directory` store** — both `AssigneeField` and the `@mention` composer offer users who may not see a restricted workspace; the backend now validates each `assignee_id` against `can_see_workstream` and rejects invisible ids (G1 closed), and the mention *notification* is filtered server-side.
 - **Visibility is create-only in the UI** — set in `ModalHost` at creation; `api.updateWorkspace({visibility})` exists but **no component calls it**, and there is no restricted badge.
 
 ---
@@ -280,7 +287,7 @@ Default `{"team_creation": "all_users", "default_workspace_visibility": "team"}`
 | Key | Values | Consumed by |
 |---|---|---|
 | `team_creation` | `all_users` \| `admins_only` | `create_team` → `403` for non-admin when `admins_only` ([workos.py:193–195](backend/open_webui/routers/workos.py:193)) |
-| `default_workspace_visibility` | `team` \| `restricted` | **Validated but NOT consumed** — `create_workspace` uses `form.visibility` directly (gap §8) |
+| `default_workspace_visibility` | `team` \| `restricted` | `create_workspace` uses this as the fallback when `form.visibility` is absent (closes G8) |
 | `notifications` | `{type: bool}` | `_notif_enabled` ([workos.py:807–810](backend/open_webui/routers/workos.py:807)) |
 | `max_attachment_mb` | int ≥ 0 (default 25) | `_max_attachment_bytes` ([workos.py:961–964](backend/open_webui/routers/workos.py:961)) |
 
@@ -294,15 +301,21 @@ Only **verified** gaps (`VERIFICATION.confirmedGaps`, both verifiers merged + de
 
 ### HIGH
 
+✅ **Closed (2026-06-27, commit e505dd998 + ad91135f0)**
+
 **G1 — `assignee_ids` never validated against visibility (create_task & update_task).**
 `create_task` ([workos.py:614–631](backend/open_webui/routers/workos.py:614)) and `update_task` ([workos.py:643–674](backend/open_webui/routers/workos.py:643)) store the raw id list (model: `assignee_ids = Column(JSON, default=list)`, [models/workos.py:470](backend/open_webui/models/workos.py:470)) and call `notify()` per id. `_validate_task_fields` ([workos.py:589–599](backend/open_webui/routers/workos.py:589)) validates only status/priority/progress/dates — never membership.
 *Risk:* a user who can see one `team`-visibility workspace can assign **any** app user (ids harvested from `GET /users`) to a task, pushing the task's id/key/title/workstream_id into a stranger's notification inbox and surfacing them in assignee/avatar UI — for a task they then get `404` opening. Information disclosure + spam, inconsistent with the mention path which *does* filter.
 *Fix:* validate each id with `can_see_workstream(id, False, task.workstream_id)` before insert/update **and** before `notify()`; reject or drop failing ids. Prefer rejecting — an assignee who can't see the task is a data-model bug, not just a notification bug.
 
+✅ **Closed (2026-06-27, commit 4f7ef4b78)**
+
 **G2 — `PATCH /tasks/{id}` has no write/role gate beyond visibility.**
 The handler stops at `require_task_visible` ([workos.py:643/649](backend/open_webui/routers/workos.py:643)) — no creator/assignee/manager check before `Tasks.update_fields` ([:653](backend/open_webui/routers/workos.py:653)). Contrast `delete_task` ([:684–686](backend/open_webui/routers/workos.py:684)) which gates on creator-or-admin.
 *Risk:* in any `team`-visibility workspace, **every team member** can mutate every field (title, description, status, priority, `assignee_ids`, labels, dates, progress, sort_key) of tasks they neither created nor are assigned to. No notion of an editor role.
 *Fix:* decide a write policy; if broad editing is intended for team-visible workspaces, document it — otherwise gate sensitive mutations (`assignee_ids`, status, labels) to creator/assignee/workspace-manager, mirroring `delete_task`.
+
+✅ **Closed (2026-06-27, commit 902d9b7c5)**
 
 **G3 — `assigned` + `status_changed` notifications leak task metadata to non-members.**
 `notify()` ([workos.py:817–838](backend/open_webui/routers/workos.py:817)) has no internal `can_see_workstream` check; callers pass recipients straight through — `assigned` on create ([:629–630](backend/open_webui/routers/workos.py:629)) and update ([:668–669](backend/open_webui/routers/workos.py:668)), and `status_changed` to `{created_by_id, *assignee_ids}` ([:670–673](backend/open_webui/routers/workos.py:670)). Delivered both as a persisted row (returned by `GET /notifications`) and over the per-user realtime room.
@@ -311,25 +324,35 @@ The handler stops at `require_task_visible` ([workos.py:643/649](backend/open_we
 
 ### MEDIUM
 
+✅ **Closed (2026-06-27, commit 902d9b7c5)**
+
 **G4 — `commented` notification leak with comment-body snippet.**
 `create_comment` notifies `_participants(task)` ([workos.py:894–896](backend/open_webui/routers/workos.py:894)) — creator + assignees + all prior comment authors + all users previously @mentioned ([_participants :842–851](backend/open_webui/routers/workos.py:842)) — with no current-visibility re-check, and the payload includes a 140-char body snippet ([:830–831](backend/open_webui/routers/workos.py:830)).
 *Risk:* a participant who lost workspace visibility (or a stale assignee per G1) still receives **comment content** for a stream they can no longer see. `_participants` accumulates every historical mentioner, widening the leak over the task's life.
 *Fix:* filter the participants set through `can_see_workstream` before the `commented` `notify`, mirroring the mention-path filter.
+
+✅ **Closed (2026-06-27, commit c69edb809 + 86b2875ae)**
 
 **G5 — `PATCH /subtasks/{id}` has no author/role gate.**
 Stops at `require_subtask_visible` (== task visibility) ([workos.py:1128/1134](backend/open_webui/routers/workos.py:1128)); no creator/author/role check before `Subtasks.update_fields` ([:1140](backend/open_webui/routers/workos.py:1140)).
 *Risk:* any task-visible user can rename, complete/reopen, or reorder any subtask (including ones they didn't create); changes mirror into parent task progress.
 *Fix:* apply the author-or-team-owner/admin guard used by `delete_comment`/`delete_attachment`, or document subtasks as collaboratively editable.
 
+✅ **Closed (2026-06-27, commit c69edb809 + 86b2875ae)**
+
 **G6 — `DELETE /subtasks/{id}` has no author/role gate.**
 Stops at `require_subtask_visible` ([workos.py:1155/1160](backend/open_webui/routers/workos.py:1155)); no gate before `Subtasks.delete` ([:1161](backend/open_webui/routers/workos.py:1161)), unlike `delete_comment`/`delete_attachment`.
 *Risk:* any task-visible user can delete any subtask.
 *Fix:* add an author-or-team-owner/admin guard, or document subtasks as collaboratively deletable.
 
+✅ **Closed (2026-06-27, commit ecb276d0b)**
+
 **G7 — `GET /users` returns the entire app roster with no team scoping.**
 `_require_workos` then `list_all_users()` → full id+name roster ([workos.py:148–154](backend/open_webui/routers/workos.py:148)), broader than the team-scoped `/directory`.
 *Risk:* user enumeration to any WorkOS-enabled user; also the id source feeding G1.
 *Fix:* acceptable only if `assignee_ids`/mentions are properly visibility-gated; otherwise scope the picker to team co-members like `/directory`, or gate behind a higher role.
+
+✅ **Closed (2026-06-27, commit 8f77ccc88)**
 
 **G8 — `default_workspace_visibility` rule is validated but never applied.**
 `create_workspace` ([workos.py:349–356](backend/open_webui/routers/workos.py:349)) uses `form.visibility` (schema default `'team'`, [:290](backend/open_webui/routers/workos.py:290)) — the admin-configured `WORKOS_RULES.default_workspace_visibility` ([config.py:1682](backend/open_webui/config.py:1682), validated [workos.py:787–788](backend/open_webui/routers/workos.py:787)) has no effect.
@@ -338,15 +361,21 @@ Stops at `require_subtask_visible` ([workos.py:1155/1160](backend/open_webui/rou
 
 ### LOW
 
+✅ **Closed (2026-06-27, commit 448fc49fe)**
+
 **G9 — `remove_member` has no last-owner / self-lockout guard.**
 `require_team_role({'owner','admin'})` checks only the actor's role, not whether the removal leaves the team ownerless ([workos.py:271–278](backend/open_webui/routers/workos.py:271)).
 *Risk:* a team can be left with no owner; an owner can lock themselves out.
 *Fix:* reject removal of the final owner.
 
+✅ **Closed (2026-06-27, commit fa4ad6a1b)**
+
 **G10 — `GET /notifications` `limit` (and `before`) unbounded.**
 Forwarded straight to the DAO ([workos.py:1064–1070](backend/open_webui/routers/workos.py:1064)).
 *Risk:* oversized result pulls.
 *Fix:* clamp, e.g. `min(limit, 200)`.
+
+✅ **Closed (2026-06-27, commit 0525fbad6)**
 
 **G11 — `upload_attachment` accepts any MIME and an unvalidated `comment_id`.**
 `file.content_type` stored verbatim with no allowlist; `comment_id` ([workos.py:967–995](backend/open_webui/routers/workos.py:967)) passed to `Attachments.insert` without checking it belongs to `task_id`.
