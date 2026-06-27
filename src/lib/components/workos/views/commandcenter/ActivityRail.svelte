@@ -20,9 +20,10 @@
 				<button
 					type="button"
 					class="flex items-start gap-2 text-left rounded-md px-1.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-900"
+					aria-label={summarizeNotification(n) + (n.read ? '' : ' (unread)')}
 					onclick={() => openNotification(n)}
 				>
-					<span class="mt-1.5 w-1.5 h-1.5 rounded-full flex-none {n.read ? 'bg-transparent' : 'bg-primary'}"></span>
+					<span aria-hidden="true" class="mt-1.5 w-1.5 h-1.5 rounded-full flex-none {n.read ? 'bg-transparent' : 'bg-primary'}"></span>
 					<span class="min-w-0">
 						<span class="block text-xs truncate">{summarizeNotification(n)}</span>
 						{#if n.data?.snippet}<span class="block text-[11px] text-gray-400 truncate">{n.data.snippet}</span>{/if}
