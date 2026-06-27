@@ -184,3 +184,11 @@ export interface TaskFilter {
 	assigneeIds: string[];
 	text: string;
 }
+
+export interface DueBuckets {
+	overdue: Task[];
+	today: Task[];
+	thisWeek: Task[];
+	later: Task[];
+	noDate: Task[];
+}
