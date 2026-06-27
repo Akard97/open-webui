@@ -192,3 +192,5 @@ export interface DueBuckets {
 	later: Task[];
 	noDate: Task[];
 }
+
+export type MyWorkSegment = 'all' | 'assigned' | 'created';
