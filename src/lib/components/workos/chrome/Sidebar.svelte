@@ -17,6 +17,18 @@
 </script>
 
 <aside class="w-64 flex-none h-full flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+	<!-- My Work -->
+	<div class="p-2.5 pb-0">
+		<button
+			class="flex items-center gap-2 w-full h-9 px-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-900"
+			class:bg-accent={$view === 'mywork'}
+			onclick={() => view.set('mywork')}
+		>
+			<Icon name="check" size={15} />
+			<span class="flex-1 text-left">My Work</span>
+		</button>
+	</div>
+
 	<!-- Team switcher -->
 	<div class="p-2.5 relative">
 		<button

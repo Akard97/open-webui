@@ -14,7 +14,7 @@ import {
 } from './types';
 import { applyFilters, emptyFilter } from './filters';
 
-export type ViewKey = 'board' | 'list' | 'admin' | 'inbox';
+export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork';
 
 export type ModalRequest =
 	| { kind: 'team' }
@@ -32,7 +32,7 @@ export const currentWorkstreamId: Writable<string | null> = writable(null);
 export const tasks: Writable<Task[]> = writable([]);
 export const labels: Writable<Label[]> = writable([]);
 export const members: Writable<Member[]> = writable([]);
-export const view: Writable<ViewKey> = writable('board');
+export const view: Writable<ViewKey> = writable('mywork');
 export const boardFilter: Writable<TaskFilter> = writable(emptyFilter());
 export const myWorkFilter: Writable<TaskFilter> = writable(emptyFilter());
 export const selectedTaskId: Writable<string | null> = writable(null);
