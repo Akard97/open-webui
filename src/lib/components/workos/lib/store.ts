@@ -420,9 +420,38 @@ export function applyTaskEvent(event: string, payload: any): void {
 	}
 }
 
+/** Reconcile a workspace/workstream nav event into the sidebar tree.
+ * §5 client-side guard: never reveal a restricted workspace from the team-wide room,
+ * and only accept a workstream whose parent workspace is already visible. */
+export function applyNavEvent(event: string, payload: any): void {
+	if (!payload || !payload.id) return;
+	if (event === 'workos:workspace.created' || event === 'workos:workspace.updated') {
+		workspaces.update((l) => {
+			const exists = l.some((w) => w.id === payload.id);
+			if (payload.visibility === 'restricted') return exists ? l.map((w) => (w.id === payload.id ? payload : w)) : l;
+			return exists ? l.map((w) => (w.id === payload.id ? payload : w)) : [...l, payload];
+		});
+	} else if (event === 'workos:workspace.deleted') {
+		workspaces.update((l) => l.filter((w) => w.id !== payload.id));
+		workstreams.update((l) => l.filter((s) => s.workspace_id !== payload.id));
+	} else if (event === 'workos:workstream.created' || event === 'workos:workstream.updated') {
+		workstreams.update((l) => {
+			if (!get(workspaces).some((w) => w.id === payload.workspace_id)) return l;
+			const exists = l.some((s) => s.id === payload.id);
+			return exists ? l.map((s) => (s.id === payload.id ? payload : s)) : [...l, payload];
+		});
+	} else if (event === 'workos:workstream.deleted') {
+		workstreams.update((l) => l.filter((s) => s.id !== payload.id));
+	}
+}
+
 // ──────────────────────────── socket wiring ────────────────────────────
 
 const TASK_EVENTS = ['workos:task.created', 'workos:task.updated', 'workos:task.deleted'];
+const NAV_EVENTS = [
+	'workos:workspace.created', 'workos:workspace.updated', 'workos:workspace.deleted',
+	'workos:workstream.created', 'workos:workstream.updated', 'workos:workstream.deleted'
+];
 const COLLAB_EVENTS = [
 	'workos:comment.created', 'workos:comment.updated', 'workos:comment.deleted',
 	'workos:activity.created', 'workos:attachment.created', 'workos:attachment.deleted',
@@ -468,6 +497,12 @@ export function connectRealtime(): void {
 		handlers[ev] = (payload: any) => applyCollabEvent(ev, payload);
 		s.on(ev, handlers[ev]);
 	}
+	for (const ev of NAV_EVENTS) {
+		handlers[ev] = (payload: any) => applyNavEvent(ev, payload);
+		s.on(ev, handlers[ev]);
+	}
+	// Subscribe to every team room so workspace/workstream nav events arrive live.
+	for (const t of get(teams)) enterRoom(teamKey(t.id));
 	handlers['workos:notification.created'] = (payload: any) => {
 		applyNotificationEvent(payload);
 		void foldInMyWorkFromNotification(payload);
@@ -487,7 +522,7 @@ export function disconnectRealtime(): void {
 		bound = false;
 		return;
 	}
-	for (const ev of [...TASK_EVENTS, ...COLLAB_EVENTS, 'workos:notification.created', 'connect']) {
+	for (const ev of [...TASK_EVENTS, ...COLLAB_EVENTS, ...NAV_EVENTS, 'workos:notification.created', 'connect']) {
 		if (handlers[ev]) s.off(ev, handlers[ev]);
 	}
 	for (const key of rooms.keys()) emitUnsub(key);

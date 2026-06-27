@@ -190,3 +190,33 @@ describe('my work reconcile', () => {
 		expect(get(myTasks).map((t) => t.id)).toContain('folded');
 	});
 });
+
+import { workspaces, workstreams, applyNavEvent } from './store';
+
+const mkWs = (over: any) => ({ id: 'ws1', team_id: 'tm', name: 'Eng', visibility: 'team', archived: false, created_at: 0, updated_at: 0, ...over });
+const mkSt = (over: any) => ({ id: 's1', workspace_id: 'ws1', name: 'Plat', archived: false, created_at: 0, updated_at: 0, ...over });
+
+describe('nav reconcile (sidebar carry-over)', () => {
+	beforeEach(() => { workspaces.set([]); workstreams.set([]); });
+
+	it('adds a team-visible workspace on workspace.created', () => {
+		applyNavEvent('workos:workspace.created', mkWs({ id: 'a', visibility: 'team' }));
+		expect(get(workspaces).map((w) => w.id)).toEqual(['a']);
+	});
+	it('ignores a restricted workspace on workspace.created (§5 client guard)', () => {
+		applyNavEvent('workos:workspace.created', mkWs({ id: 'b', visibility: 'restricted' }));
+		expect(get(workspaces)).toHaveLength(0);
+	});
+	it('removes a workspace on workspace.deleted', () => {
+		workspaces.set([mkWs({ id: 'a' })]);
+		applyNavEvent('workos:workspace.deleted', { id: 'a' });
+		expect(get(workspaces)).toHaveLength(0);
+	});
+	it('adds a workstream only when its workspace is visible', () => {
+		applyNavEvent('workos:workstream.created', mkSt({ id: 's9', workspace_id: 'ghost' }));
+		expect(get(workstreams)).toHaveLength(0); // unknown workspace -> ignored
+		workspaces.set([mkWs({ id: 'ws1' })]);
+		applyNavEvent('workos:workstream.created', mkSt({ id: 's9', workspace_id: 'ws1' }));
+		expect(get(workstreams).map((s) => s.id)).toEqual(['s9']);
+	});
+});
