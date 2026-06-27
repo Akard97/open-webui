@@ -17,15 +17,16 @@
 	onDestroy(() => teardownMyWork());
 
 	$: uid = $user?.id ?? '';
-	function inSegment(t: Task): boolean {
-		if (segment === 'assigned') return (t.assignee_ids ?? []).includes(uid);
-		if (segment === 'created') return t.created_by_id === uid;
-		return true;
-	}
 	// My Work shows open work; the Status facet can re-include done/canceled.
 	$: statusFilterActive = $myWorkFilter.statuses.length > 0;
 	$: visible = applyFilters(
-		$myTasks.filter((t) => inSegment(t) && (statusFilterActive || (t.status !== 'done' && t.status !== 'canceled'))),
+		$myTasks.filter((t) => {
+			const inSeg =
+				segment === 'assigned' ? (t.assignee_ids ?? []).includes(uid)
+				: segment === 'created' ? t.created_by_id === uid
+				: true;
+			return inSeg && (statusFilterActive || (t.status !== 'done' && t.status !== 'canceled'));
+		}),
 		$myWorkFilter
 	);
 	$: buckets = bucketByDueDate(visible, Date.now());
