@@ -4,6 +4,7 @@ import { browser } from '$app/environment';
 import { socket, user } from '$lib/stores';
 import * as api from './api';
 import { midpoint } from './key';
+import { RoomRefs } from './rooms';
 import {
 	STATUS_ORDER,
 	type Team, type Workspace, type Workstream, type Label, type Task, type Member,
@@ -137,11 +138,11 @@ export async function createLabel(name: string): Promise<Label | null> {
 
 export async function selectWorkstream(id: string): Promise<void> {
 	const prev = get(currentWorkstreamId);
-	if (prev && prev !== id) unsubscribeRoom(prev);
+	if (prev && prev !== id) leaveRoom(streamKey(prev));
 	currentWorkstreamId.set(id);
 	selectedTaskId.set(null);
 	tasks.set(await api.listTasks(token(), id).catch(() => []));
-	subscribeRoom(id);
+	enterRoom(streamKey(id));
 }
 
 export function openTask(id: string): void {
@@ -375,17 +376,27 @@ const COLLAB_EVENTS = [
 	'workos:subtask.created', 'workos:subtask.updated', 'workos:subtask.deleted'
 ];
 
-function subscribeRoom(workstreamId: string): void {
+function streamKey(id: string): string { return `stream:${id}`; }
+function teamKey(id: string): string { return `team:${id}`; }
+
+function emitSub(key: string): void {
 	const s = get(socket);
 	if (!s || !browser) return;
-	s.emit('workos:subscribe', { auth: { token: token() }, workstream_id: workstreamId });
+	const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+	if (kind === 'team') s.emit('workos:subscribe', { auth: { token: token() }, team_id: id });
+	else s.emit('workos:subscribe', { auth: { token: token() }, workstream_id: id });
+}
+function emitUnsub(key: string): void {
+	const s = get(socket);
+	if (!s || !browser) return;
+	const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+	if (kind === 'team') s.emit('workos:unsubscribe', { team_id: id });
+	else s.emit('workos:unsubscribe', { workstream_id: id });
 }
 
-function unsubscribeRoom(workstreamId: string): void {
-	const s = get(socket);
-	if (!s || !browser) return;
-	s.emit('workos:unsubscribe', { workstream_id: workstreamId });
-}
+const rooms = new RoomRefs(emitSub, emitUnsub);
+export function enterRoom(key: string): void { rooms.enter(key); }
+export function leaveRoom(key: string): void { rooms.leave(key); }
 
 let bound = false;
 const handlers: Record<string, (...args: any[]) => void> = {};
@@ -403,15 +414,12 @@ export function connectRealtime(): void {
 	}
 	handlers['workos:notification.created'] = (payload: any) => applyNotificationEvent(payload);
 	s.on('workos:notification.created', handlers['workos:notification.created']);
-	// Re-subscribe on reconnect so the room is rejoined.
+	// Re-subscribe every held room on reconnect.
 	handlers['connect'] = () => {
-		const ws = get(currentWorkstreamId);
-		if (ws) subscribeRoom(ws);
+		for (const key of rooms.keys()) emitSub(key);
 	};
 	s.on('connect', handlers['connect']);
 	bound = true;
-	const ws = get(currentWorkstreamId);
-	if (ws) subscribeRoom(ws);
 }
 
 export function disconnectRealtime(): void {
@@ -423,7 +431,6 @@ export function disconnectRealtime(): void {
 	for (const ev of [...TASK_EVENTS, ...COLLAB_EVENTS, 'workos:notification.created', 'connect']) {
 		if (handlers[ev]) s.off(ev, handlers[ev]);
 	}
-	const ws = get(currentWorkstreamId);
-	if (ws) unsubscribeRoom(ws);
+	for (const key of rooms.keys()) emitUnsub(key);
 	bound = false;
 }
