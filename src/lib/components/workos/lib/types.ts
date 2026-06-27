@@ -176,3 +176,11 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 };
 
 export const PRIORITY_ORDER: TaskPriority[] = ['urgent', 'high', 'medium', 'low'];
+
+export interface TaskFilter {
+	statuses: TaskStatus[];
+	priorities: TaskPriority[];
+	labelIds: string[];
+	assigneeIds: string[];
+	text: string;
+}
