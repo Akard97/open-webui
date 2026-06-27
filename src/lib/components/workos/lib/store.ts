@@ -375,6 +375,13 @@ export async function markAllRead(): Promise<void> {
 	unreadCount.set(r.unread);
 }
 
+export async function openNotification(n: Notification): Promise<void> {
+	if (!n.read) await markRead([n.id]);
+	if (n.data?.workstream_id) await selectWorkstream(n.data.workstream_id);
+	if (n.task_id) openTask(n.task_id);
+	view.set('board');
+}
+
 /** Reconcile a collaboration room event into the open task's feed. */
 export function applyCollabEvent(event: string, payload: any): void {
 	const open = get(selectedTaskId);
