@@ -31,4 +31,13 @@ describe('RoomRefs', () => {
 		r.enter('stream:a');
 		expect(r.keys().sort()).toEqual(['stream:a', 'team:t1']);
 	});
+	it('clear() resets all refs so a re-enter subscribes again', () => {
+		const sub = vi.fn(), unsub = vi.fn();
+		const r = new RoomRefs(sub, unsub);
+		r.enter('team:t1');
+		r.clear();
+		expect(r.keys()).toEqual([]);
+		r.enter('team:t1');
+		expect(sub).toHaveBeenCalledTimes(2); // fired again after clear, proving the ref reset to 0
+	});
 });

@@ -25,6 +25,10 @@ export class RoomRefs {
 		}
 	}
 
+	clear(): void {
+		this.refs.clear();
+	}
+
 	keys(): string[] {
 		return [...this.refs.keys()];
 	}

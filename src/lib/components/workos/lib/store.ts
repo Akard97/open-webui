@@ -526,5 +526,8 @@ export function disconnectRealtime(): void {
 		if (handlers[ev]) s.off(ev, handlers[ev]);
 	}
 	for (const key of rooms.keys()) emitUnsub(key);
+	rooms.clear();
+	myWorkRooms.clear();
+	myWorkActive = false;
 	bound = false;
 }
