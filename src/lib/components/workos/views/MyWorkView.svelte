@@ -3,10 +3,15 @@
 	import { user } from '$lib/stores';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import Icon from '../ui/Icon.svelte';
-	import { STATUS_LABEL, type Task, type MyWorkSegment } from '../lib/types';
+	import StatStrip from './commandcenter/StatStrip.svelte';
+	import InsightsPanel from './commandcenter/InsightsPanel.svelte';
+	import ActivityRail from './commandcenter/ActivityRail.svelte';
+	import QuickLaunch from './commandcenter/QuickLaunch.svelte';
+	import FocusList from './commandcenter/FocusList.svelte';
+	import { type MyWorkSegment, type TaskStatus } from '../lib/types';
 	import { applyFilters } from '../lib/filters';
-	import { bucketByDueDate, BUCKET_ORDER, BUCKET_LABEL } from '../lib/buckets';
-	import { myTasks, myWorkFilter, loadMyWork, teardownMyWork, openTask, displayName, initials } from '../lib/store';
+	import { computeStats } from '../lib/stats';
+	import { myTasks, myWorkFilter, workstreams, loadMyWork, teardownMyWork, addTask } from '../lib/store';
 
 	let segment: MyWorkSegment = 'all';
 	const SEGMENTS: { k: MyWorkSegment; label: string }[] = [
@@ -17,20 +22,53 @@
 	onDestroy(() => teardownMyWork());
 
 	$: uid = $user?.id ?? '';
-	// My Work shows open work; the Status facet can re-include done/canceled.
+	const now = Date.now();
+
+	// segmentSet: segment-only — no FilterBar, no done/canceled hide. Feeds the stats.
+	$: segmentSet = $myTasks.filter((t) =>
+		segment === 'assigned' ? (t.assignee_ids ?? []).includes(uid)
+		: segment === 'created' ? t.created_by_id === uid
+		: true
+	);
+	$: stats = computeStats(segmentSet, now);
+
+	// visible: the worked list set — segment + done/canceled hide + FilterBar (as before).
 	$: statusFilterActive = $myWorkFilter.statuses.length > 0;
 	$: visible = applyFilters(
-		$myTasks.filter((t) => {
-			const inSeg =
-				segment === 'assigned' ? (t.assignee_ids ?? []).includes(uid)
-				: segment === 'created' ? t.created_by_id === uid
-				: true;
-			return inSeg && (statusFilterActive || (t.status !== 'done' && t.status !== 'canceled'));
-		}),
+		segmentSet.filter((t) => statusFilterActive || (t.status !== 'done' && t.status !== 'canceled')),
 		$myWorkFilter
 	);
-	$: buckets = bucketByDueDate(visible, Date.now());
-	const fmt = (ms: number | null | undefined) => (ms == null ? '' : new Date(ms).toLocaleDateString());
+
+	// KPI tile interaction: in-progress/done-this-week toggle a status facet; overdue/today scroll.
+	let activeTile: string | null = null;
+	let scroller: HTMLElement;
+	function pickTile(key: string) {
+		if (key === 'inProgress' || key === 'doneThisWeek') {
+			const status: TaskStatus = key === 'inProgress' ? 'in_progress' : 'done';
+			const on = $myWorkFilter.statuses.includes(status);
+			myWorkFilter.update((f) => ({
+				...f,
+				statuses: on ? f.statuses.filter((s) => s !== status) : [...f.statuses, status]
+			}));
+			activeTile = on ? null : key;
+		} else {
+			const bucket = key === 'overdue' ? 'overdue' : 'today';
+			scroller?.querySelector(`[data-bucket="${bucket}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			activeTile = key;
+		}
+	}
+
+	// Cross-workstream new task: pick a target workstream (default = most recently updated task's).
+	let creating = false;
+	let newTitle = '';
+	let target = '';
+	$: defaultStream = [...$myTasks].sort((a, b) => b.updated_at - a.updated_at)[0]?.workstream_id ?? $workstreams[0]?.id ?? '';
+	$: if (!target) target = defaultStream;
+	async function submitNew() {
+		if (!newTitle.trim() || !target) return;
+		await addTask(target, { title: newTitle.trim() });
+		newTitle = ''; creating = false;
+	}
 </script>
 
 <div class="h-full flex flex-col min-h-0">
@@ -39,41 +77,43 @@
 		<div class="flex-1"></div>
 		<div class="inline-flex rounded-lg border border-gray-200 dark:border-gray-800 p-0.5 text-xs">
 			{#each SEGMENTS as s (s.k)}
-				<button class="px-3 py-1 rounded-md" class:bg-accent={segment === s.k} onclick={() => (segment = s.k)}>{s.label}</button>
+				<button type="button" class="px-3 py-1 rounded-md" class:bg-accent={segment === s.k} onclick={() => (segment = s.k)}>{s.label}</button>
 			{/each}
 		</div>
-	</div>
-	<FilterBar filter={myWorkFilter} showAssignee={false} />
-
-	<div class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-950">
-		{#if !visible.length}
-			<div class="h-full flex flex-col items-center justify-center gap-2 text-center text-gray-400">
-				<Icon name="check" size={28} />
-				<div class="text-sm">Nothing on your plate yet</div>
+		{#if creating}
+			<div class="flex items-center gap-1.5">
+				<select class="text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent px-2 py-1" bind:value={target}>
+					{#each $workstreams as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+				</select>
+				<input
+					class="text-sm px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
+					placeholder="Task title…"
+					bind:value={newTitle}
+					onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creating = false; newTitle = ''; } }}
+					autofocus
+				/>
 			</div>
 		{:else}
-			{#each BUCKET_ORDER as bucket (bucket)}
-				{#if buckets[bucket].length}
-					<div class="mb-5">
-						<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2">{BUCKET_LABEL[bucket]} · {buckets[bucket].length}</div>
-						<div class="flex flex-col divide-y divide-gray-100 dark:divide-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
-							{#each buckets[bucket] as t (t.id)}
-								<button class="flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900" onclick={() => openTask(t.id)}>
-									<span class="text-[11px] text-gray-400 w-16 flex-none">{t.key}</span>
-									<span class="flex-1 truncate text-sm">{t.title}</span>
-									<span class="text-[11px] text-gray-400">{STATUS_LABEL[t.status]}</span>
-									{#if t.due_date}<span class="text-[11px] text-gray-400 w-24 text-right">{fmt(t.due_date)}</span>{/if}
-									<span class="flex -space-x-1.5">
-										{#each (t.assignee_ids ?? []).slice(0, 3) as a (a)}
-											<span class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 text-[10px] flex items-center justify-center border border-white dark:border-gray-950" title={displayName(a)}>{initials(a)}</span>
-										{/each}
-									</span>
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			{/each}
+			<button type="button" class="text-sm px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground inline-flex items-center gap-1" onclick={() => (creating = true)}>
+				<Icon name="plus" size={15} /> New task
+			</button>
 		{/if}
+	</div>
+
+	<StatStrip {stats} active={activeTile} onPick={pickTile} />
+
+	<FilterBar filter={myWorkFilter} showAssignee={false} />
+
+	<div bind:this={scroller} class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-950">
+		<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4">
+			<div class="min-w-0">
+				<FocusList tasks={visible} {now} />
+			</div>
+			<div class="flex flex-col gap-3">
+				<InsightsPanel {stats} />
+				<ActivityRail />
+				<QuickLaunch tasks={segmentSet} />
+			</div>
+		</div>
 	</div>
 </div>
