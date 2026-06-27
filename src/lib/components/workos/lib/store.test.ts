@@ -12,6 +12,12 @@ vi.mock('./api', () => ({
 	})),
 	updateTask: vi.fn(async (t, id, body) => ({ id, ...body })),
 	deleteTask: vi.fn(async () => ({ deleted: true })),
+	listMyTasks: vi.fn(async () => []),
+	getTask: vi.fn(async () => ({
+		id: 'folded', workstream_id: 'wX', team_id: 'tm', number: 9, key: 'OSL-9', title: 'Folded',
+		status: 'todo', priority: null, assignee_ids: ['u1'], progress: 0, labels: [], sort_key: 1,
+		created_by_id: 'u2', created_at: 0, updated_at: 0
+	})),
 	listSubtasks: vi.fn(async () => []),
 	createSubtask: vi.fn(async (t, taskId, body) => ({
 		id: 'sub-1', task_id: taskId, title: body.title, completed: false,
@@ -135,5 +141,42 @@ describe('collab realtime', () => {
 		applyNotificationEvent({ id: 'n1', user_id: 'u1', type: 'assigned', data: {}, read: false, created_at: 1 });
 		expect(get(unreadCount)).toBe(1);
 		expect(get(notifications).map((n) => n.id)).toEqual(['n1']);
+	});
+});
+
+import { myTasks, applyMyWorkTaskEvent, loadMyWork, foldInMyWorkFromNotification } from './store';
+
+const mkT = (over: Partial<Task>): Task => ({
+	id: 'x', workstream_id: 'w1', team_id: 'tm', number: 1, key: 'OSL-1', title: 't',
+	status: 'todo', assignee_ids: [], progress: 0, labels: [], sort_key: 1, created_by_id: 'u9',
+	created_at: 0, updated_at: 0, ...over
+});
+
+describe('my work reconcile', () => {
+	beforeEach(() => myTasks.set([]));
+
+	it('adds a created-by-me task on task.created', () => {
+		applyMyWorkTaskEvent('workos:task.created', mkT({ id: 'a', created_by_id: 'u1' }), 'u1');
+		expect(get(myTasks).map((t) => t.id)).toEqual(['a']);
+	});
+	it('adds an assigned-to-me task and dedupes', () => {
+		applyMyWorkTaskEvent('workos:task.created', mkT({ id: 'a', assignee_ids: ['u1'] }), 'u1');
+		applyMyWorkTaskEvent('workos:task.created', mkT({ id: 'a', assignee_ids: ['u1'] }), 'u1');
+		expect(get(myTasks).filter((t) => t.id === 'a')).toHaveLength(1);
+	});
+	it('removes a task on update when I am no longer assignee/creator', () => {
+		myTasks.set([mkT({ id: 'a', assignee_ids: ['u1'], created_by_id: 'u9' })]);
+		applyMyWorkTaskEvent('workos:task.updated', mkT({ id: 'a', assignee_ids: [], created_by_id: 'u9' }), 'u1');
+		expect(get(myTasks)).toHaveLength(0);
+	});
+	it('removes a task on delete', () => {
+		myTasks.set([mkT({ id: 'a', created_by_id: 'u1' })]);
+		applyMyWorkTaskEvent('workos:task.deleted', { id: 'a' }, 'u1');
+		expect(get(myTasks)).toHaveLength(0);
+	});
+	it('folds in a task from a new assigned notification while active', async () => {
+		await loadMyWork(); // sets myWorkActive = true; mocked listMyTasks returns []
+		await foldInMyWorkFromNotification({ type: 'assigned', task_id: 'folded' });
+		expect(get(myTasks).map((t) => t.id)).toContain('folded');
 	});
 });

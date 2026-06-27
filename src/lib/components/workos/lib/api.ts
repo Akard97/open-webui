@@ -85,6 +85,7 @@ export const deleteWorkstream = (token: string, id: string) =>
 // Tasks
 export const listTasks = (token: string, workstreamId: string) =>
 	request<Task[]>(token, `/workstreams/${workstreamId}/tasks`);
+export const listMyTasks = (token: string) => request<Task[]>(token, '/me/tasks');
 export const createTask = (
 	token: string, workstreamId: string,
 	body: { title: string; description?: string; status?: TaskStatus; priority?: TaskPriority | null;

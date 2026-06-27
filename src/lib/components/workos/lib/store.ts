@@ -39,6 +39,9 @@ export const comments: Writable<Comment[]> = writable([]);
 export const activity: Writable<Activity[]> = writable([]);
 export const attachments: Writable<Attachment[]> = writable([]);
 export const subtasks: Writable<Subtask[]> = writable([]);
+export const myTasks: Writable<Task[]> = writable([]);
+let myWorkActive = false;
+const myWorkRooms = new Set<string>();
 export const notifications: Writable<Notification[]> = writable([]);
 export const unreadCount: Writable<number> = writable(0);
 
@@ -310,6 +313,52 @@ export async function loadNotifications(): Promise<void> {
 	notifications.set(await api.listNotifications(token()).catch(() => []));
 }
 
+export async function loadMyWork(): Promise<void> {
+	myWorkActive = true;
+	const mine = await api.listMyTasks(token()).catch(() => []);
+	myTasks.set(mine);
+	for (const id of new Set(mine.map((t) => t.workstream_id))) {
+		const key = streamKey(id);
+		myWorkRooms.add(key);
+		enterRoom(key);
+	}
+}
+
+export function teardownMyWork(): void {
+	myWorkActive = false;
+	for (const key of myWorkRooms) leaveRoom(key);
+	myWorkRooms.clear();
+}
+
+/** Reconcile a task realtime event into the cross-team My Work list. */
+export function applyMyWorkTaskEvent(event: string, payload: any, uid: string): void {
+	if (!payload || !payload.id) return;
+	if (event === 'workos:task.deleted') {
+		myTasks.update((l) => l.filter((t) => t.id !== payload.id));
+		return;
+	}
+	const mine = payload.created_by_id === uid || (payload.assignee_ids ?? []).includes(uid);
+	myTasks.update((l) => {
+		const exists = l.some((t) => t.id === payload.id);
+		if (mine) return exists ? l.map((t) => (t.id === payload.id ? payload : t)) : [...l, payload];
+		return exists ? l.filter((t) => t.id !== payload.id) : l;
+	});
+}
+
+/** A new assigned/mentioned notification may reference a task in a workstream My Work
+ * has not subscribed to yet — pull it in and join its room. */
+export async function foldInMyWorkFromNotification(payload: any): Promise<void> {
+	if (!myWorkActive || !payload || (payload.type !== 'assigned' && payload.type !== 'mentioned')) return;
+	const taskId = payload.task_id;
+	if (!taskId || get(myTasks).some((t) => t.id === taskId)) return;
+	const t = await api.getTask(token(), taskId).catch(() => null);
+	if (!t) return;
+	myTasks.update((l) => (l.some((x) => x.id === t.id) ? l : [...l, t]));
+	const key = streamKey(t.workstream_id);
+	myWorkRooms.add(key);
+	enterRoom(key);
+}
+
 export async function markRead(ids: string[]): Promise<void> {
 	notifications.update((list) => list.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
 	const r = await api.markNotificationsRead(token(), { ids });
@@ -405,14 +454,20 @@ export function connectRealtime(): void {
 	const s = get(socket);
 	if (!s || bound) return;
 	for (const ev of TASK_EVENTS) {
-		handlers[ev] = (payload: any) => applyTaskEvent(ev, payload);
+		handlers[ev] = (payload: any) => {
+			applyTaskEvent(ev, payload);
+			if (myWorkActive) applyMyWorkTaskEvent(ev, payload, get(user)?.id ?? '');
+		};
 		s.on(ev, handlers[ev]);
 	}
 	for (const ev of COLLAB_EVENTS) {
 		handlers[ev] = (payload: any) => applyCollabEvent(ev, payload);
 		s.on(ev, handlers[ev]);
 	}
-	handlers['workos:notification.created'] = (payload: any) => applyNotificationEvent(payload);
+	handlers['workos:notification.created'] = (payload: any) => {
+		applyNotificationEvent(payload);
+		void foldInMyWorkFromNotification(payload);
+	};
 	s.on('workos:notification.created', handlers['workos:notification.created']);
 	// Re-subscribe every held room on reconnect.
 	handlers['connect'] = () => {
