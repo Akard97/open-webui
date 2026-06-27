@@ -654,6 +654,21 @@ async def list_tasks(
     return await Tasks.list_for_workstream(workstream_id, db=db)
 
 
+@router.get('/me/tasks')
+async def list_my_tasks(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    is_admin = user.role == 'admin'
+    teams = await Teams.list_all(db=db) if is_admin else await Teams.list_for_user(user.id, db=db)
+    candidates = await Tasks.list_for_user(user.id, [t.id for t in teams], db=db)
+    visible = []
+    for task in candidates:
+        if await can_see_workstream(user.id, is_admin, task.workstream_id, db=db):
+            visible.append(task)
+    return visible
+
+
 @router.post('/workstreams/{workstream_id}/tasks')
 async def create_task(
     request: Request, workstream_id: str, form: TaskCreateForm,

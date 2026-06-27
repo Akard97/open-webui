@@ -163,6 +163,7 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 | `GET /workstreams/{id}/tasks` | `_require_workos` + `require_workstream_visible` | [workos.py:605](backend/open_webui/routers/workos.py:605) |
 | `POST /workstreams/{id}/tasks` | `_require_workos` + `require_workstream_visible` + `require_team_visible`; field validation; `assignee_ids` validated via `_validate_assignees` (closes G1) | [workos.py:614](backend/open_webui/routers/workos.py:614) |
 | `GET /tasks/{id}` | `_require_workos` + `require_task_visible` | [workos.py:634](backend/open_webui/routers/workos.py:634) |
+| `GET /me/tasks` | `_require_workos`; intrinsically user-scoped; returns tasks where caller is creator OR in `assignee_ids`, each filtered through `can_see_workstream` (assignment/authorship confer no access — visibility still enforced); admin scoped to own created/assigned across all teams | [workos.py](backend/open_webui/routers/workos.py) |
 | `PATCH /tasks/{id}` | `_require_workos` + `require_task_visible` + `require_task_writable`; `assignee_ids` validated via `_validate_assignees` (closes G1 + G2) | [workos.py:643](backend/open_webui/routers/workos.py:643) |
 | `DELETE /tasks/{id}` | `_require_workos` + `require_task_visible` + creator-or-team-owner/admin (`403` else) | [workos.py:677](backend/open_webui/routers/workos.py:677) |
 

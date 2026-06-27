@@ -675,6 +675,30 @@ class TasksDao:
             rows = res.scalars().all()
             return await self._with_counts(rows, db)
 
+    async def list_for_user(
+        self, user_id: str, team_ids: list, db: Optional[AsyncSession] = None
+    ) -> list[TaskModel]:
+        """Tasks the user created or is assigned to, within the given teams.
+
+        Candidates are bounded by ``team_id IN team_ids`` (the denormalized team
+        column), then membership is decided in Python because ``assignee_ids`` is a
+        JSON list with no portable SQL containment across SQLite/Postgres. The router
+        applies the per-task visibility filter on top.
+        """
+        if not team_ids:
+            return []
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosTask)
+                .filter(WorkosTask.team_id.in_(team_ids))
+                .order_by(WorkosTask.created_at.asc())
+            )
+            rows = [
+                r for r in res.scalars().all()
+                if r.created_by_id == user_id or user_id in (r.assignee_ids or [])
+            ]
+            return await self._with_counts(rows, db)
+
     async def update_fields(self, id: str, fields: dict, db: Optional[AsyncSession] = None) -> Optional[TaskModel]:
         async with get_async_db_context(db) as db:
             res = await db.execute(select(WorkosTask).filter_by(id=id))
