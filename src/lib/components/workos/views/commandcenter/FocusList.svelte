@@ -20,11 +20,11 @@
 	</div>
 {:else}
 	{#if attention.length}
-		<div class="mb-4 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50/60 dark:bg-red-500/[0.06] px-3 pt-3 pb-1.5">
-			<div class="flex items-center gap-1.5 px-1 mb-1.5 text-[11px] uppercase tracking-wide font-semibold text-red-600 dark:text-red-400">
+		<div class="mb-4 rounded-xl border border-red-200/70 dark:border-red-500/20 bg-red-50/40 dark:bg-red-500/[0.04] px-3 pt-3 pb-1.5">
+			<div class="flex items-center gap-1.5 px-1 mb-1.5 text-[11px] uppercase tracking-wide font-semibold text-red-600/90 dark:text-red-400/90">
 				<Icon name="flame" size={14} /> Needs attention · {attention.length}
 			</div>
-			<div class="flex flex-col divide-y divide-red-100 dark:divide-red-500/15">
+			<div class="flex flex-col divide-y divide-gray-100 dark:divide-gray-900">
 				{#each attention as t (t.id)}<TaskRow task={t} />{/each}
 			</div>
 		</div>

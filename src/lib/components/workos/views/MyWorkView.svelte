@@ -73,7 +73,7 @@
 </script>
 
 <div class="h-full flex flex-col min-h-0">
-	<div class="flex-none flex items-end gap-3 px-4 pt-4">
+	<div class="flex-none flex items-end gap-3 max-w-5xl mx-auto w-full px-4 pt-4">
 		<div>
 			<div class="text-[11px] uppercase tracking-[0.14em] text-gray-400 mb-0.5">{dateLabel}</div>
 			<h1 class="text-2xl font-semibold tracking-tight leading-none">My Work</h1>
@@ -108,19 +108,25 @@
 		{/if}
 	</div>
 
-	<StatStrip {stats} active={activeTile} onPick={pickTile} />
+	<div class="max-w-5xl mx-auto w-full px-4 pt-3">
+		<StatStrip {stats} active={activeTile} onPick={pickTile} />
+	</div>
 
-	<FilterBar filter={myWorkFilter} showAssignee={false} />
+	<div class="max-w-5xl mx-auto w-full">
+		<FilterBar filter={myWorkFilter} showAssignee={false} />
+	</div>
 
-	<div bind:this={scroller} class="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-gray-900">
-		<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-5">
-			<div class="min-w-0">
-				<FocusList tasks={visible} {now} />
-			</div>
-			<div class="flex flex-col gap-4">
-				<InsightsPanel {stats} />
-				<ActivityRail />
-				<QuickLaunch tasks={segmentSet} />
+	<div bind:this={scroller} class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
+		<div class="max-w-5xl mx-auto w-full px-4 py-4">
+			<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-5">
+				<div class="min-w-0">
+					<FocusList tasks={visible} {now} />
+				</div>
+				<div class="flex flex-col gap-4">
+					<InsightsPanel {stats} />
+					<ActivityRail />
+					<QuickLaunch tasks={segmentSet} />
+				</div>
 			</div>
 		</div>
 	</div>

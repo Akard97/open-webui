@@ -7,14 +7,6 @@
 	onMount(loadNotifications);
 	$: recent = $notifications.slice(0, 8);
 
-	// Tint the actor chip by event kind so the feed scans by type at a glance.
-	const CHIP: Record<string, string> = {
-		assigned: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
-		mentioned: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200',
-		commented: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-		status_changed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-	};
-	const chipClass = (n: Notification) => CHIP[n.type] ?? CHIP.status_changed;
 	const actorInitial = (n: Notification) => (n.data?.actor_name ?? '?').trim().charAt(0).toUpperCase() || '•';
 </script>
 
@@ -34,7 +26,7 @@
 					aria-label={summarizeNotification(n) + (n.read ? '' : ' (unread)')}
 					onclick={() => openNotification(n)}
 				>
-					<span aria-hidden="true" class="w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center flex-none {chipClass(n)}">{actorInitial(n)}</span>
+					<span aria-hidden="true" class="w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center flex-none bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">{actorInitial(n)}</span>
 					<span class="min-w-0 flex-1">
 						<span class="flex items-center gap-1.5">
 							<span class="block text-xs truncate flex-1">{summarizeNotification(n)}</span>

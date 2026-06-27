@@ -20,7 +20,9 @@
 >
 	<span class="text-[11px] font-medium text-gray-400 w-14 flex-none tabular-nums">{task.key}</span>
 	<span class="flex-1 truncate text-sm">{task.title}</span>
-	<span class="text-[10.5px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap" style="background:{statusColor}1f; color:{statusColor}">{STATUS_LABEL[task.status]}</span>
+	<span class="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+		<span class="w-2 h-2 rounded-full flex-none" style="background:{statusColor}"></span>{STATUS_LABEL[task.status]}
+	</span>
 	{#if task.due_date}
 		<span class="text-[11px] w-20 text-right {overdue ? 'text-red-500 font-medium' : 'text-gray-400'}">{fmt(task.due_date)}</span>
 	{/if}
