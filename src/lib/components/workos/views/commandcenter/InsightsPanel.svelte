@@ -4,7 +4,7 @@
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../../lib/types';
 	export let stats: MyWorkStats;
 
-	const R = 20;
+	const R = 52;
 	const CIRC = 2 * Math.PI * R;
 	$: pct = Math.round(stats.completionRate * 100);
 	$: offset = CIRC * (1 - stats.completionRate);
@@ -25,30 +25,28 @@
 	$: priTotal = priSegs.reduce((n, s) => n + s.count, 0);
 </script>
 
-<div class="rounded-lg border border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-4">
-	<div class="flex items-center gap-3">
-		<svg width="52" height="52" viewBox="0 0 52 52" class="flex-none" aria-hidden="true">
-			<circle cx="26" cy="26" r={R} fill="none" stroke="currentColor" class="text-gray-200 dark:text-gray-800" stroke-width="5" />
-			<circle cx="26" cy="26" r={R} fill="none" stroke="currentColor" class="text-primary" stroke-width="5"
-				stroke-dasharray={CIRC} stroke-dashoffset={offset} stroke-linecap="round" transform="rotate(-90 26 26)" />
+<div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-4 flex flex-col gap-5">
+	<div class="flex justify-center pt-1">
+		<svg width="128" height="128" viewBox="0 0 128 128" class="flex-none" aria-hidden="true">
+			<circle cx="64" cy="64" r={R} fill="none" stroke="currentColor" class="text-gray-200 dark:text-gray-800" stroke-width="12" />
+			<circle cx="64" cy="64" r={R} fill="none" stroke="currentColor" class="text-primary" stroke-width="12"
+				stroke-dasharray={CIRC} stroke-dashoffset={offset} stroke-linecap="round" transform="rotate(-90 64 64)" />
+			<text x="64" y="62" text-anchor="middle" fill="currentColor" class="text-gray-900 dark:text-gray-100" style="font-size:26px;font-weight:600">{pct}%</text>
+			<text x="64" y="82" text-anchor="middle" fill="currentColor" class="text-gray-400" style="font-size:9px;letter-spacing:0.12em">COMPLETE</text>
 		</svg>
-		<div>
-			<div class="text-lg font-semibold">{pct}%</div>
-			<div class="text-[11px] text-gray-500">Completion</div>
-		</div>
 	</div>
 
 	<div>
-		<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-1.5">By status</div>
+		<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2">By status</div>
 		{#if statusTotal}
-			<div class="flex h-2 rounded-full overflow-hidden">
+			<div class="flex h-2.5 rounded-full overflow-hidden">
 				{#each statusSegs as s (s.key)}
 					<div style="width:{(s.count / statusTotal) * 100}%; background:{s.color}" title="{s.label}: {s.count}"></div>
 				{/each}
 			</div>
-			<div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+			<div class="flex flex-wrap gap-x-3 gap-y-1 mt-2.5">
 				{#each statusSegs as s (s.key)}
-					<span class="inline-flex items-center gap-1 text-[11px] text-gray-500">
+					<span class="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
 						<span class="w-2 h-2 rounded-full" style="background:{s.color}"></span>{s.label} {s.count}
 					</span>
 				{/each}
@@ -59,16 +57,16 @@
 	</div>
 
 	<div>
-		<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-1.5">By priority</div>
+		<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2">By priority</div>
 		{#if priTotal}
-			<div class="flex h-2 rounded-full overflow-hidden">
+			<div class="flex h-2.5 rounded-full overflow-hidden">
 				{#each priSegs as s (s.key)}
 					<div style="width:{(s.count / priTotal) * 100}%; background:{s.color}" title="{s.label}: {s.count}"></div>
 				{/each}
 			</div>
-			<div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+			<div class="flex flex-wrap gap-x-3 gap-y-1 mt-2.5">
 				{#each priSegs as s (s.key)}
-					<span class="inline-flex items-center gap-1 text-[11px] text-gray-500">
+					<span class="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
 						<span class="w-2 h-2 rounded-full" style="background:{s.color}"></span>{s.label} {s.count}
 					</span>
 				{/each}

@@ -23,19 +23,21 @@
 	}
 </script>
 
-<div class="rounded-lg border border-gray-200 dark:border-gray-800 p-3">
-	<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2">Quick launch</div>
+<div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-4">
+	<div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2.5">Jump to</div>
 	{#if streams.length}
 		<div class="flex flex-col gap-0.5">
 			{#each streams as s (s.id)}
 				<button
 					type="button"
-					class="flex items-center gap-2 text-left rounded-md px-1.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-900"
+					class="flex items-center gap-2.5 text-left rounded-lg px-1.5 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
 					onclick={() => go(s.id)}
 				>
-					<Icon name="layers" size={13} />
+					<span class="w-6 h-6 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 flex items-center justify-center flex-none">
+						<Icon name="layers" size={13} />
+					</span>
 					<span class="flex-1 truncate text-xs">{s.label}</span>
-					<span class="text-[11px] text-gray-400" aria-label="{s.count} tasks">{s.count}</span>
+					<span class="text-[10.5px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-2 py-0.5 tabular-nums" aria-label="{s.count} tasks">{s.count}</span>
 				</button>
 			{/each}
 		</div>

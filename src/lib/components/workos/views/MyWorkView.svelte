@@ -23,6 +23,7 @@
 
 	$: uid = $user?.id ?? '';
 	const now = Date.now();
+	const dateLabel = new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
 	// segmentSet: segment-only — no FilterBar, no done/canceled hide. Feeds the stats.
 	$: segmentSet = $myTasks.filter((t) =>
@@ -72,21 +73,28 @@
 </script>
 
 <div class="h-full flex flex-col min-h-0">
-	<div class="flex-none flex items-center gap-2 px-4 pt-4">
-		<h1 class="text-lg font-semibold">My Work</h1>
+	<div class="flex-none flex items-end gap-3 px-4 pt-4">
+		<div>
+			<div class="text-[11px] uppercase tracking-[0.14em] text-gray-400 mb-0.5">{dateLabel}</div>
+			<h1 class="text-2xl font-semibold tracking-tight leading-none">My Work</h1>
+		</div>
 		<div class="flex-1"></div>
-		<div class="inline-flex rounded-lg border border-gray-200 dark:border-gray-800 p-0.5 text-xs">
+		<div class="inline-flex rounded-full bg-gray-100 dark:bg-gray-800 p-0.5 text-xs">
 			{#each SEGMENTS as s (s.k)}
-				<button type="button" class="px-3 py-1 rounded-md" class:bg-accent={segment === s.k} onclick={() => (segment = s.k)}>{s.label}</button>
+				<button
+					type="button"
+					class="px-3 py-1 rounded-full transition-colors {segment === s.k ? 'bg-white dark:bg-gray-950 shadow-sm font-medium text-gray-900 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}"
+					onclick={() => (segment = s.k)}
+				>{s.label}</button>
 			{/each}
 		</div>
 		{#if creating}
 			<div class="flex items-center gap-1.5">
-				<select class="text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent px-2 py-1" bind:value={target}>
+				<select class="text-sm rounded-full border border-gray-300 dark:border-gray-700 bg-transparent px-3 py-1.5" bind:value={target}>
 					{#each $workstreams as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
 				</select>
 				<input
-					class="text-sm px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
+					class="text-sm px-3 py-1.5 rounded-full border border-gray-300 dark:border-gray-700 bg-transparent w-48"
 					placeholder="Task title…"
 					bind:value={newTitle}
 					onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creating = false; newTitle = ''; } }}
@@ -94,7 +102,7 @@
 				/>
 			</div>
 		{:else}
-			<button type="button" class="text-sm px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground inline-flex items-center gap-1" onclick={() => (creating = true)}>
+			<button type="button" class="text-sm px-3.5 py-1.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground inline-flex items-center gap-1 shadow-sm" onclick={() => (creating = true)}>
 				<Icon name="plus" size={15} /> New task
 			</button>
 		{/if}
@@ -104,12 +112,12 @@
 
 	<FilterBar filter={myWorkFilter} showAssignee={false} />
 
-	<div bind:this={scroller} class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-950">
-		<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4">
+	<div bind:this={scroller} class="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-gray-900">
+		<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-5">
 			<div class="min-w-0">
 				<FocusList tasks={visible} {now} />
 			</div>
-			<div class="flex flex-col gap-3">
+			<div class="flex flex-col gap-4">
 				<InsightsPanel {stats} />
 				<ActivityRail />
 				<QuickLaunch tasks={segmentSet} />
