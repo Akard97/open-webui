@@ -54,7 +54,7 @@
 		} else {
 			const bucket = key === 'overdue' ? 'overdue' : 'today';
 			scroller?.querySelector(`[data-bucket="${bucket}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			activeTile = key;
+			activeTile = activeTile === key ? null : key;
 		}
 	}
 

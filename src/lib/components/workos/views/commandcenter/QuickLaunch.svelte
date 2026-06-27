@@ -35,7 +35,7 @@
 				>
 					<Icon name="layers" size={13} />
 					<span class="flex-1 truncate text-xs">{s.label}</span>
-					<span class="text-[11px] text-gray-400">{s.count}</span>
+					<span class="text-[11px] text-gray-400" aria-label="{s.count} tasks">{s.count}</span>
 				</button>
 			{/each}
 		</div>

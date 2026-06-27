@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeStats, needsAttention } from './stats';
-import type { Task, TaskStatus, TaskPriority } from './types';
+import type { Task, TaskStatus } from './types';
 
 const DAY = 86_400_000;
 const NOW = new Date(2024, 2, 6, 12, 0, 0).getTime(); // 2024-03-06 12:00 local

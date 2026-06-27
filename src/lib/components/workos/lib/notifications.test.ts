@@ -18,4 +18,9 @@ describe('summarizeNotification', () => {
 	it('falls back gracefully when actor and key are missing', () => {
 		expect(summarizeNotification(mk('assigned'))).toBe('Someone assigned you');
 	});
+
+	it('uses a generic verb for unknown types', () => {
+		const n = mk('something_else' as any, { actor_name: 'Mia', task_key: 'OSL-7' });
+		expect(summarizeNotification(n)).toBe('Mia updated OSL-7');
+	});
 });
