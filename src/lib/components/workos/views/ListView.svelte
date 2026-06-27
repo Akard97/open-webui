@@ -2,13 +2,16 @@
 	import Pills from '../ui/Pills.svelte';
 	import AssigneeAvatars from './AssigneeAvatars.svelte';
 	import { STATUS_ORDER, STATUS_LABEL } from '../lib/types';
-	import { tasksByStatus, openTask, directory } from '../lib/store';
+	import { tasksByStatus, openTask, directory, boardFilter } from '../lib/store';
+	import FilterBar from '../chrome/FilterBar.svelte';
 
 	$: byStatus = $tasksByStatus;
 	$: void $directory; // re-render when names load
 </script>
 
-<div class="h-full overflow-y-auto py-2">
+<div class="h-full flex flex-col min-h-0">
+<FilterBar filter={boardFilter} />
+<div class="flex-1 overflow-y-auto py-2">
 	{#each STATUS_ORDER as status (status)}
 		{#if (byStatus[status] ?? []).length}
 			<div class="mb-2">
@@ -38,4 +41,5 @@
 			</div>
 		{/if}
 	{/each}
+</div>
 </div>

@@ -144,12 +144,22 @@ describe('collab realtime', () => {
 	});
 });
 
-import { myTasks, applyMyWorkTaskEvent, loadMyWork, foldInMyWorkFromNotification } from './store';
+import { myTasks, applyMyWorkTaskEvent, loadMyWork, foldInMyWorkFromNotification, boardFilter } from './store';
 
 const mkT = (over: Partial<Task>): Task => ({
 	id: 'x', workstream_id: 'w1', team_id: 'tm', number: 1, key: 'OSL-1', title: 't',
 	status: 'todo', assignee_ids: [], progress: 0, labels: [], sort_key: 1, created_by_id: 'u9',
 	created_at: 0, updated_at: 0, ...over
+});
+
+describe('tasksByStatus filtering', () => {
+	beforeEach(() => { boardFilter.set({ statuses: [], priorities: [], labelIds: [], assigneeIds: [], text: '' }); });
+	it('applies the board filter before grouping', () => {
+		tasks.set([mkT({ id: 'a', status: 'todo', title: 'Alpha' }), mkT({ id: 'b', status: 'todo', title: 'Beta' })]);
+		boardFilter.set({ statuses: [], priorities: [], labelIds: [], assigneeIds: [], text: 'alpha' });
+		const grouped = get(tasksByStatus);
+		expect(grouped.todo.map((t) => t.id)).toEqual(['a']);
+	});
 });
 
 describe('my work reconcile', () => {

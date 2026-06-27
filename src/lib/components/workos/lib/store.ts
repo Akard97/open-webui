@@ -9,8 +9,10 @@ import {
 	STATUS_ORDER,
 	type Team, type Workspace, type Workstream, type Label, type Task, type Member,
 	type TeamRole, type TaskStatus, type TaskPriority,
-	type Comment, type Activity, type Attachment, type Notification, type FeedItem, type Subtask
+	type Comment, type Activity, type Attachment, type Notification, type FeedItem, type Subtask,
+	type TaskFilter
 } from './types';
+import { applyFilters, emptyFilter } from './filters';
 
 export type ViewKey = 'board' | 'list' | 'admin' | 'inbox';
 
@@ -31,6 +33,8 @@ export const tasks: Writable<Task[]> = writable([]);
 export const labels: Writable<Label[]> = writable([]);
 export const members: Writable<Member[]> = writable([]);
 export const view: Writable<ViewKey> = writable('board');
+export const boardFilter: Writable<TaskFilter> = writable(emptyFilter());
+export const myWorkFilter: Writable<TaskFilter> = writable(emptyFilter());
 export const selectedTaskId: Writable<string | null> = writable(null);
 export const loading: Writable<boolean> = writable(false);
 export const directory: Writable<Record<string, { name: string }>> = writable({});
@@ -71,11 +75,11 @@ export const selectedTask = derived(
 	[tasks, selectedTaskId],
 	([$t, $id]) => $t.find((x) => x.id === $id) ?? null
 );
-export const tasksByStatus = derived(tasks, ($tasks) => {
+export const tasksByStatus = derived([tasks, boardFilter], ([$tasks, $filter]) => {
 	const out: Record<TaskStatus, Task[]> = {
 		backlog: [], todo: [], in_progress: [], in_review: [], done: [], canceled: []
 	};
-	for (const t of [...$tasks].sort((a, b) => a.sort_key - b.sort_key)) out[t.status]?.push(t);
+	for (const t of applyFilters([...$tasks].sort((a, b) => a.sort_key - b.sort_key), $filter)) out[t.status]?.push(t);
 	return out;
 });
 

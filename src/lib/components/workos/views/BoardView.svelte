@@ -5,7 +5,8 @@
 	import StatusDot from '../ui/StatusDot.svelte';
 	import TaskCard from './TaskCard.svelte';
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
-	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask } from '../lib/store';
+	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask, boardFilter } from '../lib/store';
+	import FilterBar from '../chrome/FilterBar.svelte';
 
 	// Status accent + glyph — hollow ring (not started) → half pie (working) →
 	// filled check/x (resolved), echoing the board mock.
@@ -17,12 +18,6 @@
 		done: { color: '#769a4a', shape: 'check' }, /* Osool 576 C */
 		canceled: { color: '#9ca3af', shape: 'x' }
 	};
-
-	const FILTERS = [
-		{ k: 'Due Date', v: 'All' },
-		{ k: 'Assignee', v: 'All' },
-		{ k: 'Priority', v: 'All' }
-	];
 
 	let columnEls: Record<string, HTMLElement> = {};
 	let sortables: Sortable[] = [];
@@ -125,47 +120,18 @@
 </script>
 
 <div class="h-full flex flex-col min-h-0">
-	<!-- Filter bar: decorative controls + functional Add New -->
-	<div class="flex-none flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-		{#each FILTERS as f (f.k)}
-			<button
-				class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-xs hover:bg-gray-100 dark:hover:bg-gray-900"
-				title="Coming soon"
-				aria-disabled="true"
-				tabindex="-1"
-			>
-				<span class="text-gray-400">{f.k}</span>
-				<span class="font-medium text-gray-700 dark:text-gray-200">{f.v}</span>
-				<Icon name="chevron-down" size={13} />
-			</button>
-		{/each}
-		<button
-			class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-xs hover:bg-gray-100 dark:hover:bg-gray-900"
-			title="Coming soon"
-			aria-disabled="true"
-			tabindex="-1"
-		>
-			<Icon name="sliders" size={14} /> Advance Filters
-		</button>
-
-		<div class="flex-1"></div>
-
-		{#if creatingTop}
-			<input
-				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-56"
-				placeholder="Task title…"
-				bind:value={topTitle}
-				onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }}
-				autofocus
-			/>
-		{:else}
-			<button
-				class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium"
-				onclick={() => (creatingTop = true)}
-			>
-				<Icon name="plus" size={15} /> Add New
-			</button>
-		{/if}
+	<!-- Filter bar + Add New -->
+	<div class="flex-none flex items-stretch">
+		<div class="flex-1"><FilterBar filter={boardFilter} /></div>
+		<div class="flex items-center px-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+			{#if creatingTop}
+				<input class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-56" placeholder="Task title…" bind:value={topTitle} onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }} autofocus />
+			{:else}
+				<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => (creatingTop = true)}>
+					<Icon name="plus" size={15} /> Add New
+				</button>
+			{/if}
+		</div>
 	</div>
 
 	<!-- Columns: white board, each column a flexible-height tinted panel -->
