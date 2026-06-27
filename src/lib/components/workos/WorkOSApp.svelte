@@ -30,7 +30,10 @@
 <div class="workos-root text-gray-800 dark:text-gray-100">
 	<Sidebar />
 	<div class="flex-1 flex flex-col min-w-0">
-		<Topbar />
+		<!-- Topbar is workstream chrome (title + tabs); global views (My Work, Inbox, Admin) carry their own header. -->
+		{#if $view === 'board' || $view === 'list'}
+			<Topbar />
+		{/if}
 		<div class="flex-1 relative min-h-0 bg-gray-50 dark:bg-gray-900">
 			{#if $loading && !$teams.length}
 				<div class="h-full flex items-center justify-center text-sm text-gray-400">Loading…</div>
