@@ -1,19 +1,12 @@
 <script lang="ts">
 	import type { TaskPriority, TaskStatus, Label } from '../lib/types';
+	import { STATUS_COLOR, PRIORITY_COLOR } from '../lib/colors';
 	export let priority: TaskPriority | null | undefined = undefined;
 	export let status: TaskStatus | undefined = undefined;
 	export let label: Label | undefined = undefined;
 	export let size: 'sm' | 'md' = 'sm';
 
 	$: textSize = size === 'md' ? 'text-sm' : 'text-[11px]';
-
-	const PRIORITY_COLOR: Record<string, string> = {
-		urgent: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#6b7280'
-	};
-	const STATUS_COLOR: Record<string, string> = {
-		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#00a5ba',
-		in_review: '#d97706', done: '#769a4a', canceled: '#9ca3af'
-	};
 </script>
 
 {#if priority !== undefined && priority !== null}
