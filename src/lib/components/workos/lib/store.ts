@@ -39,6 +39,11 @@ export const selectedTaskId: Writable<string | null> = writable(null);
 export const loading: Writable<boolean> = writable(false);
 export const directory: Writable<Record<string, { name: string }>> = writable({});
 
+// Sidebar collapse, persisted like OWUI's own sidebar flag.
+const NAV_COLLAPSED_KEY = 'workos:nav-collapsed';
+export const navCollapsed: Writable<boolean> = writable(browser && localStorage.getItem(NAV_COLLAPSED_KEY) === '1');
+if (browser) navCollapsed.subscribe((v) => localStorage.setItem(NAV_COLLAPSED_KEY, v ? '1' : '0'));
+
 export const comments: Writable<Comment[]> = writable([]);
 export const activity: Writable<Activity[]> = writable([]);
 export const attachments: Writable<Attachment[]> = writable([]);
@@ -72,8 +77,10 @@ export const currentWorkstream = derived(
 	([$s, $id]) => $s.find((x) => x.id === $id) ?? null
 );
 export const selectedTask = derived(
-	[tasks, selectedTaskId],
-	([$t, $id]) => $t.find((x) => x.id === $id) ?? null
+	// Falls back to myTasks so opening a task from My Work (whose tasks aren't in the
+	// current workstream's `tasks` store) still resolves and renders the detail drawer.
+	[tasks, myTasks, selectedTaskId],
+	([$t, $my, $id]) => $t.find((x) => x.id === $id) ?? $my.find((x) => x.id === $id) ?? null
 );
 export const tasksByStatus = derived([tasks, boardFilter], ([$tasks, $filter]) => {
 	const out: Record<TaskStatus, Task[]> = {

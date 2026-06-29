@@ -1,19 +1,22 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { user, theme as appTheme } from '$lib/stores';
+	import { user } from '$lib/stores';
+	import { WEBUI_BASE_URL } from '$lib/constants';
 	import Icon from '../ui/Icon.svelte';
 	import StatusDot from '../ui/StatusDot.svelte';
-	import Pills from '../ui/Pills.svelte';
-	import PriorityIcon from './commandcenter/PriorityIcon.svelte';
 	import Avatar from './commandcenter/Avatar.svelte';
-	import type { Task, TaskStatus, Label } from '../lib/types';
+	import TaskHoverCard from './TaskHoverCard.svelte';
+	import * as HoverCard from '$lib/components/ui/hover-card';
+	import type { Task, TaskStatus, MyWorkSegment } from '../lib/types';
+	import { STATUS_LABEL } from '../lib/types';
 	import { STATUS_COLOR, PRIORITY_COLOR } from '../lib/colors';
+	import { taskHealth, HEALTH_LABEL, type TaskHealth } from '../lib/progress';
 	import { bucketByDueDate } from '../lib/buckets';
 	import { computeStats } from '../lib/stats';
 	import { summarizeNotification } from '../lib/notifications';
 	import {
-		myTasks, labels, workstreams, notifications,
-		loadMyWork, teardownMyWork, loadNotifications, addTask, openTask, openNotification
+		myTasks, workstreams, notifications,
+		loadMyWork, teardownMyWork, loadNotifications, openTask, openNotification
 	} from '../lib/store';
 
 	const now = Date.now();
@@ -22,6 +25,15 @@
 
 	const STATUS_SHAPE: Record<TaskStatus, 'dashed' | 'ring' | 'half' | 'check' | 'x'> = {
 		backlog: 'dashed', todo: 'ring', in_progress: 'half', in_review: 'half', done: 'check', canceled: 'x'
+	};
+
+	// Health → chip tint, mirrored from the board's TaskCard so My Work reads the
+	// same on-track / at-risk / behind / overdue scale.
+	const HEALTH_CHIP: Record<TaskHealth, string> = {
+		on_track: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+		at_risk: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+		behind: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+		overdue: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
 	};
 
 	const fmtDue = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -42,17 +54,7 @@
 	}
 	const greetWord = () => { const h = new Date(now).getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 
-	// ---- Theme toggle ----
-	let dark = false;
-	function toggleTheme() {
-		dark = !dark;
-		const v = dark ? 'dark' : 'light';
-		try { localStorage.setItem('theme', v); } catch { /* ignore */ }
-		appTheme.set(v);
-		document.documentElement.classList.toggle('dark', dark);
-	}
-
-	onMount(() => { dark = document.documentElement.classList.contains('dark'); void loadMyWork(); void loadNotifications(); });
+	onMount(() => { void loadMyWork(); void loadNotifications(); });
 	onDestroy(() => teardownMyWork());
 
 	$: uid = $user?.id ?? '';
@@ -64,15 +66,27 @@
 	$: openStats = computeStats(openTasks, now);
 	$: doneThisWeek = computeStats($myTasks, now).doneThisWeek;
 
+	// Done in the prior 7-day window → delta arrow + "vs N last week".
+	const WEEK = 7 * 86_400_000;
+	$: doneLastWeek = $myTasks.filter(
+		(t) => t.status === 'done' && (t.completed_at ?? 0) >= now - 2 * WEEK && (t.completed_at ?? 0) < now - WEEK
+	).length;
+
+	// Oldest task still waiting on review → "oldest 2d ago".
+	$: reviewTasks = openTasks.filter((t) => t.status === 'in_review');
+	$: oldestReview = reviewTasks.length ? Math.min(...reviewTasks.map((t) => t.updated_at)) : null;
+
 	$: stats4 = [
-		{ value: $myTasks.filter((t) => (t.assignee_ids ?? []).includes(uid)).length, label: 'Assigned to you', icon: 'list',
-			chip: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200' },
-		{ value: buckets.today.length + buckets.thisWeek.length, label: 'Due this week', icon: 'clock',
-			chip: 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400' },
-		{ value: $myTasks.filter((t) => t.status === 'in_review').length, label: 'Waiting on review', icon: 'message-square',
-			chip: 'bg-purple-50 text-purple-600 dark:bg-purple-500/15 dark:text-purple-300' },
-		{ value: doneThisWeek, label: 'Done this week', icon: 'circle-check',
-			chip: 'bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400' }
+		{ value: $myTasks.filter((t) => (t.assignee_ids ?? []).includes(uid)).length, label: 'Assigned to you',
+			icon: 'list', iconColor: 'text-gray-700 dark:text-gray-200', sub: `${buckets.today.length} due today`, delta: null as number | null },
+		{ value: buckets.today.length + buckets.thisWeek.length, label: 'Due this week',
+			icon: 'clock', iconColor: 'text-gray-400 dark:text-gray-500', sub: `${openStats.inProgress} in progress`, delta: null as number | null },
+		{ value: reviewTasks.length, label: 'Waiting on review',
+			icon: 'eye', iconColor: 'text-gray-400 dark:text-gray-500',
+			sub: oldestReview ? `oldest ${ago(oldestReview)} ago` : 'all clear', delta: null as number | null },
+		{ value: doneThisWeek, label: 'Done this week',
+			icon: 'circle-check', iconColor: 'text-emerald-500 dark:text-emerald-400',
+			sub: `vs ${doneLastWeek} last week`, delta: doneThisWeek - doneLastWeek }
 	];
 
 	$: overdue = buckets.overdue;
@@ -86,7 +100,32 @@
 	})();
 	$: wsChips = [{ id: 'all', name: 'All Workstreams' }, ...wsList];
 	let wsFilter = 'all';
-	$: filtered = (wsFilter === 'all' ? openTasks : openTasks.filter((t) => t.workstream_id === wsFilter))
+
+	// Ownership segment toggle — scopes the My-tasks list to all / assigned-to-me /
+	// created-by-me (the dashboard stats above stay across all your work).
+	let segment: MyWorkSegment = 'all';
+	const SEGMENTS: { k: MyWorkSegment; label: string }[] = [
+		{ k: 'all', label: 'All' },
+		{ k: 'assigned', label: 'Assigned to me' },
+		{ k: 'created', label: 'Created by me' }
+	];
+
+	// "Need attention" toggle (title row) — scopes the My-tasks list to tasks that are
+	// overdue or about to be (due within ATTENTION_WINDOW of now). Auto-clears when
+	// nothing qualifies so the (then-hidden) toggle can't strand the list empty.
+	const ATTENTION_WINDOW = 2 * 86_400_000; // "about to be overdue" = due within 2 days
+	const needsAttn = (t: Task) => t.due_date != null && t.due_date <= endToday + ATTENTION_WINDOW;
+	$: attentionCount = openTasks.filter(needsAttn).length;
+	let attentionOnly = false;
+	$: if (!attentionCount && attentionOnly) attentionOnly = false;
+
+	$: filtered = openTasks
+		.filter((t) => wsFilter === 'all' || t.workstream_id === wsFilter)
+		.filter((t) =>
+			segment === 'assigned' ? (t.assignee_ids ?? []).includes(uid)
+			: segment === 'created' ? t.created_by_id === uid
+			: true)
+		.filter((t) => !attentionOnly || needsAttn(t))
 		.slice()
 		.sort((a, b) => (a.due_date ?? 8_640_000_000_000) - (b.due_date ?? 8_640_000_000_000));
 
@@ -119,7 +158,6 @@
 	$: mentions = $notifications.filter((n) => n.type === 'mentioned').slice(0, 3);
 	$: unreadMentions = $notifications.filter((n) => n.type === 'mentioned' && !n.read).length;
 
-	const labelsFor = (t: Task): Label[] => (t.labels ?? []).map((id) => $labels.find((l) => l.id === id)).filter((l): l is Label => !!l);
 	const wsName = (t: Task) => $workstreams.find((w) => w.id === t.workstream_id)?.name ?? '';
 	function dueClass(t: Task): string {
 		if (t.due_date == null) return 'text-gray-400';
@@ -128,21 +166,22 @@
 		return 'text-gray-400';
 	}
 
-	// New task (cross-workstream).
-	let creating = false, newTitle = '', target = '';
-	$: defaultStream = [...$myTasks].sort((a, b) => b.updated_at - a.updated_at)[0]?.workstream_id ?? $workstreams[0]?.id ?? '';
-	$: if (!target) target = defaultStream;
-	async function submitNew() {
-		if (!newTitle.trim() || !target) return;
-		await addTask(target, { title: newTitle.trim() });
-		newTitle = ''; creating = false;
-	}
+// Board-card chrome: flat white surface, hairline border, rounded-lg (8px) — no
+	// resting shadow (the board cards are flat; only TaskCard lifts on hover). Dark
+	// surface stays gray-900 so cards still read against the gray-950 page.
+	const CARD = 'border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-900';
 
-	const CARD = 'border border-gray-200 dark:border-gray-800 rounded-[7px] bg-white dark:bg-gray-900 shadow-sm';
+	// Shared column track for the My-tasks table — header and rows reference the same
+	// string so the columns line up: Status · Task · Priority · Workstream · Due · Health.
+	const GRID = 'grid-template-columns:104px minmax(0,1fr) 92px 116px 60px 80px';
 </script>
 
 <div class="h-full overflow-auto bg-white dark:bg-gray-950">
 	<div class="max-w-[1240px] mx-auto px-9 pt-7 pb-14">
+
+		<!-- Brand -->
+		<img src="{WEBUI_BASE_URL}/static/workos-logo-dark.png" class="h-10 w-auto object-contain mb-4 block dark:hidden" alt="WorkOS" />
+		<img src="{WEBUI_BASE_URL}/static/workos-logo-light.png" class="h-10 w-auto object-contain mb-4 hidden dark:block" alt="WorkOS" />
 
 		<!-- Header -->
 		<div class="flex items-center gap-4 mb-6">
@@ -150,49 +189,35 @@
 				<h1 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{greetWord()}, {firstName}</h1>
 				<p class="mt-1 text-sm text-gray-400 dark:text-gray-500">{dateLine}</p>
 			</div>
-			<button type="button" onclick={toggleTheme} class="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[5px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 shadow-sm">
-				<Icon name={dark ? 'sun' : 'moon'} size={16} /> {dark ? 'Light' : 'Dark'}
-			</button>
-			{#if creating}
-				<select class="text-sm h-[34px] rounded-[5px] border border-gray-300 dark:border-gray-700 bg-transparent px-2" bind:value={target}>
-					{#each $workstreams as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
-				</select>
-				<input
-					class="text-sm h-[34px] px-3 rounded-[5px] border border-gray-300 dark:border-gray-700 bg-transparent w-44"
-					placeholder="Task title…"
-					bind:value={newTitle}
-					onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creating = false; newTitle = ''; } }}
-					autofocus
-				/>
-			{:else}
-				<button type="button" onclick={() => (creating = true)} class="inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-[5px] bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 shadow-sm">
-					<Icon name="plus" size={16} /> New task
-				</button>
-			{/if}
 		</div>
 
 		<!-- Stat tiles -->
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-[18px]">
 			{#each stats4 as s (s.label)}
-				<div class="flex items-center gap-3.5 px-[18px] py-4 {CARD}">
-					<span class="w-10 h-10 rounded-[7px] flex items-center justify-center flex-none {s.chip}"><Icon name={s.icon} size={19} /></span>
-					<div>
-						<div class="text-3xl font-semibold tracking-tight leading-none tabular-nums text-gray-900 dark:text-gray-100">{s.value}</div>
-						<div class="text-[13px] text-gray-400 dark:text-gray-500 mt-1.5">{s.label}</div>
+				<div class="px-5 py-[13px] {CARD}">
+					<span class="block {s.iconColor}"><Icon name={s.icon} size={20} /></span>
+					<div class="mt-3 flex items-baseline gap-1.5">
+						<span class="text-[34px] font-bold tracking-tight leading-none tabular-nums text-gray-900 dark:text-gray-100">{s.value}</span>
+						{#if s.delta != null && s.delta > 0}
+							<span class="inline-flex items-center gap-px text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
+								<Icon name="arrow-up" size={12} />{s.delta}
+							</span>
+						{/if}
 					</div>
+					<div class="mt-2.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200">{s.label}</div>
+					<div class="mt-1 text-[12px] font-mono text-gray-400 dark:text-gray-500">{s.sub}</div>
 				</div>
 			{/each}
 		</div>
 
 		<!-- Overdue callout -->
 		{#if overdue.length}
-			<div class="flex items-center gap-3.5 px-4 py-3.5 border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 rounded-[7px] mb-[18px]">
+			<div class="flex items-center gap-3.5 px-4 py-3.5 border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 rounded-lg mb-[18px]">
 				<span class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center flex-none"><Icon name="alert-triangle" size={17} /></span>
 				<div class="flex-1 min-w-0">
 					<div class="text-sm font-semibold text-red-700 dark:text-red-300">{overdue.length} task{overdue.length === 1 ? ' is' : 's are'} overdue</div>
 					<div class="text-xs text-red-700/80 dark:text-red-300/80 mt-px truncate">{overdue.map((t) => t.title).join(' · ')}</div>
 				</div>
-				<button type="button" onclick={() => openTask(overdue[0].id)} class="text-xs font-medium px-3 h-7 rounded-[5px] border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-white/70 dark:hover:bg-red-950/60">Review now</button>
 			</div>
 		{/if}
 
@@ -203,8 +228,46 @@
 			<div class="{CARD} overflow-hidden">
 				<div class="px-[18px] pt-4 pb-3.5 border-b border-gray-100 dark:border-gray-800">
 					<div class="flex items-center gap-3 mb-3">
-						<span class="flex-1 text-[17px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">My tasks</span>
-						<span class="font-mono text-xs text-gray-400">{filtered.length} shown</span>
+						<span class="text-[17px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">My tasks</span>
+						<span class="text-xs text-gray-400 tabular-nums">{filtered.length} shown</span>
+						<div class="flex-1"></div>
+						{#if attentionCount}
+							<button
+								type="button"
+								role="switch"
+								onclick={() => (attentionOnly = !attentionOnly)}
+								aria-checked={attentionOnly}
+								class="inline-flex items-center gap-2 h-7 pl-2.5 pr-1.5 rounded-lg text-[12px] font-medium border transition-colors
+									{attentionOnly
+										? 'border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+										: 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}"
+							>
+								<Icon name="alert-triangle" size={13} />
+								Need attention
+								<span class="tabular-nums {attentionOnly ? '' : 'text-amber-600 dark:text-amber-400'}">{attentionCount}</span>
+								<span
+									class="relative inline-block w-7 h-4 rounded-full transition-colors
+										{attentionOnly ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'}"
+								>
+									<span
+										class="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform
+											{attentionOnly ? 'translate-x-3' : ''}"
+									></span>
+								</span>
+							</button>
+						{/if}
+						<div class="inline-flex rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-0.5">
+							{#each SEGMENTS as s (s.k)}
+								<button
+									type="button"
+									onclick={() => (segment = s.k)}
+									class="h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors
+										{segment === s.k
+											? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm'
+											: 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
+								>{s.label}</button>
+							{/each}
+						</div>
 					</div>
 					<div class="flex gap-2 flex-wrap">
 						{#each wsChips as c (c.id)}
@@ -213,39 +276,73 @@
 								onclick={() => (wsFilter = c.id)}
 								class="h-7 px-3 rounded-full text-[13px] font-medium border transition-colors
 									{wsFilter === c.id
-										? 'border-brand-300 bg-brand-100 text-primary dark:border-brand-700 dark:bg-brand-900/40 dark:text-brand-200'
+										? 'border-gray-300 bg-gray-100 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'
 										: 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}"
 							>{c.name}</button>
 						{/each}
 					</div>
 				</div>
-				<div class="px-2.5 pt-1.5 pb-2.5">
+				<div class="px-2 pt-1 pb-2">
 					{#if !filtered.length}
 						<div class="py-14 text-center text-sm text-gray-400">Nothing on your plate here.</div>
 					{:else}
+						<!-- Column header -->
+						<div class="grid items-center gap-3 px-2 pb-2 text-[11px] font-medium text-gray-400 dark:text-gray-500" style={GRID}>
+							<span>Status</span>
+							<span>Task</span>
+							<span>Priority</span>
+							<span>Workstream</span>
+							<span class="text-right">Due</span>
+							<span class="text-right">Health</span>
+						</div>
 						{#each filtered as t (t.id)}
-							<button type="button" onclick={() => openTask(t.id)} class="w-full text-left px-2 pt-2.5 pb-3 rounded-[5px] hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors">
-								<div class="flex items-center gap-[11px]">
-									<StatusDot shape={STATUS_SHAPE[t.status]} color={STATUS_COLOR[t.status]} size={16} />
-									<PriorityIcon priority={t.priority} size={15} />
-									<span class="font-mono text-[11px] text-gray-400 flex-none">{t.key}</span>
-									<span class="flex-1 min-w-0 text-[15px] text-gray-900 dark:text-gray-100 truncate">{t.title}</span>
-									<span class="font-mono text-xs flex-none {dueClass(t)}">{t.due_date ? fmtDue(t.due_date) : '—'}</span>
-								</div>
-								<div class="flex items-center gap-2 mt-[9px] pl-[27px]">
-									{#each labelsFor(t) as lb (lb.id)}<Pills label={lb} />{/each}
-									<span class="text-[11px] text-gray-400 inline-flex items-center gap-1">
-										<span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span>{wsName(t)}
-									</span>
-									<span class="flex-1"></span>
-									{#if t.progress > 0}
-										<span class="inline-flex items-center gap-2 w-[130px]">
-											<span class="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden"><span class="block h-full bg-primary rounded-full" style="width:{t.progress}%"></span></span>
-											<span class="font-mono text-[11px] text-gray-400 w-7 text-right">{t.progress}%</span>
-										</span>
-									{/if}
-								</div>
-							</button>
+							{@const health = taskHealth(t, now)}
+							<HoverCard.Root openDelay={220} closeDelay={120}>
+								<HoverCard.Trigger>
+									{#snippet child({ props }: { props: Record<string, any> })}
+										<button
+											{...props}
+											type="button"
+											onclick={() => openTask(t.id)}
+											class="group grid items-center gap-3 w-full text-left px-2 py-2 rounded-lg border-t border-gray-100 dark:border-gray-800/60 first:border-t-0 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+											style={GRID}
+										>
+											<span
+												class="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md text-[11px] font-semibold"
+												style="background:{STATUS_COLOR[t.status]}24; color:{STATUS_COLOR[t.status]}"
+											>
+												<StatusDot shape={STATUS_SHAPE[t.status]} color={STATUS_COLOR[t.status]} size={11} />
+												{STATUS_LABEL[t.status]}
+											</span>
+											<span class="min-w-0 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</span>
+											{#if t.priority}
+												<span class="inline-flex items-center gap-1.5 text-[13px] text-gray-600 dark:text-gray-300">
+													<span class="flex-none" style="color:{PRIORITY_COLOR[t.priority]}"><Icon name="flag" size={14} /></span>{cap(t.priority)}
+												</span>
+											{:else}
+												<span class="text-gray-300 dark:text-gray-600">—</span>
+											{/if}
+											<span class="inline-flex items-center gap-1.5 min-w-0 text-[13px] text-gray-500 dark:text-gray-400">
+												<span class="w-1.5 h-1.5 rounded-full bg-brand-500 flex-none"></span><span class="truncate">{wsName(t)}</span>
+											</span>
+											<span class="text-[13px] tabular-nums text-right {dueClass(t)}">{t.due_date ? fmtDue(t.due_date) : '—'}</span>
+											{#if health}
+												<span class="w-fit justify-self-end rounded-md px-2 py-0.5 text-[11px] font-medium {HEALTH_CHIP[health]}">{HEALTH_LABEL[health]}</span>
+											{:else}
+												<span></span>
+											{/if}
+										</button>
+									{/snippet}
+								</HoverCard.Trigger>
+								<HoverCard.Content
+									side="right"
+									align="start"
+									sideOffset={10}
+									class="w-[340px] p-0 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-xl select-none"
+								>
+									<TaskHoverCard task={t} workstreamName={wsName(t)} {now} />
+								</HoverCard.Content>
+							</HoverCard.Root>
 						{/each}
 					{/if}
 				</div>
@@ -269,7 +366,7 @@
 								<div class="flex items-center gap-2">
 									<span class="w-[9px] h-[9px] rounded-[3px] flex-none" style="background:{seg.color}"></span>
 									<span class="flex-1 text-[13px] text-gray-600 dark:text-gray-300">{seg.label}</span>
-									<span class="font-mono text-[13px] font-medium text-gray-900 dark:text-gray-100">{seg.n}</span>
+									<span class="text-[13px] font-medium tabular-nums text-gray-900 dark:text-gray-100">{seg.n}</span>
 								</div>
 							{/each}
 						</div>
@@ -288,11 +385,11 @@
 							<button type="button" onclick={() => openTask(d.task.id)} class="w-full text-left flex gap-3 py-2 items-center">
 								<div class="w-[78px] flex-none">
 									<div class="text-[13px] font-medium text-gray-900 dark:text-gray-100">{d.day}</div>
-									<div class="font-mono text-[11px] text-gray-400">{d.date}</div>
+									<div class="text-[11px] text-gray-400 tabular-nums">{d.date}</div>
 								</div>
 								<div class="w-px self-stretch bg-gray-100 dark:bg-gray-800"></div>
 								<div class="flex-1 min-w-0 flex items-center gap-2">
-									<PriorityIcon priority={d.task.priority} size={14} />
+									<span class="flex-none" style="color:{d.task.priority ? PRIORITY_COLOR[d.task.priority] : '#cbd5e1'}"><Icon name="flag" size={14} /></span>
 									<span class="text-[13px] text-gray-600 dark:text-gray-300 truncate">{d.task.title}</span>
 								</div>
 							</button>
@@ -310,7 +407,7 @@
 							<button type="button" onclick={() => openNotification(a.n)} class="w-full text-left flex items-start gap-2.5 py-1.5">
 								<Avatar name={a.who} size={22} />
 								<div class="flex-1 min-w-0 text-[13px] text-gray-600 dark:text-gray-300 leading-snug">
-									<b class="font-medium text-gray-900 dark:text-gray-100">{a.first}</b> {a.action}{#if a.target} <span class="font-mono text-xs text-primary">{a.target}</span>{/if}{#if a.detail} {a.detail}{/if}
+									<b class="font-medium text-gray-900 dark:text-gray-100">{a.first}</b> {a.action}{#if a.target} <span class="text-xs font-medium text-primary tabular-nums">{a.target}</span>{/if}{#if a.detail} {a.detail}{/if}
 								</div>
 								<span class="text-[11px] text-gray-400 flex-none">{a.when}</span>
 							</button>
@@ -322,7 +419,7 @@
 				<div class="px-[18px] py-4 {CARD}">
 					<div class="flex items-center gap-2 mb-2.5">
 						<span class="flex-1 text-[15px] font-semibold text-gray-900 dark:text-gray-100">Mentions</span>
-						{#if unreadMentions}<span class="font-mono text-[11px] text-white bg-red-500 rounded-full px-1.5 py-0.5">{unreadMentions}</span>{/if}
+						{#if unreadMentions}<span class="text-[11px] tabular-nums text-white bg-red-500 rounded-full px-1.5 py-0.5">{unreadMentions}</span>{/if}
 					</div>
 					{#if !mentions.length}
 						<div class="text-xs text-gray-400 py-1">No mentions.</div>
@@ -332,7 +429,7 @@
 								<Avatar name={m.data?.actor_name ?? '?'} size={22} />
 								<div class="flex-1 min-w-0">
 									<div class="text-[13px] text-gray-600 dark:text-gray-300 leading-snug">{m.data?.snippet ?? summarizeNotification(m)}</div>
-									<div class="font-mono text-[11px] text-gray-400 mt-0.5">{m.data?.task_key ?? ''} · {ago(m.created_at)}</div>
+									<div class="text-[11px] text-gray-400 tabular-nums mt-0.5">{m.data?.task_key ?? ''} · {ago(m.created_at)}</div>
 								</div>
 							</button>
 						{/each}

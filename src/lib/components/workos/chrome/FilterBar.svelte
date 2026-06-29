@@ -10,6 +10,14 @@
 	let open: string | null = null;
 	const toggle = (k: string) => (open = open === k ? null : k);
 
+	// Dismiss the open facet menu on any click outside that facet's own
+	// chip/menu — including empty space within the filter bar itself.
+	function onWindowClick(e: MouseEvent) {
+		if (!open) return;
+		const facet = (e.target as HTMLElement).closest?.('[data-facet]')?.getAttribute('data-facet');
+		if (facet !== open) open = null;
+	}
+
 	function flip(key: 'statuses' | 'priorities' | 'labelIds' | 'assigneeIds', val: string) {
 		filter.update((f) => {
 			const set = new Set(f[key] as string[]);
@@ -21,9 +29,11 @@
 	$: dirEntries = Object.entries($directory);
 </script>
 
+<svelte:window onclick={onWindowClick} />
+
 <div class="flex-none flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
 	<!-- Status -->
-	<div class="relative">
+	<div class="relative" data-facet="status">
 		<button class="filter-chip" onclick={() => toggle('status')}>
 			<span class="text-gray-400">Status</span><span class="font-medium">{count($filter.statuses.length) || ' All'}</span>
 			<Icon name="chevron-down" size={13} />
@@ -37,7 +47,7 @@
 		{/if}
 	</div>
 	<!-- Priority -->
-	<div class="relative">
+	<div class="relative" data-facet="priority">
 		<button class="filter-chip" onclick={() => toggle('priority')}>
 			<span class="text-gray-400">Priority</span><span class="font-medium">{count($filter.priorities.length) || ' All'}</span>
 			<Icon name="chevron-down" size={13} />
@@ -51,7 +61,7 @@
 		{/if}
 	</div>
 	<!-- Label -->
-	<div class="relative">
+	<div class="relative" data-facet="label">
 		<button class="filter-chip" onclick={() => toggle('label')}>
 			<span class="text-gray-400">Label</span><span class="font-medium">{count($filter.labelIds.length) || ' All'}</span>
 			<Icon name="chevron-down" size={13} />
@@ -66,7 +76,7 @@
 	</div>
 	<!-- Assignee (hidden on My Work) -->
 	{#if showAssignee}
-		<div class="relative">
+		<div class="relative" data-facet="assignee">
 			<button class="filter-chip" onclick={() => toggle('assignee')}>
 				<span class="text-gray-400">Assignee</span><span class="font-medium">{count($filter.assigneeIds.length) || ' All'}</span>
 				<Icon name="chevron-down" size={13} />

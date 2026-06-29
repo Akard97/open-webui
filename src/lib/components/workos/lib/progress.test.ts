@@ -5,7 +5,7 @@ import type { Task } from './types';
 const baseTask: Task = {
 	id: 't1', workstream_id: 'w1', team_id: 'team', number: 1, key: 'OSL-1',
 	title: 'Task', status: 'in_progress', progress: 20, labels: [], sort_key: 1,
-	created_at: 0, updated_at: 0
+	assignee_ids: [], created_at: 0, updated_at: 0
 };
 
 describe('plannedProgress', () => {
@@ -37,6 +37,14 @@ describe('actualProgress', () => {
 describe('taskHealth', () => {
 	it('returns null when schedule dates are missing', () => {
 		expect(taskHealth({ ...baseTask, start_date: null, due_date: null }, 150)).toBeNull();
+	});
+
+	it('marks overdue when past due even without a start date', () => {
+		expect(taskHealth({ ...baseTask, start_date: null, due_date: 100, progress: 90 }, 101)).toBe('overdue');
+	});
+
+	it('marks overdue when past due even at 100% progress (status, not progress, completes a task)', () => {
+		expect(taskHealth({ ...baseTask, start_date: null, due_date: 100, progress: 100 }, 101)).toBe('overdue');
 	});
 
 	it('marks overdue when past due and actual is below complete', () => {

@@ -27,10 +27,15 @@ export function actualProgress(task: Pick<Task, 'progress' | 'subtask_total' | '
 
 export function taskHealth(task: Task, now: number): TaskHealth | null {
 	if (task.status === 'done' || task.status === 'canceled') return null;
+	const actual = actualProgress(task);
+	// Overdue is a due-date fact: any open, past-due task is overdue regardless of
+	// start_date or progress %. Status (done/canceled, handled above) — not the
+	// progress bar — is the system's completion signal, so a 100%-progress task that's
+	// still open and past due is overdue. This keeps the badge in sync with the overdue
+	// banner/buckets, which only check due_date + status.
+	if (task.due_date != null && now > task.due_date) return 'overdue';
 	const planned = plannedProgress(task.start_date, task.due_date, now);
 	if (planned == null) return null;
-	const actual = actualProgress(task);
-	if (task.due_date != null && now > task.due_date && actual < 100) return 'overdue';
 	const gap = planned - actual;
 	if (gap >= 25) return 'behind';
 	if (gap >= 10) return 'at_risk';

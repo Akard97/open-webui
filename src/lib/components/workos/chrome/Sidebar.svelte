@@ -1,134 +1,248 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
+	import SidebarIcon from '$lib/components/icons/Sidebar.svelte';
 	import ThemeSwitcher from '$lib/components/app/ThemeSwitcher.svelte';
+	import AssigneeAvatars from '../views/AssigneeAvatars.svelte';
+	import { get } from 'svelte/store';
+	import * as api from '../lib/api';
+	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { user } from '$lib/stores';
 	import { canUseAdmin, canCreateWorkspace, canManageMembers } from '../lib/roles';
 	import {
 		teams, workspaces, workstreams, roles, currentTeam, currentTeamId, currentWorkstreamId,
-		selectTeam, selectWorkstream, view, openModal, unreadCount
+		selectTeam, selectWorkstream, view, openModal, unreadCount, navCollapsed, token
 	} from '../lib/store';
 
 	let teamMenuOpen = false;
+	let teamMenuEl: HTMLElement;
 	let expanded: Record<string, boolean> = {};
+	let memberIds: string[] = [];
+
+	// Close the team switcher when clicking anywhere outside its container.
+	function onWindowClick(e: MouseEvent): void {
+		if (teamMenuOpen && teamMenuEl && !teamMenuEl.contains(e.target as Node)) teamMenuOpen = false;
+	}
 
 	$: teamWorkspaces = $workspaces.filter((w) => w.team_id === $currentTeamId);
 	$: streamsByWs = (wsId: string) => $workstreams.filter((s) => s.workspace_id === wsId);
 	$: myRole = $currentTeamId ? $roles[$currentTeamId] : undefined;
+
+	// Two-letter team mark for the collapsed rail (prefer the short key).
+	$: teamBadge = (($currentTeam?.key || $currentTeam?.name || '?').trim().slice(0, 2)).toUpperCase();
+
+	// Load the active team's roster so the switcher card can show its members.
+	$: void loadMembers($currentTeamId);
+	async function loadMembers(id: string | null): Promise<void> {
+		if (!id) { memberIds = []; return; }
+		const ms = await api.listTeamMembers(token(), id).catch(() => []);
+		if (get(currentTeamId) !== id) return; // a newer team switch won the race
+		memberIds = ms.map((m) => m.user_id);
+	}
+
 </script>
 
-<aside class="w-64 flex-none h-full flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-	<!-- My Work -->
-	<div class="p-2.5 pb-0">
+<svelte:window onclick={onWindowClick} onkeydown={(e) => { if (e.key === 'Escape') teamMenuOpen = false; }} />
+
+{#if $navCollapsed}
+	<!-- Collapsed: icon rail -->
+	<aside
+		class="w-14 flex-none h-full flex flex-col items-center gap-0.5 pt-2 pb-2 px-2 bg-gray-50 dark:bg-gray-950 border-e-[0.5px] border-gray-50 dark:border-gray-850/30 text-gray-600 dark:text-gray-400"
+	>
+		<!-- Logo / expand -->
 		<button
-			class="flex items-center gap-2 w-full h-9 px-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-900"
-			class:bg-accent={$view === 'mywork'}
+			class="group size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition"
+			title="Expand sidebar"
+			onclick={() => navCollapsed.set(false)}
+		>
+			<img src="{WEBUI_BASE_URL}/static/workos-logo-dark.png" class="size-7 object-contain group-hover:hidden block dark:hidden" alt="WorkOS" />
+			<img src="{WEBUI_BASE_URL}/static/workos-logo-light.png" class="size-7 object-contain group-hover:hidden hidden dark:block" alt="WorkOS" />
+			<SidebarIcon className="size-5 hidden group-hover:flex" />
+		</button>
+
+		<button
+			class="size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition {$view === 'mywork' ? 'bg-gray-100 dark:bg-gray-850 text-gray-900 dark:text-white' : ''}"
+			title="My Work"
 			onclick={() => view.set('mywork')}
 		>
-			<Icon name="check" size={15} />
-			<span class="flex-1 text-left">My Work</span>
+			<Icon name="check" size={18} />
 		</button>
-	</div>
 
-	<!-- Team switcher -->
-	<div class="p-2.5 relative">
 		<button
-			class="flex items-center gap-2 w-full h-10 px-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900"
-			onclick={() => (teamMenuOpen = !teamMenuOpen)}
-		>
-			<div class="flex-1 text-left min-w-0">
-				<div class="text-sm font-semibold truncate">{$currentTeam?.name ?? 'No team'}</div>
-				<div class="text-[11px] text-gray-400">{$currentTeam?.key ?? ''}</div>
-			</div>
-			<Icon name="chevrons-up-down" size={15} />
-		</button>
-		{#if teamMenuOpen}
-			<div class="absolute left-2.5 right-2.5 mt-1 z-20 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1">
-				{#each $teams as t (t.id)}
-					<button
-						class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-						onclick={() => { selectTeam(t.id); teamMenuOpen = false; }}
-					>
-						<span class="flex-1 text-left truncate">{t.name}</span>
-						{#if t.id === $currentTeamId}<Icon name="check" size={14} />{/if}
-					</button>
-				{/each}
-				{#if canManageMembers(myRole) && $currentTeamId}
-					<button class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800" onclick={() => { openModal.set({ kind: 'members', teamId: $currentTeamId }); teamMenuOpen = false; }}>
-						<Icon name="users" size={14} /> Manage members
-					</button>
-				{/if}
-				<button
-					class="flex items-center gap-2 w-full px-2 h-8 rounded text-sm text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
-					onclick={() => { openModal.set({ kind: 'team' }); teamMenuOpen = false; }}
-				>
-					<Icon name="plus" size={14} /> New team
-				</button>
-			</div>
-		{/if}
-	</div>
-
-	<!-- Workspaces -->
-	<div class="flex-1 overflow-y-auto px-2 pb-2">
-		<button
-			class="flex items-center gap-2 w-full h-8 px-2 mb-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-900"
-			class:bg-accent={$view === 'inbox'}
+			class="relative size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition {$view === 'inbox' ? 'bg-gray-100 dark:bg-gray-850 text-gray-900 dark:text-white' : ''}"
+			title="Inbox"
 			onclick={() => view.set('inbox')}
 		>
-			<Icon name="message-square" size={15} />
-			<span class="flex-1 text-left">Inbox</span>
+			<Icon name="message-square" size={18} />
 			{#if $unreadCount > 0}
-				<span class="text-[11px] min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">{$unreadCount}</span>
+				<span class="absolute top-1 right-1 size-1.5 rounded-full bg-sky-500"></span>
 			{/if}
 		</button>
-		<div class="flex items-center justify-between px-2 py-1.5">
-			<span class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Workspaces</span>
-			{#if canCreateWorkspace(myRole) && $currentTeamId}
-				<button class="text-gray-400 hover:text-gray-600" onclick={() => openModal.set({ kind: 'workspace', teamId: $currentTeamId })}>
-					<Icon name="plus" size={14} />
-				</button>
-			{/if}
-		</div>
-		{#each teamWorkspaces as ws (ws.id)}
-			<div>
-				<button
-					class="flex items-center gap-1.5 w-full h-8 px-2 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-900"
-					onclick={() => (expanded[ws.id] = !expanded[ws.id])}
-				>
-					<Icon name={expanded[ws.id] ? 'chevron-down' : 'chevron-right'} size={14} />
-					<span class="flex-1 text-left truncate">{ws.name}</span>
-				</button>
-				{#if expanded[ws.id]}
-					{#each streamsByWs(ws.id) as s (s.id)}
-						<button
-							class="flex items-center gap-2 w-full h-8 pl-8 pr-2 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-900"
-							class:bg-accent={$currentWorkstreamId === s.id}
-							onclick={() => { selectWorkstream(s.id); view.set('board'); }}
-						>
-							<span class="w-1.5 h-1.5 rounded-sm bg-primary flex-none"></span>
-							<span class="flex-1 text-left truncate">{s.name}</span>
-						</button>
-					{/each}
-					{#if canCreateWorkspace(myRole)}
-						<button
-							class="flex items-center gap-2 w-full h-7 pl-8 pr-2 rounded text-xs text-gray-400 hover:text-gray-600"
-							onclick={() => openModal.set({ kind: 'workstream', workspaceId: ws.id })}
-						>
-							<Icon name="plus" size={12} /> New workstream
-						</button>
-					{/if}
-				{/if}
-			</div>
-		{/each}
-	</div>
 
-	<!-- Footer -->
-	<div class="border-t border-gray-200 dark:border-gray-800 p-2 flex items-center gap-2">
-		<div class="flex-1 min-w-0 text-sm font-medium truncate">{$user?.name ?? ''}</div>
+		<!-- Current team (click to expand and switch) -->
+		<button
+			class="size-9 rounded-xl flex items-center justify-center text-[11px] font-semibold bg-brand-600 text-white transition hover:bg-brand-700 dark:bg-brand-500 dark:text-brand-950 dark:hover:bg-brand-400"
+			title={$currentTeam?.name ?? 'Team'}
+			onclick={() => navCollapsed.set(false)}
+		>
+			{teamBadge}
+		</button>
+
+		<div class="flex-1"></div>
+
 		{#if canUseAdmin($user)}
-			<button class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-900" title="WorkOS admin" onclick={() => view.set('admin')}>
-				<Icon name="settings" size={16} />
+			<button class="size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="WorkOS admin" onclick={() => view.set('admin')}>
+				<Icon name="settings" size={18} />
 			</button>
 		{/if}
 		<ThemeSwitcher />
-	</div>
-</aside>
+	</aside>
+{:else}
+	<aside class="w-64 flex-none h-full flex flex-col bg-gray-50 dark:bg-gray-950 border-e-[0.5px] border-gray-50 dark:border-gray-850/30">
+		<!-- Header: mark + name + collapse -->
+		<div class="px-[0.5625rem] pt-2 pb-1.5 flex justify-between space-x-1 text-gray-600 dark:text-gray-400">
+			<div class="flex items-center size-8.5 justify-center">
+				<img src="{WEBUI_BASE_URL}/static/workos-logo-dark.png" class="size-7 object-contain block dark:hidden" alt="WorkOS" />
+				<img src="{WEBUI_BASE_URL}/static/workos-logo-light.png" class="size-7 object-contain hidden dark:block" alt="WorkOS" />
+			</div>
+			<div class="flex flex-1 items-center px-0.5">
+				<div class="self-center font-medium text-gray-850 dark:text-white font-primary">WorkOS</div>
+			</div>
+			<button
+				class="flex rounded-xl size-8.5 justify-center items-center hover:bg-gray-100/50 dark:hover:bg-gray-850/50 transition"
+				title="Collapse sidebar"
+				onclick={() => navCollapsed.set(true)}
+			>
+				<div class="self-center p-1.5"><SidebarIcon /></div>
+			</button>
+		</div>
+
+		<!-- My Work + Inbox -->
+		<div class="text-gray-800 dark:text-gray-200">
+			<div class="px-[0.4375rem] flex justify-center">
+				<button
+					class="group grow flex items-center space-x-3 rounded-xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none {$view === 'mywork' ? 'bg-gray-100 dark:bg-gray-900' : ''}"
+					onclick={() => view.set('mywork')}
+				>
+					<div class="self-center"><Icon name="check" size={18} /></div>
+					<div class="flex flex-1 self-center translate-y-[0.5px]">
+						<div class="self-center text-sm font-primary {$view === 'mywork' ? 'font-medium' : ''}">My Work</div>
+					</div>
+				</button>
+			</div>
+			<div class="px-[0.4375rem] flex justify-center">
+				<button
+					class="group grow flex items-center space-x-3 rounded-xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none {$view === 'inbox' ? 'bg-gray-100 dark:bg-gray-900' : ''}"
+					onclick={() => view.set('inbox')}
+				>
+					<div class="self-center"><Icon name="message-square" size={18} /></div>
+					<div class="flex flex-1 self-center translate-y-[0.5px]">
+						<div class="self-center text-sm font-primary {$view === 'inbox' ? 'font-medium' : ''}">Inbox</div>
+					</div>
+					{#if $unreadCount > 0}
+						<span class="shrink-0 self-center text-[10px] min-w-4 h-4 px-1 rounded-full bg-sky-500 text-white flex items-center justify-center">{$unreadCount}</span>
+					{/if}
+				</button>
+			</div>
+		</div>
+
+		<!-- Teams (directly above Workspaces) -->
+		<div class="mt-1 px-[0.4375rem] relative text-gray-800 dark:text-gray-200" bind:this={teamMenuEl}>
+			<div class="py-1.5 pl-2.5 text-xs font-medium text-gray-600 dark:text-gray-400">Team</div>
+			<button
+				class="group w-full flex flex-col gap-2.5 rounded-xl px-3 py-2.5 transition outline-none bg-gray-100 dark:bg-gray-900 ring-1 ring-black/5 dark:ring-white/10 hover:bg-gray-200 dark:hover:bg-gray-850"
+				onclick={() => (teamMenuOpen = !teamMenuOpen)}
+			>
+				<div class="flex items-center gap-2.5 w-full">
+					<span class="flex-none size-7 rounded-lg flex items-center justify-center text-[11px] font-semibold bg-brand-600 text-white dark:bg-brand-500 dark:text-brand-950">{teamBadge}</span>
+					<span class="flex-1 min-w-0 text-left text-sm font-semibold truncate translate-y-[0.5px] text-gray-900 dark:text-white">{$currentTeam?.name ?? 'No team'}</span>
+					<span class="text-gray-400 dark:text-gray-500 transition group-hover:text-gray-600 dark:group-hover:text-gray-300"><Icon name="chevrons-up-down" size={15} /></span>
+				</div>
+				{#if memberIds.length}
+					<div class="flex items-center gap-2 pl-0.5">
+						<AssigneeAvatars ids={memberIds} max={4} size={20} />
+						<span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">{memberIds.length} member{memberIds.length === 1 ? '' : 's'}</span>
+					</div>
+				{/if}
+			</button>
+			{#if teamMenuOpen}
+				<div class="absolute left-[0.4375rem] right-[0.4375rem] mt-1 z-20 rounded-xl border border-gray-100 dark:border-gray-850 bg-white dark:bg-gray-900 shadow-lg p-1">
+					{#each $teams as t (t.id)}
+						<button
+							class="flex items-center gap-2 w-full px-2.5 h-8 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-850"
+							onclick={() => { selectTeam(t.id); teamMenuOpen = false; }}
+						>
+							<span class="flex-1 text-left truncate">{t.name}</span>
+							{#if t.id === $currentTeamId}<Icon name="check" size={14} />{/if}
+						</button>
+					{/each}
+					{#if canManageMembers(myRole) && $currentTeamId}
+						<button class="flex items-center gap-2 w-full px-2.5 h-8 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-850" onclick={() => { openModal.set({ kind: 'members', teamId: $currentTeamId }); teamMenuOpen = false; }}>
+							<Icon name="users" size={14} /> Manage members
+						</button>
+					{/if}
+					<button
+						class="flex items-center gap-2 w-full px-2.5 h-8 rounded-lg text-sm text-primary hover:bg-gray-100 dark:hover:bg-gray-850"
+						onclick={() => { openModal.set({ kind: 'team' }); teamMenuOpen = false; }}
+					>
+						<Icon name="plus" size={14} /> New team
+					</button>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Workspaces -->
+		<div class="flex-1 overflow-y-auto scrollbar-hidden px-2 mt-1 pb-2">
+			<div class="group w-full rounded-xl flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-900 transition text-gray-600 dark:text-gray-400">
+				<div class="w-full py-1.5 pl-2 flex items-center gap-1.5 text-xs font-medium">
+					<div class="translate-y-[0.5px] pl-0.5">Workspaces</div>
+				</div>
+				{#if canCreateWorkspace(myRole) && $currentTeamId}
+					<button class="z-10 mr-2 invisible group-hover:visible self-center p-0.5 hover:bg-gray-200 dark:hover:bg-gray-850 rounded-lg transition" title="New workspace" onclick={() => openModal.set({ kind: 'workspace', teamId: $currentTeamId })}>
+						<Icon name="plus" size={12} strokeWidth={2.5} />
+					</button>
+				{/if}
+			</div>
+			{#each teamWorkspaces as ws (ws.id)}
+				<div class="text-gray-800 dark:text-gray-200">
+					<button
+						class="w-full flex items-center gap-1.5 rounded-xl px-[11px] py-[6px] text-sm hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+						onclick={() => (expanded[ws.id] = !expanded[ws.id])}
+					>
+						<Icon name={expanded[ws.id] ? 'chevron-down' : 'chevron-right'} size={12} />
+						<span class="flex-1 text-left truncate">{ws.name}</span>
+					</button>
+					{#if expanded[ws.id]}
+						{#each streamsByWs(ws.id) as s (s.id)}
+							<button
+								class="w-full flex items-center gap-2 rounded-xl pl-7 pr-[11px] py-[6px] text-sm transition {$currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
+								onclick={() => { selectWorkstream(s.id); view.set('board'); }}
+							>
+								<span class="size-1.5 rounded-full bg-gray-400 dark:bg-gray-600 flex-none"></span>
+								<span class="flex-1 text-left truncate">{s.name}</span>
+							</button>
+						{/each}
+						{#if canCreateWorkspace(myRole)}
+							<button
+								class="w-full flex items-center gap-2 rounded-xl pl-7 pr-[11px] py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+								onclick={() => openModal.set({ kind: 'workstream', workspaceId: ws.id })}
+							>
+								<Icon name="plus" size={12} /> New workstream
+							</button>
+						{/if}
+					{/if}
+				</div>
+			{/each}
+		</div>
+
+		<!-- Footer -->
+		<div class="border-t border-gray-50 dark:border-gray-850/30 p-2 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+			<div class="flex-1 min-w-0 text-sm font-medium truncate">{$user?.name ?? ''}</div>
+			{#if canUseAdmin($user)}
+				<button class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="WorkOS admin" onclick={() => view.set('admin')}>
+					<Icon name="settings" size={16} />
+				</button>
+			{/if}
+			<ThemeSwitcher />
+		</div>
+	</aside>
+{/if}
