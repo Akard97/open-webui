@@ -36,7 +36,7 @@
 		{/if}
 	</div>
 
-	<div class="flex flex-col gap-1">
+	<div class="flex flex-col gap-1 min-h-[20px]" data-cal-list data-day={dayKey(date.getTime())}>
 		{#each visible as t (t.id)}
 			<CalChip task={t} />
 		{/each}
