@@ -7,6 +7,7 @@
 	import type { Task } from '../../lib/types';
 
 	export let task: Task;
+	export let placeholder = 'Unassigned';
 
 	$: assigned = task.assignee_ids ?? [];
 	$: members = Object.entries($directory).map(([id, u]) => ({ id, name: u.name }));
@@ -31,7 +32,7 @@
 			<span class="text-sm">{summary}</span>
 		{:else}
 			<span class="inline-flex items-center gap-1.5 text-sm text-gray-400">
-				<Icon name="user" size={15} /> Unassigned
+				<Icon name="user" size={15} /> {placeholder}
 			</span>
 		{/if}
 	</DropdownMenu.Trigger>
