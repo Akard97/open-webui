@@ -1,4 +1,4 @@
-export type ListColumnKey = 'assignee' | 'due' | 'priority' | 'labels' | 'progress';
+export type ListColumnKey = 'assignee' | 'start' | 'due' | 'priority' | 'labels' | 'progress';
 
 export interface ListColumnMeta {
 	key: ListColumnKey;
@@ -9,6 +9,7 @@ export interface ListColumnMeta {
 // menu is always last — neither is configurable).
 export const LIST_COLUMNS: ListColumnMeta[] = [
 	{ key: 'assignee', label: 'Assignee' },
+	{ key: 'start', label: 'Start date' },
 	{ key: 'due', label: 'Due date' },
 	{ key: 'priority', label: 'Priority' },
 	{ key: 'labels', label: 'Labels' },
@@ -18,7 +19,7 @@ export const LIST_COLUMNS: ListColumnMeta[] = [
 export type ColumnPrefs = Record<ListColumnKey, boolean>;
 
 export function defaultColumnPrefs(): ColumnPrefs {
-	return { assignee: true, due: true, priority: true, labels: true, progress: true };
+	return { assignee: true, start: true, due: true, priority: true, labels: true, progress: true };
 }
 
 // Merge a persisted preference string over the defaults, tolerating missing keys,
@@ -44,6 +45,7 @@ const NAME_WIDTH = 'minmax(180px, 1fr)';
 const MENU_WIDTH = '36px';
 const COLUMN_WIDTH: Record<ListColumnKey, string> = {
 	assignee: '120px',
+	start: '120px',
 	due: '120px',
 	priority: '130px',
 	labels: '160px',

@@ -26,10 +26,13 @@
 	$: template = gridTemplate($listColumns);
 	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
 
-	// Ephemeral UI state (not persisted): collapsed groups + per-group quick-add.
+	// Ephemeral UI state (not persisted): collapsed groups + per-group quick-add +
+	// the toolbar "Add new" quick-add.
 	let collapsed: Record<string, boolean> = {};
 	let adding: TaskStatus | null = null;
 	let newTitle = '';
+	let creatingNew = false;
+	let newGlobalTitle = '';
 
 	function toggle(s: TaskStatus) {
 		collapsed = { ...collapsed, [s]: !collapsed[s] };
@@ -42,13 +45,21 @@
 		newTitle = '';
 		adding = null;
 	}
+
+	// Toolbar "Add new" — creates a task in the default (backlog) status, like the
+	// old Topbar entry point it replaces.
+	async function submitNew() {
+		const ws = $currentWorkstream;
+		if (!newGlobalTitle.trim() || !ws) return;
+		await addTask(ws.id, { title: newGlobalTitle.trim() });
+		newGlobalTitle = '';
+		creatingNew = false;
+	}
 </script>
 
 <div class="h-full flex flex-col min-h-0">
-	<FilterBar filter={boardFilter} />
-
-	<!-- List toolbar: column picker (right-aligned) -->
-	<div class="flex-none flex items-center justify-end px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+	<!-- Filters + Columns picker + Add new, all on one row (Columns/Add after the search). -->
+	<FilterBar filter={boardFilter}>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-sm hover:bg-gray-100 dark:hover:bg-gray-900">
 				<Icon name="sliders" size={14} /> Columns <Icon name="chevron-down" size={13} />
@@ -63,10 +74,25 @@
 				{/each}
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-	</div>
+
+		{#if creatingNew}
+			<!-- svelte-ignore a11y_autofocus -->
+			<input
+				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
+				placeholder="Task title…"
+				bind:value={newGlobalTitle}
+				onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creatingNew = false; newGlobalTitle = ''; } }}
+				autofocus
+			/>
+		{:else}
+			<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => { creatingNew = true; newGlobalTitle = ''; }}>
+				<Icon name="plus" size={15} /> Add new
+			</button>
+		{/if}
+	</FilterBar>
 
 	<!-- Grouped, collapsible status sections -->
-	<div class="flex-1 overflow-auto p-4 space-y-3">
+	<div class="flex-1 overflow-auto p-4 space-y-3 bg-white dark:bg-gray-900">
 		{#each STATUS_ORDER as status (status)}
 			{#if (byStatus[status] ?? []).length}
 				<section class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden">
@@ -91,6 +117,7 @@
 							<!-- 26px aligns "Name" under the row title, past the StatusCell glyph: StatusDot(16) + gap-2.5(10) -->
 							<span style="padding-left: 26px;">Name</span>
 							{#if $listColumns.assignee}<span>Assignee</span>{/if}
+							{#if $listColumns.start}<span>Start date</span>{/if}
 							{#if $listColumns.due}<span>Due date</span>{/if}
 							{#if $listColumns.priority}<span>Priority</span>{/if}
 							{#if $listColumns.labels}<span>Labels</span>{/if}
@@ -109,6 +136,9 @@
 
 								{#if $listColumns.assignee}
 									<span class="min-w-0"><AssigneeField {task} placeholder="Assign" /></span>
+								{/if}
+								{#if $listColumns.start}
+									<span class="min-w-0"><DueDateCell {task} field="start_date" /></span>
 								{/if}
 								{#if $listColumns.due}
 									<span class="min-w-0"><DueDateCell {task} /></span>

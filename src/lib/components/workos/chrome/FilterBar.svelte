@@ -102,6 +102,9 @@
 		/>
 		<span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"><Icon name="search" size={14} /></span>
 	</div>
+
+	<!-- Optional trailing controls (e.g. List view's Columns picker + Add new), placed after the search. -->
+	<slot />
 </div>
 
 <style>

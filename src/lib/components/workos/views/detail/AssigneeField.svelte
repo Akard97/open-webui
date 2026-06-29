@@ -36,7 +36,7 @@
 			</span>
 		{/if}
 	</DropdownMenu.Trigger>
-	<DropdownMenu.Content class="max-h-64 overflow-y-auto">
+	<DropdownMenu.Content class="w-64 max-h-64 overflow-y-auto">
 		{#each members as m (m.id)}
 			<DropdownMenu.CheckboxItem
 				checked={assigned.includes(m.id)}

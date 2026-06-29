@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
-	import { currentWorkstream, currentTeam, workspaces, view, tasks, initials, addTask } from '../lib/store';
+	import { currentWorkstream, currentTeam, workspaces, view, tasks, initials } from '../lib/store';
 
 	$: ws = $currentWorkstream;
 	$: parentWorkspace = ws ? $workspaces.find((w) => w.id === ws.workspace_id) : null;
@@ -18,16 +18,6 @@
 	function selectTab(t: (typeof TABS)[number]) {
 		if (t.live) view.set(t.key as 'board' | 'list');
 	}
-
-	// List view keeps an add entry point (board has its own in the filter bar).
-	let creating = false;
-	let title = '';
-	async function submitNew() {
-		if (!title.trim() || !ws) return;
-		await addTask(ws.id, { title: title.trim() });
-		title = '';
-		creating = false;
-	}
 </script>
 
 <header class="flex-none border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
@@ -44,21 +34,6 @@
 		<div class="flex-1"></div>
 
 		{#if ws}
-			{#if $view === 'list'}
-				{#if creating}
-					<input
-						class="text-sm px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-56"
-						placeholder="Task title…"
-						bind:value={title}
-						onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creating = false; title = ''; } }}
-						autofocus
-					/>
-				{:else}
-					<button class="text-sm px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground inline-flex items-center gap-1" onclick={() => (creating = true)}>
-						<Icon name="plus" size={15} /> New task
-					</button>
-				{/if}
-			{/if}
 			<div class="flex -space-x-2">
 				{#each assignees as id (id)}
 					<span class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
