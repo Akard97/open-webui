@@ -13,6 +13,7 @@ import {
 	type TaskFilter
 } from './types';
 import { applyFilters, emptyFilter } from './filters';
+import { defaultColumnPrefs, parseColumnPrefs, type ColumnPrefs } from './columns';
 
 export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork';
 
@@ -43,6 +44,13 @@ export const directory: Writable<Record<string, { name: string }>> = writable({}
 const NAV_COLLAPSED_KEY = 'workos:nav-collapsed';
 export const navCollapsed: Writable<boolean> = writable(browser && localStorage.getItem(NAV_COLLAPSED_KEY) === '1');
 if (browser) navCollapsed.subscribe((v) => localStorage.setItem(NAV_COLLAPSED_KEY, v ? '1' : '0'));
+
+// List column visibility, persisted per browser like the sidebar flag.
+const LIST_COLUMNS_KEY = 'workos:list-columns';
+export const listColumns: Writable<ColumnPrefs> = writable(
+	browser ? parseColumnPrefs(localStorage.getItem(LIST_COLUMNS_KEY)) : defaultColumnPrefs()
+);
+if (browser) listColumns.subscribe((v) => localStorage.setItem(LIST_COLUMNS_KEY, JSON.stringify(v)));
 
 export const comments: Writable<Comment[]> = writable([]);
 export const activity: Writable<Activity[]> = writable([]);
