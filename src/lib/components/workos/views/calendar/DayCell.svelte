@@ -18,10 +18,12 @@
 
 	async function submit() {
 		const ws = $currentWorkstream;
-		if (!title.trim() || !ws) return;
-		await addTask(ws.id, { title: title.trim(), due_date: dayKey(date.getTime()) });
-		title = '';
+		const t = title.trim();
+		if (!t || !ws) return;
+		// Close before the await so a quick double-Enter can't fire addTask twice.
 		adding = false;
+		title = '';
+		await addTask(ws.id, { title: t, due_date: dayKey(date.getTime()) });
 	}
 </script>
 
