@@ -2,6 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import DayCell from './calendar/DayCell.svelte';
+	import UnscheduledRail from './calendar/UnscheduledRail.svelte';
 	import { monthGrid, weekDays, isToday, dayKey } from '../lib/calendar';
 	import { boardFilter, filteredTasks } from '../lib/store';
 	import type { Task } from '../lib/types';
@@ -15,6 +16,7 @@
 	$: days = mode === 'month' ? monthGrid(cursor) : weekDays(cursor);
 	$: cursorMonth = cursor.getMonth();
 	$: scheduled = $filteredTasks.filter((t) => t.due_date != null);
+	$: unscheduled = $filteredTasks.filter((t) => t.due_date == null);
 	$: byDay = scheduled.reduce<Map<number, Task[]>>((m, t) => {
 		const k = dayKey(t.due_date as number);
 		(m.get(k) ?? m.set(k, []).get(k)!).push(t);
@@ -64,8 +66,8 @@
 	</div>
 
 	<!-- Grid -->
-	<div class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-900">
-		<div class="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+	<div class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-900 flex gap-4 items-start">
+		<div class="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
 			<div class="grid grid-cols-7 bg-gray-50 dark:bg-gray-950">
 				{#each WEEKDAYS as w (w)}
 					<div class="px-2 py-1.5 text-xs text-gray-400 border-b border-gray-100 dark:border-gray-900">{w}</div>
@@ -83,5 +85,6 @@
 				{/each}
 			</div>
 		</div>
+		<UnscheduledRail tasks={unscheduled} />
 	</div>
 </div>
