@@ -91,10 +91,14 @@
 		const current = get(tasksStore).find((t) => t.id === taskId);
 		const curKey = current?.due_date == null ? null : dayKey(current.due_date);
 		const nextKey = nextDue == null ? null : dayKey(nextDue);
-		if (curKey !== nextKey) await editTask(taskId, { due_date: nextDue });
-
-		epoch += 1; // rebuild grid + rail from the store
+		// editTask writes optimistically (synchronously) before its network await,
+		// so rebuild from that synchronous state and re-init BEFORE awaiting the
+		// network — otherwise the chip flickers out for the whole round-trip.
+		// (Mirrors BoardView's epoch-before-await ordering.)
+		const saved = curKey !== nextKey ? editTask(taskId, { due_date: nextDue }) : null;
+		epoch += 1; // rebuild grid + rail from the (already-updated) store
 		await initSortables();
+		if (saved) await saved;
 	}
 
 	// Re-init whenever the rendered cell set changes (period, mode, filtered
