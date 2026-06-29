@@ -2,8 +2,9 @@
 	import Icon from '../ui/Icon.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import DayCell from './calendar/DayCell.svelte';
-	import { monthGrid, weekDays, isToday } from '../lib/calendar';
-	import { boardFilter } from '../lib/store';
+	import { monthGrid, weekDays, isToday, dayKey } from '../lib/calendar';
+	import { boardFilter, filteredTasks } from '../lib/store';
+	import type { Task } from '../lib/types';
 
 	const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -13,6 +14,13 @@
 
 	$: days = mode === 'month' ? monthGrid(cursor) : weekDays(cursor);
 	$: cursorMonth = cursor.getMonth();
+	$: scheduled = $filteredTasks.filter((t) => t.due_date != null);
+	$: byDay = scheduled.reduce<Map<number, Task[]>>((m, t) => {
+		const k = dayKey(t.due_date as number);
+		(m.get(k) ?? m.set(k, []).get(k)!).push(t);
+		return m;
+	}, new Map());
+	$: cap = mode === 'month' ? 3 : Infinity;
 	// In week mode `days` is already weekDays(cursor); derive the label from it
 	// rather than recomputing the week array.
 	$: label =
@@ -65,7 +73,13 @@
 			</div>
 			<div class="grid grid-cols-7">
 				{#each days as d (d.getTime())}
-					<DayCell date={d} dimmed={mode === 'month' && d.getMonth() !== cursorMonth} today={isToday(d.getTime(), Date.now())} />
+					<DayCell
+						date={d}
+						dimmed={mode === 'month' && d.getMonth() !== cursorMonth}
+						today={isToday(d.getTime(), Date.now())}
+						tasks={byDay.get(dayKey(d.getTime())) ?? []}
+						{cap}
+					/>
 				{/each}
 			</div>
 		</div>

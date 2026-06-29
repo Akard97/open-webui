@@ -98,6 +98,12 @@ export const tasksByStatus = derived([tasks, boardFilter], ([$tasks, $filter]) =
 	return out;
 });
 
+// Flat, filtered task list — the single source for the calendar grid + rail.
+// Mirrors tasksByStatus' filtering (same applyFilters predicate), ungrouped.
+export const filteredTasks = derived([tasks, boardFilter], ([$tasks, $filter]) =>
+	applyFilters($tasks, $filter)
+);
+
 export function token(): string {
 	return browser ? localStorage.token : '';
 }
