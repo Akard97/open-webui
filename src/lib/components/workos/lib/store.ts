@@ -15,7 +15,7 @@ import {
 import { applyFilters, emptyFilter } from './filters';
 import { defaultColumnPrefs, parseColumnPrefs, type ColumnPrefs } from './columns';
 
-export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork';
+export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar';
 
 export type ModalRequest =
 	| { kind: 'team' }

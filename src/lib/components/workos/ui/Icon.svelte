@@ -4,6 +4,7 @@
 		plus: '<path d="M5 12h14M12 5v14"/>',
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 		'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+		'chevron-left': '<path d="m15 18-6-6 6-6"/>',
 		'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 		'chevrons-up-down': '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
 		'more-horizontal': '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
