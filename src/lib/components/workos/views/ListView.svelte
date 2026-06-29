@@ -88,6 +88,7 @@
 					{#if !collapsed[status]}
 						<!-- Column header -->
 						<div class="grid items-center gap-3 px-3 py-1.5 border-t border-gray-100 dark:border-gray-900 text-xs text-gray-400" style="grid-template-columns: {template};">
+							<!-- 26px aligns "Name" under the row title, past the StatusCell glyph: StatusDot(16) + gap-2.5(10) -->
 							<span style="padding-left: 26px;">Name</span>
 							{#if $listColumns.assignee}<span>Assignee</span>{/if}
 							{#if $listColumns.due}<span>Due date</span>{/if}
@@ -157,7 +158,7 @@
 							</div>
 						{/each}
 
-						<!-- Add task -->
+						<!-- Add task — left pad = row px-3 (0.75rem) + 26px name offset (see header above) -->
 						<div class="border-t border-gray-100 dark:border-gray-900 px-3 py-2" style="padding-left: calc(0.75rem + 26px);">
 							{#if adding === status}
 								<!-- svelte-ignore a11y_autofocus -->
