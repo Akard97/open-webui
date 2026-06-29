@@ -13,10 +13,12 @@
 
 	$: days = mode === 'month' ? monthGrid(cursor) : weekDays(cursor);
 	$: cursorMonth = cursor.getMonth();
+	// In week mode `days` is already weekDays(cursor); derive the label from it
+	// rather than recomputing the week array.
 	$: label =
 		mode === 'month'
 			? cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-			: rangeLabel(weekDays(cursor));
+			: rangeLabel(days);
 
 	function rangeLabel(w: Date[]): string {
 		const f = w[0], l = w[6];
