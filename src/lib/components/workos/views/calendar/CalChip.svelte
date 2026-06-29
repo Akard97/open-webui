@@ -20,11 +20,11 @@
 	onclick={() => openTask(task.id)}
 >
 	{#if overdue}
-		<Icon name="alert-triangle" size={11} />
-	{:else if task.priority === 'urgent'}
-		<span class="flex-none text-red-600"><Icon name="flag" size={11} /></span>
+		<span class="flex-none text-red-600"><Icon name="alert-triangle" size={11} /></span>
 	{:else if done}
 		<span class="flex-none" style="color:{color}"><Icon name="check" size={11} /></span>
+	{:else if task.priority === 'urgent'}
+		<span class="flex-none text-red-600"><Icon name="flag" size={11} /></span>
 	{:else}
 		<span class="flex-none w-[7px] h-[7px] rounded-full" style="background:{color}"></span>
 	{/if}
