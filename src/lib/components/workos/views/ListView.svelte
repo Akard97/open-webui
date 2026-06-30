@@ -40,20 +40,22 @@
 
 	async function submitAdd(status: TaskStatus) {
 		const ws = $currentWorkstream;
-		if (!newTitle.trim() || !ws) return;
-		await addTask(ws.id, { title: newTitle.trim(), status });
+		const t = newTitle.trim();
+		if (!t || !ws) return;
 		newTitle = '';
 		adding = null;
+		await addTask(ws.id, { title: t, status });
 	}
 
 	// Toolbar "Add new" — creates a task in the default (backlog) status, like the
 	// old Topbar entry point it replaces.
 	async function submitNew() {
 		const ws = $currentWorkstream;
-		if (!newGlobalTitle.trim() || !ws) return;
-		await addTask(ws.id, { title: newGlobalTitle.trim() });
+		const t = newGlobalTitle.trim();
+		if (!t || !ws) return;
 		newGlobalTitle = '';
 		creatingNew = false;
+		await addTask(ws.id, { title: t });
 	}
 </script>
 

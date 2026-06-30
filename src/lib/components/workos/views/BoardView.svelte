@@ -103,18 +103,22 @@
 	onDestroy(destroySortables);
 
 	async function submitAdd(status: TaskStatus) {
-		if (!newTitle.trim() || !$currentWorkstream) return;
-		await addTask($currentWorkstream.id, { title: newTitle.trim(), status });
+		const ws = $currentWorkstream;
+		const t = newTitle.trim();
+		if (!t || !ws) return;
 		newTitle = '';
 		adding = null;
+		await addTask(ws.id, { title: t, status });
 		await initSortables(); // attach the new card to the sortable list
 	}
 
 	async function submitTop() {
-		if (!topTitle.trim() || !$currentWorkstream) return;
-		await addTask($currentWorkstream.id, { title: topTitle.trim() });
+		const ws = $currentWorkstream;
+		const t = topTitle.trim();
+		if (!t || !ws) return;
 		topTitle = '';
 		creatingTop = false;
+		await addTask(ws.id, { title: t });
 		await initSortables();
 	}
 </script>
