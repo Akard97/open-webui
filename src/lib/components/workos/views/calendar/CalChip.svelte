@@ -14,7 +14,7 @@
 
 <button
 	data-task-id={task.id}
-	class="w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] leading-tight"
+	class="w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] leading-tight ring-1 ring-inset ring-transparent transition hover:ring-black/[0.07] dark:hover:ring-white/10"
 	style={overdue ? 'background:#dc26261f' : `background:${color}1f`}
 	title={task.title}
 	onclick={() => openTask(task.id)}
