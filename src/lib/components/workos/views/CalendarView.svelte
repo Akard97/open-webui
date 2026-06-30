@@ -132,15 +132,15 @@
 	<!-- Toolbar -->
 	<div class="flex-none flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
 		<div class="flex items-center gap-1">
-			<button type="button" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition" title="Previous" onclick={() => step(-1)}><Icon name="chevron-left" size={16} /></button>
-			<button type="button" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition" title="Next" onclick={() => step(1)}><Icon name="chevron-right" size={16} /></button>
+			<button type="button" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition" title="Previous" aria-label="Previous period" onclick={() => step(-1)}><Icon name="chevron-left" size={16} /></button>
+			<button type="button" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition" title="Next" aria-label="Next period" onclick={() => step(1)}><Icon name="chevron-right" size={16} /></button>
 		</div>
 		<div class="text-base font-semibold tracking-tight">{label}</div>
 		<button type="button" class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900 transition" onclick={today}>Today</button>
 		<div class="flex-1"></div>
 		<div class="inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-900 p-0.5 text-sm">
-			<button type="button" class="px-3.5 py-1 rounded-full transition {mode === 'month' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'month')}>Month</button>
-			<button type="button" class="px-3.5 py-1 rounded-full transition {mode === 'week' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'week')}>Week</button>
+			<button type="button" aria-pressed={mode === 'month'} class="px-3.5 py-1 rounded-full transition {mode === 'month' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'month')}>Month</button>
+			<button type="button" aria-pressed={mode === 'week'} class="px-3.5 py-1 rounded-full transition {mode === 'week' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'week')}>Week</button>
 		</div>
 	</div>
 
@@ -150,7 +150,7 @@
 			<div class="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
 				<div class="grid grid-cols-7 bg-gray-50 dark:bg-gray-950">
 					{#each WEEKDAYS as w (w)}
-						<div class="px-2.5 py-2 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-900">{w}</div>
+						<div class="px-2.5 py-2 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-400 border-b border-gray-100 dark:border-gray-900">{w}</div>
 					{/each}
 				</div>
 				<div class="grid grid-cols-7">
@@ -177,5 +177,9 @@
 		box-shadow: inset 0 0 0 2px #00a5ba;
 		background: rgba(0, 165, 186, 0.07);
 		border-radius: 6px;
+	}
+	:global(.dark [data-cal-list].cal-drop-active),
+	:global(.dark [data-cal-rail].cal-drop-active) {
+		background: rgba(0, 165, 186, 0.16);
 	}
 </style>

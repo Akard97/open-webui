@@ -29,7 +29,7 @@
 </script>
 
 <div
-	class="group relative flex flex-col min-h-[96px] border-r border-b border-gray-100 dark:border-gray-900 [&:nth-child(7n)]:border-r-0 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-900/40 {today ? 'bg-primary/5' : ''}"
+	class="group relative flex flex-col min-h-[96px] border-r border-b border-gray-100 dark:border-gray-900 [&:nth-child(7n)]:border-r-0 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-900/40 {today ? 'bg-primary/5 dark:bg-primary/10' : ''}"
 >
 	<!-- Date — outside the drop zone so the dragged-chip preview always lands below the number -->
 	<div class="flex-none px-1.5 pt-1.5">
@@ -60,6 +60,7 @@
 			<input
 				class="mt-0.5 text-[11px] px-1.5 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 focus:outline-none focus:ring-1 focus:ring-primary"
 				placeholder="Task title…"
+				aria-label="New task on {date.toDateString()}"
 				bind:value={title}
 				onkeydown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { adding = false; title = ''; } }}
 				onblur={() => { adding = false; title = ''; }}
@@ -68,7 +69,7 @@
 		{:else}
 			<button
 				type="button"
-				class="absolute bottom-1 right-1 w-[22px] h-[22px] rounded-md inline-flex items-center justify-center text-primary bg-primary/10 hover:bg-primary/20 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+				class="absolute bottom-1 right-1 w-[22px] h-[22px] rounded-md inline-flex items-center justify-center text-primary bg-white dark:bg-gray-900 ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm hover:bg-primary hover:text-primary-foreground hover:ring-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
 				title="Add task on this day"
 				aria-label="Add task on {date.toDateString()}"
 				onclick={() => (adding = true)}
