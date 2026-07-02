@@ -5,6 +5,7 @@
 	import Topbar from './chrome/Topbar.svelte';
 	import BoardView from './views/BoardView.svelte';
 	import ListView from './views/ListView.svelte';
+	import OverviewView from './views/OverviewView.svelte';
 	import CalendarView from './views/CalendarView.svelte';
 	import TaskDetail from './views/TaskDetail.svelte';
 	import AdminApp from './views/admin/AdminApp.svelte';
@@ -32,7 +33,7 @@
 	<Sidebar />
 	<div class="flex-1 flex flex-col min-w-0">
 		<!-- Topbar is workstream chrome (title + tabs); global views (My Work, Inbox, Admin) carry their own header. -->
-		{#if $view === 'board' || $view === 'list' || $view === 'calendar'}
+		{#if $view === 'board' || $view === 'list' || $view === 'calendar' || $view === 'overview'}
 			<Topbar />
 		{/if}
 		<div class="flex-1 relative min-h-0 bg-gray-50 dark:bg-gray-900">
@@ -49,6 +50,8 @@
 					<div class="text-lg font-medium">You're not in any teams yet</div>
 					<div class="text-sm text-gray-500">Create a team from the sidebar to get started.</div>
 				</div>
+			{:else if $view === 'overview'}
+				<OverviewView />
 			{:else if $view === 'list'}
 				<ListView />
 			{:else if $view === 'calendar'}
