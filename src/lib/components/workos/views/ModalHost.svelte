@@ -2,10 +2,8 @@
 	import Icon from '../ui/Icon.svelte';
 	import * as api from '../lib/api';
 	import {
-		openModal, token, loadBootstrap, directory, reloadDirectory
+		openModal, token, loadBootstrap
 	} from '../lib/store';
-	import { canManageMembers } from '../lib/roles';
-	import type { TeamRole } from '../lib/types';
 
 	let name = '';
 	let key = '';
@@ -13,34 +11,14 @@
 	let busy = false;
 	let err = '';
 
-	// Members manager state
-	let teamMembers: { user_id: string; role: string }[] = [];
-	let allUsers: { id: string; name: string }[] = [];
-	let addUserId = '';
-	let addRole: TeamRole = 'member';
-
 	$: req = $openModal;
 	$: if (req) reset(req);
-
-	// Resolve a name from the full roster first (covers just-added members), then
-	// the team-scoped directory, then fall back to the raw id.
-	$: nameOf = (id: string) =>
-		allUsers.find((u) => u.id === id)?.name ?? $directory[id]?.name ?? id;
-	// Users not yet on the team — the only ones worth offering in "Add a user…".
-	$: addableUsers = allUsers.filter((u) => !teamMembers.some((m) => m.user_id === u.id));
 
 	async function reset(r: NonNullable<typeof req>) {
 		name = '';
 		key = '';
 		visibility = 'team';
 		err = '';
-		addUserId = '';
-		if (r.kind === 'members') {
-			[teamMembers, allUsers] = await Promise.all([
-				api.listTeamMembers(token(), r.teamId).catch(() => []).then((ms) => ms.map((m) => ({ user_id: m.user_id, role: m.role }))),
-				api.listAllUsers(token(), r.teamId).catch(() => [])
-			]);
-		}
 	}
 
 	function close() {
@@ -68,30 +46,7 @@
 		}
 	}
 
-	async function addMember(teamId: string) {
-		if (!addUserId) return;
-		try {
-			await api.addTeamMember(token(), teamId, { user_id: addUserId, role: addRole });
-			teamMembers = (await api.listTeamMembers(token(), teamId)).map((m) => ({ user_id: m.user_id, role: m.role }));
-			addUserId = '';
-			await reloadDirectory();
-		} catch (e: any) {
-			err = typeof e === 'string' ? e : (e?.detail ?? 'Could not add member.');
-		}
-	}
-
-	async function changeRole(teamId: string, userId: string, role: TeamRole) {
-		await api.updateTeamMember(token(), teamId, userId, { role }).catch(() => {});
-		teamMembers = (await api.listTeamMembers(token(), teamId)).map((m) => ({ user_id: m.user_id, role: m.role }));
-	}
-
-	async function removeMember(teamId: string, userId: string) {
-		await api.removeTeamMember(token(), teamId, userId).catch(() => {});
-		teamMembers = teamMembers.filter((m) => m.user_id !== userId);
-		await reloadDirectory();
-	}
-
-	const TITLES = { team: 'New team', workspace: 'New workspace', workstream: 'New workstream', members: 'Team members' };
+	const TITLES = { team: 'New team', workspace: 'New workspace', workstream: 'New workstream' };
 </script>
 
 {#if req}
@@ -105,50 +60,22 @@
 
 			{#if err}<div class="mb-3 text-sm text-red-600">{err}</div>{/if}
 
-			{#if req.kind === 'members'}
-				<div class="space-y-2 max-h-72 overflow-y-auto">
-					{#each teamMembers as m (m.user_id)}
-						<div class="flex items-center gap-2">
-							<span class="flex-1 text-sm truncate">{nameOf(m.user_id)}</span>
-							<select class="text-xs border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 bg-transparent" value={m.role} onchange={(e) => changeRole(req.teamId, m.user_id, (e.target as HTMLSelectElement).value as TeamRole)}>
-								<option value="owner">owner</option>
-								<option value="admin">admin</option>
-								<option value="member">member</option>
-							</select>
-							<button class="text-red-500 p-1" onclick={() => removeMember(req.teamId, m.user_id)}><Icon name="x" size={14} /></button>
-						</div>
-					{/each}
-				</div>
-				<div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-					<select class="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-transparent" bind:value={addUserId}>
-						<option value="">{addableUsers.length ? 'Add a user…' : 'No more users to add'}</option>
-						{#each addableUsers as u (u.id)}<option value={u.id}>{u.name}</option>{/each}
+			<div class="space-y-3">
+				<input class="w-full text-sm px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Name" bind:value={name} autofocus />
+				{#if req.kind === 'team'}
+					<input class="w-full text-sm px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent font-mono uppercase" placeholder="Key (e.g. OSL)" bind:value={key} maxlength="6" />
+					<p class="text-xs text-gray-400">The key prefixes task numbers, e.g. {(key || 'OSL').toUpperCase()}-1.</p>
+				{:else if req.kind === 'workspace'}
+					<select class="w-full text-sm px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent" bind:value={visibility}>
+						<option value="team">Visible to whole team</option>
+						<option value="restricted">Restricted to members</option>
 					</select>
-					<select class="text-sm border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-transparent" bind:value={addRole}>
-						<option value="member">member</option>
-						<option value="admin">admin</option>
-						<option value="owner">owner</option>
-					</select>
-					<button class="text-sm px-3 py-1 rounded bg-primary text-primary-foreground" onclick={() => addMember(req.teamId)}>Add</button>
-				</div>
-			{:else}
-				<div class="space-y-3">
-					<input class="w-full text-sm px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Name" bind:value={name} autofocus />
-					{#if req.kind === 'team'}
-						<input class="w-full text-sm px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent font-mono uppercase" placeholder="Key (e.g. OSL)" bind:value={key} maxlength="6" />
-						<p class="text-xs text-gray-400">The key prefixes task numbers, e.g. {(key || 'OSL').toUpperCase()}-1.</p>
-					{:else if req.kind === 'workspace'}
-						<select class="w-full text-sm px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent" bind:value={visibility}>
-							<option value="team">Visible to whole team</option>
-							<option value="restricted">Restricted to members</option>
-						</select>
-					{/if}
-				</div>
-				<div class="flex justify-end gap-2 mt-5">
-					<button class="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onclick={close}>Cancel</button>
-					<button class="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50" disabled={busy || !name.trim() || (req.kind === 'team' && !key.trim())} onclick={submit}>Create</button>
-				</div>
-			{/if}
+				{/if}
+			</div>
+			<div class="flex justify-end gap-2 mt-5">
+				<button class="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onclick={close}>Cancel</button>
+				<button class="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50" disabled={busy || !name.trim() || (req.kind === 'team' && !key.trim())} onclick={submit}>Create</button>
+			</div>
 		</div>
 	</div>
 {/if}

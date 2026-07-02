@@ -15,13 +15,12 @@ import {
 import { applyFilters, emptyFilter } from './filters';
 import { defaultColumnPrefs, parseColumnPrefs, type ColumnPrefs } from './columns';
 
-export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview' | 'access';
+export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview';
 
 export type ModalRequest =
 	| { kind: 'team' }
 	| { kind: 'workspace'; teamId: string }
 	| { kind: 'workstream'; workspaceId: string }
-	| { kind: 'members'; teamId: string }
 	| { kind: 'team-settings'; teamId: string }
 	| { kind: 'workspace-settings'; workspaceId: string };
 export const openModal: Writable<ModalRequest | null> = writable(null);
