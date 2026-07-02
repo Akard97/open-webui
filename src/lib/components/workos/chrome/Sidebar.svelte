@@ -18,12 +18,12 @@
 	import type { Workspace } from '../lib/types';
 	import {
 		teams, workspaces, workstreams, roles, currentTeam, currentTeamId, currentWorkstreamId,
-		selectTeam, selectWorkstream, view, openModal, unreadCount, navCollapsed, token, loadBootstrap
+		selectTeam, selectWorkstream, view, openModal, unreadCount, navCollapsed, token, loadBootstrap,
+		expandedWorkspaces
 	} from '../lib/store';
 
 	let teamMenuOpen = false;
 	let teamMenuEl: HTMLElement;
-	let expanded: Record<string, boolean> = {};
 	let memberIds: string[] = [];
 
 	// Close the team switcher when clicking anywhere outside its container.
@@ -266,9 +266,9 @@
 							<div class="group/ws w-full flex items-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-900 transition">
 								<button
 									class="flex-1 min-w-0 flex items-center gap-1.5 px-[11px] py-[6px] text-sm"
-									onclick={() => (expanded[ws.id] = !expanded[ws.id])}
+									onclick={() => expandedWorkspaces.update((m) => ({ ...m, [ws.id]: !m[ws.id] }))}
 								>
-									<Icon name={expanded[ws.id] ? 'chevron-down' : 'chevron-right'} size={12} />
+									<Icon name={$expandedWorkspaces[ws.id] ? 'chevron-down' : 'chevron-right'} size={12} />
 									<span class="flex-1 text-left truncate">{ws.name}</span>
 									{#if ws.visibility === 'restricted'}
 										<span class="text-gray-400 dark:text-gray-500 flex-none" title="Restricted workspace"><Icon name="lock" size={12} /></span>
@@ -296,7 +296,7 @@
 									</DropdownMenu.Root>
 								{/if}
 							</div>
-							{#if expanded[ws.id]}
+							{#if $expandedWorkspaces[ws.id]}
 								<div class="ws-tree">
 									{#each streamsByWs(ws.id) as s (s.id)}
 										<button

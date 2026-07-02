@@ -29,7 +29,15 @@ export const teams: Writable<Team[]> = writable([]);
 export const workspaces: Writable<Workspace[]> = writable([]);
 export const workstreams: Writable<Workstream[]> = writable([]);
 export const roles: Writable<Record<string, TeamRole>> = writable({});
-export const currentTeamId: Writable<string | null> = writable(null);
+
+// Selected team, persisted per browser so a reload returns to the same team.
+const CURRENT_TEAM_KEY = 'workos:current-team';
+export const currentTeamId: Writable<string | null> = writable(browser ? localStorage.getItem(CURRENT_TEAM_KEY) : null);
+if (browser) currentTeamId.subscribe((v) => {
+	if (v) localStorage.setItem(CURRENT_TEAM_KEY, v);
+	else localStorage.removeItem(CURRENT_TEAM_KEY);
+});
+
 export const currentWorkstreamId: Writable<string | null> = writable(null);
 export const tasks: Writable<Task[]> = writable([]);
 export const labels: Writable<Label[]> = writable([]);
@@ -45,6 +53,21 @@ export const directory: Writable<Record<string, { name: string }>> = writable({}
 const NAV_COLLAPSED_KEY = 'workos:nav-collapsed';
 export const navCollapsed: Writable<boolean> = writable(browser && localStorage.getItem(NAV_COLLAPSED_KEY) === '1');
 if (browser) navCollapsed.subscribe((v) => localStorage.setItem(NAV_COLLAPSED_KEY, v ? '1' : '0'));
+
+// Which sidebar workspaces are expanded, persisted per browser so the tree
+// keeps its open/closed shape across reloads.
+const EXPANDED_WS_KEY = 'workos:expanded-workspaces';
+function readExpandedWorkspaces(): Record<string, boolean> {
+	if (!browser) return {};
+	try {
+		const parsed = JSON.parse(localStorage.getItem(EXPANDED_WS_KEY) ?? '{}');
+		return parsed && typeof parsed === 'object' ? parsed : {};
+	} catch {
+		return {};
+	}
+}
+export const expandedWorkspaces: Writable<Record<string, boolean>> = writable(readExpandedWorkspaces());
+if (browser) expandedWorkspaces.subscribe((v) => localStorage.setItem(EXPANDED_WS_KEY, JSON.stringify(v)));
 
 // List column visibility, persisted per browser like the sidebar flag.
 const LIST_COLUMNS_KEY = 'workos:list-columns';
@@ -126,7 +149,10 @@ export async function loadBootstrap(): Promise<void> {
 		unreadCount.set(b.notifications_unread ?? 0);
 		const dir = await api.getDirectory(token()).catch(() => []);
 		directory.set(Object.fromEntries(dir.map((u) => [u.id, { name: u.name }])));
-		if (!get(currentTeamId) && b.teams.length) currentTeamId.set(b.teams[0].id);
+		const savedTeam = get(currentTeamId);
+		if ((!savedTeam || !b.teams.some((t) => t.id === savedTeam)) && b.teams.length) {
+			currentTeamId.set(b.teams[0].id);
+		}
 		const team = get(currentTeam);
 		if (team) labels.set(await api.listLabels(token(), team.id).catch(() => []));
 		const firstStream = b.workstreams.find((s) => {
