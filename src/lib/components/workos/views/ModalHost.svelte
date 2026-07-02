@@ -11,7 +11,13 @@
 	let busy = false;
 	let err = '';
 
-	$: req = $openModal;
+	// ModalHost owns only the create flows; settings kinds are rendered by the
+	// dedicated dialogs in chrome/access/ and must not open this overlay too.
+	$: req =
+		$openModal &&
+		($openModal.kind === 'team' || $openModal.kind === 'workspace' || $openModal.kind === 'workstream')
+			? $openModal
+			: null;
 	$: if (req) reset(req);
 
 	async function reset(r: NonNullable<typeof req>) {
