@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { actualProgress, plannedProgress, taskHealth, pointerToPercent, parsePercentInput } from './progress';
+import {
+	actualProgress,
+	plannedProgress,
+	taskHealth,
+	pointerToPercent,
+	parsePercentInput,
+	dueDayStartLocal,
+	dueDayEndLocal
+} from './progress';
 import type { Task } from './types';
 
 const baseTask: Task = {
@@ -40,15 +48,15 @@ describe('taskHealth', () => {
 	});
 
 	it('marks overdue when past due even without a start date', () => {
-		expect(taskHealth({ ...baseTask, start_date: null, due_date: 100, progress: 90 }, 101)).toBe('overdue');
+		expect(taskHealth({ ...baseTask, start_date: null, due_date: 100, progress: 90 }, dueDayEndLocal(100) + 1)).toBe('overdue');
 	});
 
 	it('marks overdue when past due even at 100% progress (status, not progress, completes a task)', () => {
-		expect(taskHealth({ ...baseTask, start_date: null, due_date: 100, progress: 100 }, 101)).toBe('overdue');
+		expect(taskHealth({ ...baseTask, start_date: null, due_date: 100, progress: 100 }, dueDayEndLocal(100) + 1)).toBe('overdue');
 	});
 
 	it('marks overdue when past due and actual is below complete', () => {
-		expect(taskHealth({ ...baseTask, start_date: 0, due_date: 100, progress: 90 }, 101)).toBe('overdue');
+		expect(taskHealth({ ...baseTask, start_date: 0, due_date: 100, progress: 90 }, dueDayEndLocal(100) + 1)).toBe('overdue');
 	});
 
 	it('marks at risk and behind from planned minus actual gap', () => {
@@ -58,6 +66,34 @@ describe('taskHealth', () => {
 
 	it('marks on track when actual is close enough to planned', () => {
 		expect(taskHealth({ ...baseTask, start_date: 0, due_date: 100, progress: 45 }, 50)).toBe('on_track');
+	});
+});
+
+describe('due-day helpers', () => {
+	// Due dates are stored as UTC midnight of the picked date (DueDateCell parses 'YYYY-MM-DD').
+	const dueJun15 = Date.UTC(2026, 5, 15); // 2026-06-15T00:00Z
+
+	it('dueDayStartLocal maps the UTC date to local midnight', () => {
+		expect(dueDayStartLocal(dueJun15)).toBe(new Date(2026, 5, 15).getTime());
+	});
+
+	it('dueDayEndLocal maps the UTC date to local 23:59:59.999', () => {
+		expect(dueDayEndLocal(dueJun15)).toBe(new Date(2026, 5, 15, 23, 59, 59, 999).getTime());
+	});
+});
+
+describe('taskHealth overdue boundary (due day counts as not-overdue)', () => {
+	const dueJun15 = Date.UTC(2026, 5, 15);
+	const base = { status: 'todo', progress: 0, labels: [], assignee_ids: [] } as any;
+
+	it('is not overdue during the due day', () => {
+		const now = new Date(2026, 5, 15, 9, 0).getTime();
+		expect(taskHealth({ ...base, due_date: dueJun15, start_date: null }, now)).not.toBe('overdue');
+	});
+
+	it('is overdue one ms after the due day ends', () => {
+		const now = new Date(2026, 5, 15, 23, 59, 59, 999).getTime() + 1;
+		expect(taskHealth({ ...base, due_date: dueJun15, start_date: null }, now)).toBe('overdue');
 	});
 });
 

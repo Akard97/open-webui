@@ -25,6 +25,19 @@ export function actualProgress(task: Pick<Task, 'progress' | 'subtask_total' | '
 	return clampPercent(task.progress ?? 0);
 }
 
+// due_date/start_date are stored as UTC midnight of the picked calendar date
+// (DueDateCell parses 'YYYY-MM-DD' → UTC). The calendar date is the timestamp's
+// UTC Y/M/D; deadlines are experienced in the viewer's local time.
+export function dueDayStartLocal(ts: number): number {
+	const d = new Date(ts);
+	return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()).getTime();
+}
+
+export function dueDayEndLocal(ts: number): number {
+	const d = new Date(ts);
+	return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999).getTime();
+}
+
 export function taskHealth(task: Task, now: number): TaskHealth | null {
 	if (task.status === 'done' || task.status === 'canceled') return null;
 	const actual = actualProgress(task);
@@ -32,8 +45,9 @@ export function taskHealth(task: Task, now: number): TaskHealth | null {
 	// start_date or progress %. Status (done/canceled, handled above) — not the
 	// progress bar — is the system's completion signal, so a 100%-progress task that's
 	// still open and past due is overdue. This keeps the badge in sync with the overdue
-	// banner/buckets, which only check due_date + status.
-	if (task.due_date != null && now > task.due_date) return 'overdue';
+	// banner/buckets, which only check due_date + status. The due *day* counts as
+	// not-overdue: the boundary is when that day has fully ended in the viewer's local time.
+	if (task.due_date != null && now > dueDayEndLocal(task.due_date)) return 'overdue';
 	const planned = plannedProgress(task.start_date, task.due_date, now);
 	if (planned == null) return null;
 	const gap = planned - actual;
