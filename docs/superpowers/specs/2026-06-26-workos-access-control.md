@@ -93,7 +93,7 @@ Resolves the workstream (`False` if unknown/deleted), then its parent workspace 
 | Team | `WorkosTeamMember` ([workos.py:50](backend/open_webui/models/workos.py:50)) | `owner` \| `admin` \| `member` (col [:57](backend/open_webui/models/workos.py:57)) | `(team_id, user_id)` ([:52](backend/open_webui/models/workos.py:52)) |
 | Workspace | `WorkosWorkspaceMember` ([workos.py:75](backend/open_webui/models/workos.py:75)) | `admin` \| `member` (col [:82](backend/open_webui/models/workos.py:82)) | `(workspace_id, user_id)` ([:77](backend/open_webui/models/workos.py:77)) |
 
-Roles are unvalidated free text at the model layer; a typo'd value is silently stored (harmless for visibility, which tests existence only).
+Role values are validated at the model layer (since 2026-07-02): `TEAM_ROLES` / `WORKSPACE_ROLES` are defined in [models/workos.py](backend/open_webui/models/workos.py) next to the tables, and the four DAO write methods (`TeamMembers.add`/`update_role`, `WorkspaceMembers.add`/`update_role`) raise `ValueError` on any other string. The router additionally 400s on invalid roles at the member endpoints (user-facing), importing the same constants via the policy module re-export.
 
 ### Role-resolution & gate helpers (policy module — [utils/workos_access.py](backend/open_webui/utils/workos_access.py))
 

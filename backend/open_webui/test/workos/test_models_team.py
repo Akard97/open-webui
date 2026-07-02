@@ -35,3 +35,14 @@ async def test_membership_add_list_role_remove():
     assert [t.id for t in await Teams.list_for_user('u2')] == [team.id]
     assert await TeamMembers.remove(team.id, 'u2') is True
     assert await TeamMembers.get(team.id, 'u2') is None
+
+
+@pytest.mark.asyncio
+async def test_member_role_validated_at_dao():
+    team = await Teams.insert(name='Acme', key='OSL', icon=None, created_by_id='u1')
+    with pytest.raises(ValueError):
+        await TeamMembers.add(team.id, 'u1', 'superuser')
+    await TeamMembers.add(team.id, 'u1', 'owner')
+    with pytest.raises(ValueError):
+        await TeamMembers.update_role(team.id, 'u1', 'ownr')
+    assert (await TeamMembers.get(team.id, 'u1')).role == 'owner'

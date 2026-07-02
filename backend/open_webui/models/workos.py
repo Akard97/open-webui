@@ -47,6 +47,15 @@ class WorkosTeam(Base):
     updated_at = Column(BigInteger)
 
 
+TEAM_ROLES = {'owner', 'admin', 'member'}
+WORKSPACE_ROLES = {'admin', 'member'}
+
+
+def _validate_role(role: str, allowed: set) -> None:
+    if role not in allowed:
+        raise ValueError(f'invalid role: {role!r}')
+
+
 class WorkosTeamMember(Base):
     __tablename__ = 'workos_team_member'
     __table_args__ = (UniqueConstraint('team_id', 'user_id', name='uq_workos_team_member'),)
@@ -54,7 +63,7 @@ class WorkosTeamMember(Base):
     id = Column(Text, primary_key=True, unique=True)
     team_id = Column(Text)
     user_id = Column(Text)
-    role = Column(Text)  # owner | admin | member
+    role = Column(Text)  # owner | admin | member (validated in the DAO)
     created_at = Column(BigInteger)
 
 
@@ -79,7 +88,7 @@ class WorkosWorkspaceMember(Base):
     id = Column(Text, primary_key=True, unique=True)
     workspace_id = Column(Text)
     user_id = Column(Text)
-    role = Column(Text)  # admin | member
+    role = Column(Text)  # admin | member (validated in the DAO)
     created_at = Column(BigInteger)
 
 
@@ -236,6 +245,7 @@ class TeamsDao:
 
 class TeamMembersDao:
     async def add(self, team_id: str, user_id: str, role: str, db: Optional[AsyncSession] = None) -> TeamMemberModel:
+        _validate_role(role, TEAM_ROLES)
         async with get_async_db_context(db) as db:
             row = WorkosTeamMember(id=_id(), team_id=team_id, user_id=user_id, role=role, created_at=_now())
             db.add(row)
@@ -262,6 +272,7 @@ class TeamMembersDao:
     async def update_role(
         self, team_id: str, user_id: str, role: str, db: Optional[AsyncSession] = None
     ) -> Optional[TeamMemberModel]:
+        _validate_role(role, TEAM_ROLES)
         async with get_async_db_context(db) as db:
             res = await db.execute(select(WorkosTeamMember).filter_by(team_id=team_id, user_id=user_id))
             row = res.scalars().first()
@@ -337,6 +348,7 @@ class WorkspaceMembersDao:
     async def add(
         self, workspace_id: str, user_id: str, role: str, db: Optional[AsyncSession] = None
     ) -> WorkspaceMemberModel:
+        _validate_role(role, WORKSPACE_ROLES)
         async with get_async_db_context(db) as db:
             row = WorkosWorkspaceMember(
                 id=_id(), workspace_id=workspace_id, user_id=user_id, role=role, created_at=_now()
@@ -364,6 +376,7 @@ class WorkspaceMembersDao:
     async def update_role(
         self, workspace_id: str, user_id: str, role: str, db: Optional[AsyncSession] = None
     ) -> Optional[WorkspaceMemberModel]:
+        _validate_role(role, WORKSPACE_ROLES)
         async with get_async_db_context(db) as db:
             res = await db.execute(select(WorkosWorkspaceMember).filter_by(workspace_id=workspace_id, user_id=user_id))
             row = res.scalars().first()

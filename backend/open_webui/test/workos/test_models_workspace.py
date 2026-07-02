@@ -28,6 +28,18 @@ async def test_workspace_membership():
 
 
 @pytest.mark.asyncio
+async def test_workspace_member_role_validated_at_dao():
+    team = await Teams.insert('Acme', 'OSL', None, 'u1')
+    ws = await Workspaces.insert(team.id, 'Engineering', None, 'restricted', 'u1')
+    with pytest.raises(ValueError):
+        await WorkspaceMembers.add(ws.id, 'u2', 'owner')  # not a workspace role
+    await WorkspaceMembers.add(ws.id, 'u2', 'member')
+    with pytest.raises(ValueError):
+        await WorkspaceMembers.update_role(ws.id, 'u2', 'manager')
+    assert (await WorkspaceMembers.get(ws.id, 'u2')).role == 'member'
+
+
+@pytest.mark.asyncio
 async def test_workstream_crud():
     team = await Teams.insert('Acme', 'OSL', None, 'u1')
     ws = await Workspaces.insert(team.id, 'Engineering', None, 'team', 'u1')

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
     Tasks, Subtasks, TeamModel,
+    TEAM_ROLES, WORKSPACE_ROLES,  # re-exported: policy callers import role sets from here
 )
 from open_webui.models.users import Users
 from open_webui.utils.access_control import has_permission

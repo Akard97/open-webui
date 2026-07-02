@@ -22,6 +22,7 @@ from open_webui.models.workos import (
 )
 from open_webui.models.users import Users
 from open_webui.utils.workos_access import (
+    TEAM_ROLES, WORKSPACE_ROLES,
     require_workos, require_workos_admin,
     can_see_workspace, can_see_workstream, team_role,
     is_last_owner, is_app_admin,
@@ -54,8 +55,6 @@ async def emit_users(event: str, payload: dict, user_ids: list) -> None:
 
 
 router = APIRouter()
-
-TEAM_ROLES = {'owner', 'admin', 'member'}
 
 
 # Access predicates and require_* gates live in open_webui.utils.workos_access —
@@ -262,9 +261,6 @@ async def remove_member(
 
 
 # ──────────────────────────────── workspace schemas ────────────────────────────────
-
-
-WORKSPACE_ROLES = {'admin', 'member'}
 
 
 class WorkspaceForm(BaseModel):
