@@ -125,9 +125,9 @@
 
 <div class="h-full flex flex-col min-h-0">
 	<!-- Filter bar + Add New -->
-	<div class="flex-none flex items-stretch">
+	<div class="flex-none flex flex-col md:flex-row md:items-stretch">
 		<div class="flex-1"><FilterBar filter={boardFilter} /></div>
-		<div class="flex items-center px-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+		<div class="flex items-center px-4 py-2 md:py-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
 			{#if creatingTop}
 				<input class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-56" placeholder="Task title…" bind:value={topTitle} onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }} autofocus />
 			{:else}
@@ -139,9 +139,9 @@
 	</div>
 
 	<!-- Columns: white board, each column a flexible-height tinted panel -->
-	<div class="flex-1 overflow-auto flex gap-4 p-4 box-border items-start bg-white dark:bg-gray-950">
+	<div class="flex-1 overflow-auto flex gap-4 p-4 box-border items-start bg-white dark:bg-gray-950 max-md:snap-x max-md:snap-mandatory max-md:gap-3 max-md:p-3">
 		{#each STATUS_ORDER as status (status)}
-			<div class="w-72 flex-none flex flex-col rounded-lg bg-gray-50/70 dark:bg-gray-900/40 p-2.5">
+			<div class="w-72 max-md:w-[82vw] max-md:snap-center flex-none flex flex-col rounded-lg bg-gray-50/70 dark:bg-gray-900/40 p-2.5">
 				<div class="flex items-center gap-2 px-1 pb-2.5">
 					<span
 						class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-semibold"
