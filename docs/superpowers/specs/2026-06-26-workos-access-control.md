@@ -339,7 +339,7 @@ The WorkOS frontend has **no authoritative access model of its own** — it is a
   detects the workspace vanishing from bootstrap and closes. Restricted rows show a
   lock badge (visibility ships in `/bootstrap`).
 - **Pickers source the team-wide `directory` store** — both `AssigneeField` and the `@mention` composer offer users who may not see a restricted workspace; the backend now validates each `assignee_id` against `can_see_workstream` and rejects invisible ids (G1 closed), and the mention *notification* is filtered server-side.
-- **Workspace visibility is editable in the UI** (since the Access console) — created in `ModalHost`, flipped via `api.updateWorkspace({visibility})` from `WorkspacePanel.svelte`, with restricted badges in the console. Outside the console there is still no restricted badge.
+- **Workspace visibility is editable in the UI** — set at create time in `ModalHost`, flipped via `api.updateWorkspace({visibility})` from `WorkspaceSettingsDialog.svelte` (destructive confirm on `team→restricted`) or the sidebar quick-flip. Restricted workspaces show a lock badge on their sidebar rows (visibility ships in `/bootstrap`).
 
 ---
 

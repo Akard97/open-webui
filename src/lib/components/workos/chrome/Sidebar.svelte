@@ -195,7 +195,7 @@
 		<div class="mt-1 px-[0.4375rem] relative text-gray-800 dark:text-gray-200" bind:this={teamMenuEl}>
 			<div class="py-1.5 pl-2.5 text-xs font-medium text-gray-600 dark:text-gray-400">Team</div>
 			<ContextMenu.Root>
-				<ContextMenu.Trigger class="block w-full">
+				<ContextMenu.Trigger class="block w-full" disabled={!canManage}>
 					<button
 						class="group w-full flex flex-col gap-2.5 rounded-xl px-3 py-2.5 transition outline-none bg-gray-100 dark:bg-gray-900 ring-1 ring-black/5 dark:ring-white/10 hover:bg-gray-200 dark:hover:bg-gray-850"
 						onclick={() => (teamMenuOpen = !teamMenuOpen)}
@@ -261,7 +261,7 @@
 			</div>
 			{#each teamWorkspaces as ws (ws.id)}
 				<ContextMenu.Root>
-					<ContextMenu.Trigger class="block w-full">
+					<ContextMenu.Trigger class="block w-full" disabled={!canManage}>
 						<div class="text-gray-800 dark:text-gray-200">
 							<div class="group/ws w-full flex items-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-900 transition">
 								<button
