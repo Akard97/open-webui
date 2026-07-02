@@ -3,6 +3,8 @@
 	import './styles.css';
 	import Sidebar from './chrome/Sidebar.svelte';
 	import Topbar from './chrome/Topbar.svelte';
+	import BottomNav from './chrome/BottomNav.svelte';
+	import NavDrawer from './chrome/NavDrawer.svelte';
 	import BoardView from './views/BoardView.svelte';
 	import ListView from './views/ListView.svelte';
 	import OverviewView from './views/OverviewView.svelte';
@@ -15,14 +17,17 @@
 	import TeamSettingsDialog from './chrome/access/TeamSettingsDialog.svelte';
 	import WorkspaceSettingsDialog from './chrome/access/WorkspaceSettingsDialog.svelte';
 	import { canUseAdmin } from './lib/roles';
-	import { user } from '$lib/stores';
+	import { user, mobile } from '$lib/stores';
 	import {
 		loadBootstrap, connectRealtime, disconnectRealtime,
-		view, selectedTask, teams, loading
+		view, selectedTask, teams, loading, mobileNavOpen
 	} from './lib/store';
 
 	// Guard: snap non-admins away from the admin view.
 	$: if ($view === 'admin' && !canUseAdmin($user)) view.set('board');
+
+	// Crossing back to desktop must not leave a phantom drawer overlay.
+	$: if (!$mobile) mobileNavOpen.set(false);
 
 	onMount(async () => {
 		await loadBootstrap();
@@ -32,7 +37,9 @@
 </script>
 
 <div class="workos-root text-gray-800 dark:text-gray-100">
-	<Sidebar />
+	{#if !$mobile}
+		<Sidebar />
+	{/if}
 	<div class="flex-1 flex flex-col min-w-0">
 		<!-- Topbar is workstream chrome (title + tabs); global views (My Work, Inbox, Admin) carry their own header. -->
 		{#if $view === 'board' || $view === 'list' || $view === 'calendar' || $view === 'overview'}
@@ -65,7 +72,13 @@
 				<TaskDetail />
 			{/if}
 		</div>
+		{#if $mobile}
+			<BottomNav />
+		{/if}
 	</div>
+	{#if $mobile}
+		<NavDrawer />
+	{/if}
 	<ModalHost />
 	<TeamSettingsDialog />
 	<WorkspaceSettingsDialog />

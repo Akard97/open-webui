@@ -54,6 +54,9 @@ const NAV_COLLAPSED_KEY = 'workos:nav-collapsed';
 export const navCollapsed: Writable<boolean> = writable(browser && localStorage.getItem(NAV_COLLAPSED_KEY) === '1');
 if (browser) navCollapsed.subscribe((v) => localStorage.setItem(NAV_COLLAPSED_KEY, v ? '1' : '0'));
 
+// Mobile Browse drawer (bottom-nav → workstream tree). Ephemeral by design.
+export const mobileNavOpen: Writable<boolean> = writable(false);
+
 // Which sidebar workspaces are expanded, persisted per browser so the tree
 // keeps its open/closed shape across reloads.
 const EXPANDED_WS_KEY = 'workos:expanded-workspaces';
