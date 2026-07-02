@@ -21,7 +21,9 @@ export type ModalRequest =
 	| { kind: 'team' }
 	| { kind: 'workspace'; teamId: string }
 	| { kind: 'workstream'; workspaceId: string }
-	| { kind: 'members'; teamId: string };
+	| { kind: 'members'; teamId: string }
+	| { kind: 'team-settings'; teamId: string }
+	| { kind: 'workspace-settings'; workspaceId: string };
 export const openModal: Writable<ModalRequest | null> = writable(null);
 
 export const teams: Writable<Team[]> = writable([]);
