@@ -135,6 +135,21 @@ export const deleteComment = (token: string, id: string) =>
 // Activity
 export const listActivity = (token: string, taskId: string) =>
 	request<Activity[]>(token, `/tasks/${taskId}/activity`);
+// Workstream-scoped activity: newest items (joined w/ task key/title) + a daily
+// histogram bucketed in the viewer's local days. JS getTimezoneOffset() is minutes
+// BEHIND UTC, so minutes AHEAD = its negation (Amman UTC+3 → +180).
+export const getWorkstreamActivity = (
+	token: string, workstreamId: string, opts?: { limit?: number; days?: number }
+) => {
+	const tz = -new Date().getTimezoneOffset();
+	return request<{
+		items: (Activity & { task_key?: string; task_title?: string; workstream_id?: string })[];
+		daily: { day: string; n: number }[];
+	}>(
+		token,
+		`/workstreams/${workstreamId}/activity?limit=${opts?.limit ?? 30}&days=${opts?.days ?? 14}&tz_offset_minutes=${tz}`
+	);
+};
 
 // Attachments
 export const listAttachments = (token: string, taskId: string) =>

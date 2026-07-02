@@ -62,6 +62,12 @@ const myWorkRooms = new Set<string>();
 export const notifications: Writable<Notification[]> = writable([]);
 export const unreadCount: Writable<number> = writable(0);
 
+export interface WsActivityItem extends Activity { task_key?: string; task_title?: string; workstream_id?: string }
+export interface WsActivityState {
+	items: WsActivityItem[]; daily: { day: string; n: number }[]; loaded: boolean; error: boolean;
+}
+export const wsActivity: Writable<WsActivityState> = writable({ items: [], daily: [], loaded: false, error: false });
+
 export const feed = derived([comments, activity], ([$c, $a]): FeedItem[] => {
 	const items: FeedItem[] = [
 		...$c.map((comment) => ({ kind: 'comment' as const, at: comment.created_at, comment })),
@@ -342,6 +348,44 @@ export async function loadNotifications(): Promise<void> {
 	notifications.set(await api.listNotifications(token()).catch(() => []));
 }
 
+export async function loadWorkstreamActivity(id: string): Promise<void> {
+	wsActivity.set({ items: [], daily: [], loaded: false, error: false });
+	try {
+		const r = await api.getWorkstreamActivity(token(), id);
+		if (get(currentWorkstreamId) !== id) return; // user moved on
+		wsActivity.set({ items: r.items, daily: r.daily, loaded: true, error: false });
+	} catch {
+		wsActivity.set({ items: [], daily: [], loaded: true, error: true });
+	}
+}
+
+function localDayKey(now: number): string {
+	const d = new Date(now);
+	const p = (n: number) => String(n).padStart(2, '0');
+	return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Fold a workstream-room activity event into the Overview pulse + today's histogram
+ * bucket. task_key/title fall back to the tasks store (realtime payloads lack them). */
+export function applyOverviewActivityEvent(payload: any): void {
+	if (!payload || !payload.id || payload.workstream_id !== get(currentWorkstreamId)) return;
+	const t = get(tasks).find((x) => x.id === payload.task_id);
+	const item: WsActivityItem = {
+		...payload,
+		task_key: payload.task_key ?? t?.key,
+		task_title: payload.task_title ?? t?.title
+	};
+	const todayKey = localDayKey(Date.now());
+	wsActivity.update((s) => {
+		if (s.items.some((a) => a.id === item.id)) return s; // duplicate → no-op
+		return {
+			...s,
+			items: [item, ...s.items].slice(0, 30),
+			daily: s.daily.map((d) => (d.day === todayKey ? { ...d, n: d.n + 1 } : d))
+		};
+	});
+}
+
 export async function loadMyWork(): Promise<void> {
 	myWorkActive = true;
 	const mine = await api.listMyTasks(token()).catch(() => []);
@@ -526,7 +570,10 @@ export function connectRealtime(): void {
 		s.on(ev, handlers[ev]);
 	}
 	for (const ev of COLLAB_EVENTS) {
-		handlers[ev] = (payload: any) => applyCollabEvent(ev, payload);
+		handlers[ev] = (payload: any) => {
+			applyCollabEvent(ev, payload);
+			if (ev === 'workos:activity.created') applyOverviewActivityEvent(payload);
+		};
 		s.on(ev, handlers[ev]);
 	}
 	for (const ev of NAV_EVENTS) {

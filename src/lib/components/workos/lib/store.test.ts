@@ -196,6 +196,33 @@ import { workspaces, workstreams, applyNavEvent } from './store';
 const mkWs = (over: any) => ({ id: 'ws1', team_id: 'tm', name: 'Eng', visibility: 'team', archived: false, created_at: 0, updated_at: 0, ...over });
 const mkSt = (over: any) => ({ id: 's1', workspace_id: 'ws1', name: 'Plat', archived: false, created_at: 0, updated_at: 0, ...over });
 
+import { wsActivity, applyOverviewActivityEvent } from './store';
+
+describe('applyOverviewActivityEvent', () => {
+	it('prepends for the current workstream, dedupes, and bumps today bucket', () => {
+		currentWorkstreamId.set('ws1');
+		tasks.set([{ id: 'tsk', key: 'K-1', title: 'Task' } as any]);
+		const d = new Date();
+		const p = (n: number) => String(n).padStart(2, '0');
+		const today = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+		wsActivity.set({ items: [], daily: [{ day: today, n: 0 }], loaded: true, error: false });
+		const payload = { id: 'a1', task_id: 'tsk', team_id: 'tm', user_id: 'u1', type: 'status_changed', data: {}, created_at: Date.now(), workstream_id: 'ws1' };
+		applyOverviewActivityEvent(payload);
+		applyOverviewActivityEvent(payload); // duplicate → ignored
+		const s = get(wsActivity);
+		expect(s.items).toHaveLength(1);
+		expect(s.items[0].task_key).toBe('K-1'); // resolved from tasks store
+		expect(s.daily[0].n).toBe(1);
+	});
+
+	it('ignores events for other workstreams', () => {
+		currentWorkstreamId.set('ws1');
+		wsActivity.set({ items: [], daily: [], loaded: true, error: false });
+		applyOverviewActivityEvent({ id: 'a2', task_id: 'x', workstream_id: 'other', type: 'created', created_at: 1 });
+		expect(get(wsActivity).items).toHaveLength(0);
+	});
+});
+
 describe('nav reconcile (sidebar carry-over)', () => {
 	beforeEach(() => { workspaces.set([]); workstreams.set([]); });
 
