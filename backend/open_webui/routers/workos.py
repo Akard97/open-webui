@@ -309,16 +309,26 @@ class WorkspaceUpdateForm(BaseModel):
 # ──────────────────────────────── workspace endpoints ────────────────────────────────
 
 
+def _with_creator(ws, member_ids: list) -> list:
+    """Restricted-workspace recipient set: explicit members plus the creator,
+    who retains visibility without a member row (see can_see_workspace)."""
+    ids = set(member_ids)
+    if ws.created_by_id:
+        ids.add(ws.created_by_id)
+    return sorted(ids)
+
+
 async def _emit_nav_event(event: str, ws, payload: dict, db, member_ids: Optional[list] = None) -> None:
     """Route a workspace/workstream nav event by the workspace's visibility:
-    team-visible -> the team-wide room; restricted -> each member's user room,
-    so plain team members never receive restricted names/metadata."""
+    team-visible -> the team-wide room; restricted -> each member's (and the
+    creator's) user room, so plain team members never receive restricted
+    names/metadata."""
     if ws.visibility == 'team':
         await emit_event(event, f'workos:team:{ws.team_id}', payload)
         return
     if member_ids is None:
         member_ids = [m.user_id for m in await WorkspaceMembers.list_for_workspace(ws.id, db=db)]
-    await emit_users(event, payload, member_ids)
+    await emit_users(event, payload, _with_creator(ws, member_ids))
 
 
 async def _emit_workspace_updated(before, updated, db) -> None:
@@ -333,7 +343,9 @@ async def _emit_workspace_updated(before, updated, db) -> None:
     """
     if before.visibility == 'team' and updated.visibility == 'restricted':
         await emit_event('workos:workspace.deleted', f'workos:team:{updated.team_id}', {'id': updated.id})
-        member_ids = [m.user_id for m in await WorkspaceMembers.list_for_workspace(updated.id, db=db)]
+        member_ids = _with_creator(
+            updated, [m.user_id for m in await WorkspaceMembers.list_for_workspace(updated.id, db=db)]
+        )
         streams = await Workstreams.list_for_workspace(updated.id, db=db)
         await emit_users('workos:workspace.updated', updated.model_dump(), member_ids)
         for s in streams:
@@ -469,8 +481,9 @@ async def remove_workspace_member(
     removed = await WorkspaceMembers.remove(workspace_id, user_id, db=db)
     # Removal from a restricted workspace revokes visibility -> evict from its
     # workstream rooms (not the team room — the user is still a team member).
-    # Removal from a team-visible workspace revokes nothing.
-    if removed and ws.visibility == 'restricted' and not await is_app_admin(user_id, db):
+    # Removal from a team-visible workspace revokes nothing. The creator and
+    # app-admins keep visibility without a member row, so they are never evicted.
+    if removed and ws.visibility == 'restricted' and user_id != ws.created_by_id and not await is_app_admin(user_id, db):
         rooms = [f'workos:workstream:{s.id}' for s in await Workstreams.list_for_workspace(workspace_id, db=db)]
         await evict_user(user_id, rooms)
     return {'removed': removed}
@@ -824,6 +837,50 @@ async def admin_update_settings(
     rules.update(form.model_dump(exclude_none=True))
     request.app.state.config.WORKOS_RULES = rules
     return request.app.state.config.WORKOS_RULES
+
+
+# ──────────────────────────────── access console ────────────────────────────────
+
+
+@router.get('/access/overview')
+async def access_overview(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    """Teams the caller manages (team_role in {owner, admin}; app-admins: all teams,
+    archived included), with the workspaces they can see. Restricted workspaces the
+    caller is not a member of are omitted — the console manages only what its user
+    can see. Non-managers get an empty list."""
+    await require_workos(request, user, db)
+    is_admin = user.role == 'admin'
+    teams = await (Teams.list_all(db=db) if is_admin else Teams.list_for_user(user.id, db=db))
+    out = []
+    for team in teams:
+        role = await team_role(user, team.id, db)
+        if role not in {'owner', 'admin'}:
+            continue
+        members = await TeamMembers.list_for_team(team.id, db=db)
+        workspaces = []
+        for ws in await Workspaces.list_for_team(team.id, db=db):
+            if not await can_see_workspace(user.id, is_admin, ws, db=db):
+                continue
+            entry = {
+                'id': ws.id,
+                'name': ws.name,
+                'icon': ws.icon,
+                'visibility': ws.visibility,
+                'archived': ws.archived,
+            }
+            if ws.visibility == 'restricted':
+                entry['member_count'] = len(await WorkspaceMembers.list_for_workspace(ws.id, db=db))
+            workspaces.append(entry)
+        out.append({
+            'team': team,
+            'my_role': role,
+            'owner_ids': [m.user_id for m in members if m.role == 'owner'],
+            'member_count': len(members),
+            'workspaces': workspaces,
+        })
+    return out
 
 
 # ──────────────────────────────── collaboration: schemas ────────────────────────────────

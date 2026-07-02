@@ -36,10 +36,13 @@ async def test_can_see_workspace_matrix():
 
     rws = await Workspaces.insert(team.id, 'Secret', None, 'restricted', 'u1')
     await WorkspaceMembers.add(rws.id, 'u2', 'member')
-    # restricted: explicit workspace members only (+ app-admin); a plain team member is out.
+    # restricted: explicit workspace members + the creator (2026-07-02 rule) +
+    # app-admin; a plain team member with neither is out.
     assert await wa.can_see_workspace('u2', False, rws) is True
-    assert await wa.can_see_workspace('u1', False, rws) is False
+    assert await wa.can_see_workspace('u1', False, rws) is True  # creator, no member row
     assert await wa.can_see_workspace('u1', True, rws) is True
+    await TeamMembers.add(team.id, 'u4', 'member')
+    assert await wa.can_see_workspace('u4', False, rws) is False
     # non-team-member workspace member row alone is not enough (team gate first).
     await WorkspaceMembers.add(rws.id, 'u9', 'member')
     assert await wa.can_see_workspace('u9', False, rws) is False

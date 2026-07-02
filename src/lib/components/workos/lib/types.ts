@@ -157,6 +157,26 @@ export type FeedItem =
 	| { kind: 'comment'; at: number; comment: Comment }
 	| { kind: 'activity'; at: number; activity: Activity };
 
+// Access console (`GET /access/overview`) — teams the caller manages.
+// Workspaces are pre-filtered server-side: restricted spaces the caller
+// cannot see are absent; member_count present only on visible restricted ones.
+export interface AccessWorkspaceSummary {
+	id: string;
+	name: string;
+	icon?: string | null;
+	visibility: Visibility;
+	archived: boolean;
+	member_count?: number;
+}
+
+export interface AccessTeamOverview {
+	team: Team;
+	my_role: TeamRole;
+	owner_ids: string[];
+	member_count: number;
+	workspaces: AccessWorkspaceSummary[];
+}
+
 export interface WorkosRules {
 	team_creation: 'all_users' | 'admins_only';
 	default_workspace_visibility: Visibility;

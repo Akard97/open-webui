@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	canManageTeam, canManageMembers, canCreateWorkspace, canManageWorkspace, canDeleteTask, canUseAdmin,
-	canEditTask, canEditSubtask
+	canUseAccessConsole, canEditTask, canEditSubtask
 } from './roles';
 import type { Task } from './types';
 
@@ -47,5 +47,17 @@ describe('roles', () => {
 	it('subtask editing: subtask author or task editor', () => {
 		expect(canEditSubtask({ created_by_id: 'u1' }, task({ created_by_id: 'u9' }), 'u1', 'member', undefined)).toBe(true);
 		expect(canEditSubtask({ created_by_id: 'u9' }, task({ created_by_id: 'u9' }), 'u1', 'member', undefined)).toBe(false);
+	});
+	it('access console: system admin or owner/admin of at least one team', () => {
+		expect(canUseAccessConsole({ role: 'admin' }, {})).toBe(true);
+		expect(canUseAccessConsole({ role: 'user' }, { t1: 'owner' })).toBe(true);
+		expect(canUseAccessConsole({ role: 'user' }, { t1: 'member', t2: 'admin' })).toBe(true);
+		expect(canUseAccessConsole({ role: 'user' }, { t1: 'member' })).toBe(false);
+		expect(canUseAccessConsole({ role: 'user' }, {})).toBe(false);
+		expect(canUseAccessConsole({ role: 'user' }, null)).toBe(false);
+		expect(canUseAccessConsole(null, { t1: 'owner' })).toBe(false);
+	});
+	it('access console: the workos_admin permission flag alone does not pass', () => {
+		expect(canUseAccessConsole({ role: 'user', permissions: { features: { workos_admin: true } } } as any, {})).toBe(false);
 	});
 });

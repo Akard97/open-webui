@@ -2,7 +2,7 @@ import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type {
 	Bootstrap, Team, Workspace, Workstream, Label, Task, Member, WorkosRules,
 	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole,
-	Comment, Attachment, Activity, Notification, Subtask
+	Comment, Attachment, Activity, Notification, Subtask, AccessTeamOverview
 } from './types';
 
 const BASE = `${WEBUI_API_BASE_URL}/workos`;
@@ -114,6 +114,10 @@ export const getDirectory = (token: string) => request<{ id: string; name: strin
 // All app users — for the team-member "Add a user…" picker (bootstraps membership).
 export const listAllUsers = (token: string, teamId: string) =>
 	request<{ id: string; name: string }[]>(token, `/users?team_id=${encodeURIComponent(teamId)}`);
+
+// Access console
+export const accessOverview = (token: string) =>
+	request<AccessTeamOverview[]>(token, '/access/overview');
 
 // Admin
 export const adminListTeams = (token: string) =>

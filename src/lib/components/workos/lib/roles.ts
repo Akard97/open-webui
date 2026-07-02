@@ -28,6 +28,18 @@ export function canUseAdmin(user: { role?: string; permissions?: any } | null | 
 	return user.role === 'admin' || !!user?.permissions?.features?.workos_admin;
 }
 
+// Access console gate: system admins, or anyone who owns/administers at least
+// one team (`roles` = bootstrap map teamId -> caller's role). The workos_admin
+// permission flag deliberately does NOT pass — the console is team-scoped.
+export function canUseAccessConsole(
+	user: { role?: string } | null | undefined,
+	roles: Record<string, TeamRole> | null | undefined
+): boolean {
+	if (!user) return false;
+	if (user.role === 'admin') return true;
+	return Object.values(roles ?? {}).some((r) => r === 'owner' || r === 'admin');
+}
+
 export function canDeleteComment(
 	comment: { user_id: string },
 	userId: string,

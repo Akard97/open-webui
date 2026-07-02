@@ -5,9 +5,12 @@
 	import AssigneeAvatars from '../views/AssigneeAvatars.svelte';
 	import { get } from 'svelte/store';
 	import * as api from '../lib/api';
-	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { user } from '$lib/stores';
-	import { canUseAdmin, canCreateWorkspace, canManageMembers } from '../lib/roles';
+	// Bundle the logo as a hashed build asset instead of loading it from the
+	// backend's /static dir, which gets wiped when the backend image is rebuilt.
+	import workosLogoDark from '../assets/workos-logo-dark.png';
+	import workosLogoLight from '../assets/workos-logo-light.png';
+	import { canUseAdmin, canUseAccessConsole, canCreateWorkspace, canManageMembers } from '../lib/roles';
 	import {
 		teams, workspaces, workstreams, roles, currentTeam, currentTeamId, currentWorkstreamId,
 		selectTeam, selectWorkstream, view, openModal, unreadCount, navCollapsed, token
@@ -54,8 +57,8 @@
 			title="Expand sidebar"
 			onclick={() => navCollapsed.set(false)}
 		>
-			<img src="{WEBUI_BASE_URL}/static/workos-logo-dark.png" class="size-7 object-contain group-hover:hidden block dark:hidden" alt="WorkOS" />
-			<img src="{WEBUI_BASE_URL}/static/workos-logo-light.png" class="size-7 object-contain group-hover:hidden hidden dark:block" alt="WorkOS" />
+			<img src={workosLogoDark} class="size-7 object-contain group-hover:hidden block dark:hidden" alt="WorkOS" />
+			<img src={workosLogoLight} class="size-7 object-contain group-hover:hidden hidden dark:block" alt="WorkOS" />
 			<SidebarIcon className="size-5 hidden group-hover:flex" />
 		</button>
 
@@ -89,6 +92,11 @@
 
 		<div class="flex-1"></div>
 
+		{#if canUseAccessConsole($user, $roles)}
+			<button class="size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition {$view === 'access' ? 'bg-gray-100 dark:bg-gray-850 text-gray-900 dark:text-white' : ''}" title="Access console" onclick={() => view.set('access')}>
+				<Icon name="shield" size={18} />
+			</button>
+		{/if}
 		{#if canUseAdmin($user)}
 			<button class="size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="WorkOS admin" onclick={() => view.set('admin')}>
 				<Icon name="settings" size={18} />
@@ -101,8 +109,8 @@
 		<!-- Header: mark + name + collapse -->
 		<div class="px-[0.5625rem] pt-2 pb-1.5 flex justify-between space-x-1 text-gray-600 dark:text-gray-400">
 			<div class="flex items-center size-8.5 justify-center">
-				<img src="{WEBUI_BASE_URL}/static/workos-logo-dark.png" class="size-7 object-contain block dark:hidden" alt="WorkOS" />
-				<img src="{WEBUI_BASE_URL}/static/workos-logo-light.png" class="size-7 object-contain hidden dark:block" alt="WorkOS" />
+				<img src={workosLogoDark} class="size-7 object-contain block dark:hidden" alt="WorkOS" />
+				<img src={workosLogoLight} class="size-7 object-contain hidden dark:block" alt="WorkOS" />
 			</div>
 			<div class="flex flex-1 items-center px-0.5">
 				<div class="self-center font-medium text-gray-850 dark:text-white font-primary">WorkOS</div>
@@ -237,6 +245,11 @@
 		<!-- Footer -->
 		<div class="border-t border-gray-50 dark:border-gray-850/30 p-2 flex items-center gap-2 text-gray-800 dark:text-gray-200">
 			<div class="flex-1 min-w-0 text-sm font-medium truncate">{$user?.name ?? ''}</div>
+			{#if canUseAccessConsole($user, $roles)}
+				<button class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="Access console" onclick={() => view.set('access')}>
+					<Icon name="shield" size={16} />
+				</button>
+			{/if}
 			{#if canUseAdmin($user)}
 				<button class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="WorkOS admin" onclick={() => view.set('admin')}>
 					<Icon name="settings" size={16} />

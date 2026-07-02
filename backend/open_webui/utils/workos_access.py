@@ -65,10 +65,16 @@ async def can_see_workspace(user_id: str, is_admin: bool, workspace, db: Optiona
 
     Note the admin branch still requires the parent team row to exist (an
     app-admin cannot see a workspace orphaned by a deleted team).
+
+    The workspace creator keeps visibility even when the workspace is
+    restricted and they hold no member row (e.g. someone else flipped it
+    after creation) — but only while they still pass the team gate.
     """
     if not await can_see_team(user_id, is_admin, workspace.team_id, db=db):
         return False
     if workspace.visibility == 'team' or is_admin:
+        return True
+    if workspace.created_by_id == user_id:
         return True
     return (await WorkspaceMembers.get(workspace.id, user_id, db=db)) is not None
 

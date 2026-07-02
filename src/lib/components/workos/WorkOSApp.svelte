@@ -9,18 +9,22 @@
 	import CalendarView from './views/CalendarView.svelte';
 	import TaskDetail from './views/TaskDetail.svelte';
 	import AdminApp from './views/admin/AdminApp.svelte';
+	import AccessConsole from './views/access/AccessConsole.svelte';
 	import InboxView from './views/InboxView.svelte';
 	import MyWorkView from './views/MyWorkView.svelte';
 	import ModalHost from './views/ModalHost.svelte';
-	import { canUseAdmin } from './lib/roles';
+	import { canUseAdmin, canUseAccessConsole } from './lib/roles';
 	import { user } from '$lib/stores';
 	import {
 		loadBootstrap, connectRealtime, disconnectRealtime,
-		view, selectedTask, teams, loading
+		view, selectedTask, teams, roles, loading
 	} from './lib/store';
 
 	// Guard: snap non-admins away from the admin view.
 	$: if ($view === 'admin' && !canUseAdmin($user)) view.set('board');
+	// Guard: the access console is for team owners/admins and system admins only.
+	// Skip while roles are still loading so a slow bootstrap doesn't bounce the view.
+	$: if ($view === 'access' && $teams.length && !canUseAccessConsole($user, $roles)) view.set('board');
 
 	onMount(async () => {
 		await loadBootstrap();
@@ -41,6 +45,8 @@
 				<div class="h-full flex items-center justify-center text-sm text-gray-400">Loading…</div>
 			{:else if $view === 'admin'}
 				<AdminApp />
+			{:else if $view === 'access'}
+				<AccessConsole />
 			{:else if $view === 'inbox'}
 				<InboxView />
 			{:else if $view === 'mywork'}

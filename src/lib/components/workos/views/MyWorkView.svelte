@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { user } from '$lib/stores';
-	import { WEBUI_BASE_URL } from '$lib/constants';
 	import Icon from '../ui/Icon.svelte';
+	// Bundle the logo as a hashed build asset instead of loading it from the
+	// backend's /static dir, which gets wiped when the backend image is rebuilt.
+	import workosLogoDark from '../assets/workos-logo-dark.png';
+	import workosLogoLight from '../assets/workos-logo-light.png';
 	import StatusDot from '../ui/StatusDot.svelte';
 	import Avatar from './commandcenter/Avatar.svelte';
 	import TaskHoverCard from './TaskHoverCard.svelte';
@@ -180,8 +183,8 @@
 	<div class="max-w-[1240px] mx-auto px-9 pt-7 pb-14">
 
 		<!-- Brand -->
-		<img src="{WEBUI_BASE_URL}/static/workos-logo-dark.png" class="h-10 w-auto object-contain mb-4 block dark:hidden" alt="WorkOS" />
-		<img src="{WEBUI_BASE_URL}/static/workos-logo-light.png" class="h-10 w-auto object-contain mb-4 hidden dark:block" alt="WorkOS" />
+		<img src={workosLogoDark} class="h-10 w-auto object-contain mb-4 block dark:hidden" alt="WorkOS" />
+		<img src={workosLogoLight} class="h-10 w-auto object-contain mb-4 hidden dark:block" alt="WorkOS" />
 
 		<!-- Header -->
 		<div class="flex items-center gap-4 mb-6">

@@ -11,6 +11,19 @@
   truth). §2/§3 cite the new locations; router line cites in §4 predate the
   consolidation and have shifted up by ~120 lines (helper defs removed), but the
   gate-per-endpoint mapping is unchanged.
+
+  2026-07-02 (later): Access console shipped — a dedicated frontend view for team
+  owners/admins (and app-admins) to manage membership, roles, and workspace
+  visibility. One new read endpoint (GET /access/overview, §4); all mutations
+  reuse the existing gated endpoints. §6 updated (new view + predicate; the
+  "visibility is create-only in the UI" bullet is now false).
+
+  2026-07-02 (creator rule): can_see_workspace grants the workspace CREATOR
+  (created_by_id) visibility into their own restricted workspace even without a
+  member row, provided they still pass the team gate. Ripples: restricted nav
+  fan-out includes the creator (_with_creator), remove_workspace_member never
+  evicts the creator, and the flip-eviction predicate is creator-safe
+  automatically. §2/§5 updated.
 -->
 
 # WorkOS — Access Control & Visibility (Reference)
@@ -34,7 +47,7 @@ There are **two distinct user→thing relationships, and they must not be confla
 
 | Relationship | Stored as | Grants access? |
 |---|---|---|
-| **Membership / access** | `WorkosTeamMember` rows, `WorkosWorkspaceMember` rows, plus the per-workspace `visibility` flag | **YES.** This is the only thing that makes a node visible. |
+| **Membership / access** | `WorkosTeamMember` rows, `WorkosWorkspaceMember` rows, plus the per-workspace `visibility` flag | **YES.** This is what makes a node visible (one exception: the workspace **creator** keeps visibility into their own restricted workspace without a member row — §2 creator rule, 2026-07-02). |
 | **Task assignment** | `WorkosTask.assignee_ids` (a JSON list on the task itself, [workos.py:470](backend/open_webui/models/workos.py:470)) | **NO.** Being an assignee is *not* an access grant. An assignee who is not also a member who can see the workstream **cannot open the task** ([require_task_visible](backend/open_webui/routers/workos.py:581) never consults `assignee_ids`). |
 
 This split is the root of several gaps in §8: the assignee picker and notification fan-out treat assignment as if it implied access, but the visibility gate does not — so a task can be assigned to (and a notification pushed to) someone who then gets a 404 trying to open it.
@@ -74,7 +87,8 @@ The canonical per-workspace rule (takes a resolved workspace row):
 |---|---|
 | `if not can_see_team(...): return False` | **Outer wall:** must pass the team gate first. Short-circuits regardless of workspace visibility. Note this means an app-admin cannot see a workspace orphaned by a deleted team (pre-consolidation the router path allowed it; unified 2026-07-02 to the stricter semantic — unreachable via normal flows). |
 | `if workspace.visibility == 'team' or is_admin: return True` | Team-visible workspace → any team member passes; **or** app-admin passes even when restricted. |
-| `return WorkspaceMembers.get(workspace.id, user_id) is not None` | Reached **only** when `restricted` AND not admin: need an explicit workspace-member row, *any workspace role*. |
+| `if workspace.created_by_id == user_id: return True` | **Creator rule (2026-07-02):** the workspace creator keeps visibility even when restricted with no member row (covers someone else flipping it after creation). Team gate still applies — a creator who left the team sees nothing. |
+| `return WorkspaceMembers.get(workspace.id, user_id) is not None` | Reached **only** when `restricted` AND not admin AND not creator: need an explicit workspace-member row, *any workspace role*. |
 
 ### `can_see_workstream(user_id, is_admin, workstream_id)` — [workos_access.py:75](backend/open_webui/utils/workos_access.py:75)
 
@@ -237,6 +251,11 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 | `GET /notifications` | `require_workos`; intrinsically scoped to `user.id`; `limit` clamped to ≤ 200 (closes G10) | [workos.py:1064](backend/open_webui/routers/workos.py:1064) |
 | `POST /notifications/read` | `require_workos`; `Notifications.mark_read` passed `user.id` | [workos.py:1073](backend/open_webui/routers/workos.py:1073) |
 
+### Access console
+| Route / Helper | Gate applied | Location |
+|---|---|---|
+| `GET /access/overview` | `require_workos` only; result intrinsically scoped — one row per team where the caller's `team_role ∈ {'owner','admin'}` (app-admin: all teams incl. archived), each row's `workspaces` filtered through `can_see_workspace` so restricted workspaces the caller is not a member of are **omitted** (§9 decision holds — no owner/admin bypass); non-managers get `[]` (no error, no leak) | [workos.py](backend/open_webui/routers/workos.py) `access_overview` |
+
 ### Admin
 | Route / Helper | Gate applied | Location |
 |---|---|---|
@@ -266,9 +285,9 @@ Three room namespaces: `workos:team:{team_id}`, `workos:workstream:{workstream_i
 - **Conclusion (verified):** a user who fails `can_see_workstream` **cannot receive** task/comment/activity/subtask/attachment realtime events. This claim was checked and is accurate, *not* overstated.
 
 **Realtime caveats — all three CLOSED (2026-07-02):**
-- **Eviction on revocation — FIXED.** `remove_member` evicts the removed user's live sockets from the team room and every workstream room under the team; `remove_workspace_member` evicts from the workspace's workstream rooms when (and only when) the workspace is `restricted` (removal from a team-visible workspace revokes nothing, and app-admin targets are never evicted — they retain access). Implemented via `workos_leave_rooms` in [socket/main.py](backend/open_webui/socket/main.py) behind the best-effort `evict_user` wrapper in the router. *Known limit:* room membership is per-worker (`sio.manager.get_participants`), so eviction is best-effort in scale-out — same posture as `disconnect_user_sessions`.
+- **Eviction on revocation — FIXED.** `remove_member` evicts the removed user's live sockets from the team room and every workstream room under the team; `remove_workspace_member` evicts from the workspace's workstream rooms when (and only when) the workspace is `restricted` (removal from a team-visible workspace revokes nothing, and app-admin targets and the **workspace creator** are never evicted — they retain access). Implemented via `workos_leave_rooms` in [socket/main.py](backend/open_webui/socket/main.py) behind the best-effort `evict_user` wrapper in the router. *Known limit:* room membership is per-worker (`sio.manager.get_participants`), so eviction is best-effort in scale-out — same posture as `disconnect_user_sessions`.
 - **Token-in-payload — FIXED.** `workos:subscribe` now authorizes from `SESSION_POOL[sid]` (connection identity); payload tokens are ignored, absent session fails closed. The client no longer sends a token in the subscribe payload ([store.ts emitSub](src/lib/components/workos/lib/store.ts)).
-- **Structural scoping mismatch — FIXED.** Workspace/workstream nav events are now **visibility-routed** by `_emit_nav_event` in the router: `visibility=='team'` → team-wide room as before; `restricted` → each workspace member's `user:{id}` room. Plain team members no longer receive restricted names/metadata.
+- **Structural scoping mismatch — FIXED.** Workspace/workstream nav events are now **visibility-routed** by `_emit_nav_event` in the router: `visibility=='team'` → team-wide room as before; `restricted` → each workspace member's (plus the creator's, via `_with_creator`) `user:{id}` room. Plain team members no longer receive restricted names/metadata.
   - **Visibility-flip protocol** (`_emit_workspace_updated`): on `team→restricted`, the team room gets a `workspace.deleted`-shaped event FIRST (clients drop the subtree), then members get the full `workspace.updated` + one `workstream.created` per child stream over their user rooms (subtree rebuild), then sockets that can no longer see each child workstream are evicted from its room (`workos_evict_room_non_members`). On `restricted→team`, the team room gets the full `workspace.updated` + `workstream.created` per child stream. Emission order is load-bearing and pinned by tests (`test_router_restricted_emits.py`, `store.test.ts`).
   - Frontend consequence: the old §6 client-side guard that refused restricted payloads from nav events was removed (the server now only delivers restricted payloads to authorized sockets, and the guard broke the flip rebuild); the workstream parent-visibility check remains.
 
@@ -296,11 +315,12 @@ The WorkOS frontend has **no authoritative access model of its own** — it is a
 
 - **Role source:** `/bootstrap` returns a flat `roles: Record<teamId, TeamRole>` map, stored in the `roles` Svelte store ([store.ts:26](src/lib/components/workos/lib/store.ts), set in `loadBootstrap` [:82–104](src/lib/components/workos/lib/store.ts)). The WorkOS-level capability gate (`features.workos` / `features.workos_admin`) is read from the Open WebUI `user` store, not the roles map.
 - **Tree is server-trimmed:** `/bootstrap` already filters restricted workspaces/workstreams ([workos.py:170](backend/open_webui/routers/workos.py:170)), so the sidebar never re-checks visibility.
-- **Predicates:** `lib/roles.ts` exposes pure predicates — `canManageTeam` (owner only), `canManageMembers` / `canCreateWorkspace` (owner||admin), `canDeleteTask` (creator OR owner/admin), `canDeleteComment` / `canDeleteAttachment` (author OR owner/admin), `canUseAdmin` (reads OWUI `user.role==='admin' || permissions.features.workos_admin`). `canManageWorkspace` is defined+tested but **unused** (dead predicate).
+- **Predicates:** `lib/roles.ts` exposes pure predicates — `canManageTeam` (owner only), `canManageMembers` / `canCreateWorkspace` (owner||admin), `canDeleteTask` (creator OR owner/admin), `canDeleteComment` / `canDeleteAttachment` (author OR owner/admin), `canUseAdmin` (reads OWUI `user.role==='admin' || permissions.features.workos_admin`), `canUseAccessConsole` (`user.role==='admin'` OR any bootstrap team role ∈ {owner, admin} — the `workos_admin` flag deliberately does NOT pass). `canManageWorkspace` is defined+tested but **unused** (dead predicate).
 - **Nav gate:** `railItems.ts` shows the WorkOS item if `user.role==='admin' || permissions.features.workos ?? true` (defaults visible, mirroring backend default-ON).
-- **Admin view guard** is client-side only — `WorkOSApp.svelte:20` snaps the view from `admin` back to `board` when `!canUseAdmin`.
+- **Admin view guard** is client-side only — `WorkOSApp.svelte` snaps the view from `admin` back to `board` when `!canUseAdmin`, and from `access` back to `board` when `!canUseAccessConsole` (both cosmetic; the server re-checks everything).
+- **Access console** (`views/access/`, view key `'access'`, sidebar shield button): team-scoped management surface for owners/admins. Reads `GET /access/overview` for first paint and lazy-loads rosters via the existing member endpoints; **all mutations go through the existing gated endpoints**, so role gates, the last-owner guard, and realtime emit/eviction come from the server unchanged. UI mirrors (server stays authoritative): owner-grant selects disabled for non-owners, last-owner row locked, restricted-workspace add-picker sourced from **team members only** (the backend does not validate the target is a team member), and the `team→restricted` flip sits behind a destructive-confirm dialog because it evicts non-member sockets via `_emit_workspace_updated`.
 - **Pickers source the team-wide `directory` store** — both `AssigneeField` and the `@mention` composer offer users who may not see a restricted workspace; the backend now validates each `assignee_id` against `can_see_workstream` and rejects invisible ids (G1 closed), and the mention *notification* is filtered server-side.
-- **Visibility is create-only in the UI** — set in `ModalHost` at creation; `api.updateWorkspace({visibility})` exists but **no component calls it**, and there is no restricted badge.
+- **Workspace visibility is editable in the UI** (since the Access console) — created in `ModalHost`, flipped via `api.updateWorkspace({visibility})` from `WorkspacePanel.svelte`, with restricted badges in the console. Outside the console there is still no restricted badge.
 
 ---
 
