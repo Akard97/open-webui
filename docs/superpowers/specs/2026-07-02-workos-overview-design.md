@@ -77,7 +77,10 @@ Implemented as pure functions in `src/lib/components/workos/lib/overview.ts`, al
   the selected range, in days, 1 decimal; delta vs the preceding equal-length window —
   ▾ green (faster), ▴ red (slower), hidden when either window is empty. Label it
   **"avg completion time"** (created→done lead time), NOT "cycle time" — we do not measure
-  in_progress→done. Empty range → "—".
+  in_progress→done. Empty range → "—". (As built, the two windows are calendar-aligned with the
+  chart rather than strictly equal-length: current = `[start of the oldest calendar bin, now]`
+  — includes the current partial week; previous = the exactly `7 · weeks`-day span immediately
+  before it. Deliberate: keeps the footnote consistent with the bars it sits under.)
 
 ### 3.3 Distribution card
 
@@ -116,9 +119,10 @@ today or tomorrow). Each task appears once under its most severe class
 
 Ranking: severity class, then within class — overdue: `dueDayEndLocal` asc (most late first);
 behind / at_risk: `plannedProgress − actualProgress` gap desc; due_soon: due asc.
-Right-hand label: "`X`d late" / "behind plan" (tooltip "`a`% done vs `p`% planned") / "at risk" /
-"due today"·"due tomorrow". Rows show severity dot, title, key, assignee avatars; click →
-`openTask(id)`. Show 6, "Show all `N`" expands in place. Empty state: "Nothing needs attention."
+Right-hand label: "`X`d late" / "behind plan" (tooltip "`N` points behind planned progress") /
+"at risk" (same tooltip) / "due `dueLabel`". Rows show severity dot, title, key — no assignee
+avatars (deferred nicety, not shipped in this phase); click → `openTask(id)`. Show 6, "Show all
+`N`" expands in place. Empty state: "Nothing needs attention."
 
 ### 3.6 Pulse
 

@@ -25,6 +25,7 @@ vi.mock('./api', () => ({
 	})),
 	updateSubtask: vi.fn(async (t, id, body) => ({ id, task_id: 'task-1', title: 'Sub', completed: !!body.completed, sort_key: 1, created_at: 1, updated_at: 2 })),
 	deleteSubtask: vi.fn(async () => ({ deleted: true })),
+	getWorkstreamActivity: vi.fn(async () => ({ items: [], daily: [] })),
 }));
 
 vi.mock('$lib/stores', () => {
@@ -196,7 +197,29 @@ import { workspaces, workstreams, applyNavEvent } from './store';
 const mkWs = (over: any) => ({ id: 'ws1', team_id: 'tm', name: 'Eng', visibility: 'team', archived: false, created_at: 0, updated_at: 0, ...over });
 const mkSt = (over: any) => ({ id: 's1', workspace_id: 'ws1', name: 'Plat', archived: false, created_at: 0, updated_at: 0, ...over });
 
-import { wsActivity, applyOverviewActivityEvent } from './store';
+import { wsActivity, applyOverviewActivityEvent, loadWorkstreamActivity } from './store';
+import * as api from './api';
+
+describe('loadWorkstreamActivity stale-error guard', () => {
+	it('does not clobber a newer workstream\'s state when an older load rejects late', async () => {
+		let rejectDeferred!: (e: unknown) => void;
+		vi.mocked(api.getWorkstreamActivity).mockImplementationOnce(
+			() => new Promise((_resolve, reject) => { rejectDeferred = reject; })
+		);
+
+		currentWorkstreamId.set('ws-A');
+		const pending = loadWorkstreamActivity('ws-A'); // resets wsActivity synchronously
+
+		const wsBState = { items: [{ id: 'b1' } as any], daily: [{ day: '2026-07-01', n: 2 }], loaded: true, error: false };
+		currentWorkstreamId.set('ws-B');
+		wsActivity.set(wsBState);
+
+		rejectDeferred(new Error('late failure for A'));
+		await pending;
+
+		expect(get(wsActivity)).toEqual(wsBState);
+	});
+});
 
 describe('applyOverviewActivityEvent', () => {
 	it('prepends for the current workstream, dedupes, and bumps today bucket', () => {

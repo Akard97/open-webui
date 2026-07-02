@@ -20,7 +20,8 @@
 		return n === 0 ? 4 : Math.max(8, Math.round((n / maxDaily) * 34));
 	}
 	const pairColor = (p: PriorityPair): string =>
-		p.key === 'urgent' || p.key === 'high' ? PRIORITY_COLOR[p.key] : 'inherit';
+		p.key === 'urgent' || p.key === 'high' ? `color:${PRIORITY_COLOR[p.key]}` : '';
+	$: hasActivity = daily.some((d) => d.n > 0);
 </script>
 
 <section class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 min-w-0">
@@ -31,7 +32,7 @@
 		{#each pairs as p (p.key)}
 			<div>
 				{p.label}
-				<div class="text-[16px] font-medium tabular-nums text-gray-900 dark:text-gray-100" style="color:{pairColor(p)}">{p.n}</div>
+				<div class="text-[16px] font-medium tabular-nums text-gray-900 dark:text-gray-100" style={pairColor(p)}>{p.n}</div>
 			</div>
 		{/each}
 	</div>
@@ -55,7 +56,7 @@
 		<div class="h-[34px] mt-1.5 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></div>
 	{:else}
 		<div class="flex items-end gap-[5px] mt-1.5 h-[34px]" role="img"
-			aria-label="Daily activity, busiest day {maxDaily} events">
+			aria-label={hasActivity ? `Daily activity, busiest day ${maxDaily} events` : 'No activity in the last 14 days'}>
 			{#each daily as d (d.day)}
 				<div class="w-2 rounded" title="{d.day} · {d.n}" style="height:{stripHeight(d.n)}px;background:{stripColor(d.n)}"></div>
 			{/each}

@@ -355,6 +355,7 @@ export async function loadWorkstreamActivity(id: string): Promise<void> {
 		if (get(currentWorkstreamId) !== id) return; // user moved on
 		wsActivity.set({ items: r.items, daily: r.daily, loaded: true, error: false });
 	} catch {
+		if (get(currentWorkstreamId) !== id) return; // user moved on
 		wsActivity.set({ items: [], daily: [], loaded: true, error: true });
 	}
 }
