@@ -56,7 +56,7 @@
 </script>
 
 {#if req}
-	<div class="fixed inset-0 z-40 flex items-center justify-center">
+	<div class="fixed inset-0 z-50 flex items-center justify-center">
 		<div class="absolute inset-0 bg-black/40" onclick={close} role="presentation"></div>
 		<div class="relative w-[420px] max-w-[92%] rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 shadow-2xl p-5">
 			<div class="flex items-center mb-4">

@@ -15,7 +15,7 @@
 {#if $mobileNavOpen}
 	<div class="fixed inset-0 z-40">
 		<button class="absolute inset-0 bg-black/40" aria-label="Close navigation" onclick={close}></button>
-		<aside class="absolute inset-y-0 left-0 w-[82vw] max-w-[320px] flex flex-col bg-gray-50 dark:bg-gray-950 shadow-xl">
+		<aside class="absolute inset-y-0 left-0 w-[82vw] max-w-[320px] flex flex-col bg-gray-50 dark:bg-gray-950 shadow-xl" role="dialog" aria-modal="true">
 			<TeamSwitcher />
 			<div class="flex-1 overflow-y-auto scrollbar-hidden px-2 mt-4 pb-2">
 				<WorkstreamTree onNavigate={close} />

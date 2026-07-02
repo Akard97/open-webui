@@ -4,6 +4,7 @@
 		plus: '<path d="M5 12h14M12 5v14"/>',
 		'square-plus-dashed': '<rect x="3" y="3" width="18" height="18" rx="5" stroke-dasharray="3 3" stroke-linecap="butt"/><path d="M8 12h8M12 8v8"/>',
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+		'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
 		'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 		'chevron-left': '<path d="m15 18-6-6 6-6"/>',
 		'chevron-down': '<path d="m6 9 6 6 6-6"/>',

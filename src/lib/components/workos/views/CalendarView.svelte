@@ -122,7 +122,7 @@
 
 	// Re-init whenever the rendered cell set changes (period, mode, filtered
 	// tasks, or a post-drop rebuild). Guarded by tick() inside initSortables.
-	$: void [days, mode, $filteredTasks, epoch], queueInit();
+	$: void [days, mode, $filteredTasks, epoch, $mobile], queueInit();
 	let queued = false;
 	function queueInit() {
 		if (queued) return;

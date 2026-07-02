@@ -62,7 +62,7 @@
 		<div class="translate-y-[0.5px] pl-0.5">Workspaces</div>
 	</div>
 	{#if canCreateWorkspace(myRole) && $currentTeamId}
-		<button class="z-10 mr-2 invisible group-hover:visible self-center p-0.5 hover:bg-gray-200 dark:hover:bg-gray-850 rounded-lg transition" title="New workspace" onclick={() => openModal.set({ kind: 'workspace', teamId: $currentTeamId })}>
+		<button class="z-10 mr-2 invisible group-hover:visible max-md:visible self-center p-0.5 hover:bg-gray-200 dark:hover:bg-gray-850 rounded-lg transition" title="New workspace" onclick={() => openModal.set({ kind: 'workspace', teamId: $currentTeamId })}>
 			<Icon name="plus" size={12} strokeWidth={2.5} />
 		</button>
 	{/if}
@@ -85,7 +85,7 @@
 					{#if canManage}
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger
-								class="mr-1.5 p-1 rounded-lg text-gray-500 dark:text-gray-400 opacity-0 group-hover/ws:opacity-100 data-[state=open]:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-850 transition"
+								class="mr-1.5 p-1 rounded-lg text-gray-500 dark:text-gray-400 opacity-0 group-hover/ws:opacity-100 max-md:opacity-100 data-[state=open]:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-850 transition"
 								title="Workspace actions"
 							>
 								<Icon name="more-horizontal" size={14} />
