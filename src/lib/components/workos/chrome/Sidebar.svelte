@@ -192,7 +192,7 @@
 		</div>
 
 		<!-- Teams (directly above Workspaces) -->
-		<div class="mt-1 px-[0.4375rem] relative text-gray-800 dark:text-gray-200" bind:this={teamMenuEl}>
+		<div class="mt-4 px-[0.4375rem] relative text-gray-800 dark:text-gray-200" bind:this={teamMenuEl}>
 			<div class="py-1.5 pl-2.5 text-xs font-medium text-gray-600 dark:text-gray-400">Team</div>
 			<ContextMenu.Root>
 				<ContextMenu.Trigger class="block w-full" disabled={!canManage}>
@@ -248,7 +248,7 @@
 		</div>
 
 		<!-- Workspaces -->
-		<div class="flex-1 overflow-y-auto scrollbar-hidden px-2 mt-1 pb-2">
+		<div class="flex-1 overflow-y-auto scrollbar-hidden px-2 mt-4 pb-2">
 			<div class="group w-full rounded-xl flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-900 transition text-gray-600 dark:text-gray-400">
 				<div class="w-full py-1.5 pl-2 flex items-center gap-1.5 text-xs font-medium">
 					<div class="translate-y-[0.5px] pl-0.5">Workspaces</div>
@@ -297,23 +297,24 @@
 								{/if}
 							</div>
 							{#if expanded[ws.id]}
-								{#each streamsByWs(ws.id) as s (s.id)}
-									<button
-										class="w-full flex items-center gap-2 rounded-xl pl-7 pr-[11px] py-[6px] text-sm transition {$currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
-										onclick={() => { selectWorkstream(s.id); view.set('board'); }}
-									>
-										<span class="size-1.5 rounded-full bg-gray-400 dark:bg-gray-600 flex-none"></span>
-										<span class="flex-1 text-left truncate">{s.name}</span>
-									</button>
-								{/each}
-								{#if canCreateWorkspace(myRole)}
-									<button
-										class="w-full flex items-center gap-2 rounded-xl pl-7 pr-[11px] py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-										onclick={() => openModal.set({ kind: 'workstream', workspaceId: ws.id })}
-									>
-										<Icon name="plus" size={12} /> New workstream
-									</button>
-								{/if}
+								<div class="ws-tree">
+									{#each streamsByWs(ws.id) as s (s.id)}
+										<button
+											class="ws-tree-item w-full flex items-center rounded-lg pl-2 pr-[11px] py-[6px] text-sm transition {$currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
+											onclick={() => { selectWorkstream(s.id); view.set('board'); }}
+										>
+											<span class="flex-1 text-left truncate">{s.name}</span>
+										</button>
+									{/each}
+									{#if canCreateWorkspace(myRole)}
+										<button
+											class="ws-tree-item w-full flex items-center gap-1.5 rounded-lg pl-2 pr-[11px] py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+											onclick={() => openModal.set({ kind: 'workstream', workspaceId: ws.id })}
+										>
+											<Icon name="square-plus-dashed" size={16} /> New workstream
+										</button>
+									{/if}
+								</div>
 							{/if}
 						</div>
 					</ContextMenu.Trigger>
@@ -354,3 +355,44 @@
 	onCancel={() => (pendingRestrict = null)}
 	onConfirm={() => pendingRestrict && void restrictWorkspace(pendingRestrict)}
 />
+
+<style>
+	/* File-explorer-style tree guides under a workspace. Item left edge sits at
+	   22px, and the 2px line is centred at 17px — directly under the workspace
+	   chevron's centre. */
+	.ws-tree {
+		margin-left: 0.5rem; /* 8px  */
+		padding-left: 1.25rem; /* 20px -> item left edge at 28px */
+	}
+	.ws-tree-item {
+		position: relative;
+	}
+	/* Per-item vertical segment: they stack into one continuous line, and the
+	   last item stops at its own centre so the run terminates in an elbow. */
+	.ws-tree-item::before {
+		content: '';
+		position: absolute;
+		left: -11px; /* line at 17px — under the chevron centre */
+		top: 0;
+		bottom: 0;
+		width: 1px;
+		background: rgb(229 231 235); /* gray-200 */
+	}
+	.ws-tree-item:last-child::before {
+		bottom: 50%;
+	}
+	/* Horizontal elbow from the vertical line to the item. */
+	.ws-tree-item::after {
+		content: '';
+		position: absolute;
+		left: -11px;
+		top: 50%;
+		width: 11px;
+		height: 1px;
+		background: rgb(229 231 235); /* gray-200 */
+	}
+	:global(.dark) .ws-tree-item::before,
+	:global(.dark) .ws-tree-item::after {
+		background: rgb(31 41 55); /* gray-800 */
+	}
+</style>

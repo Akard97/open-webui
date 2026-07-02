@@ -2,6 +2,7 @@
 	// Lucide (ISC) path data, ported from the prototype's icon set. 24px grid, 2px stroke.
 	const LUCIDE: Record<string, string> = {
 		plus: '<path d="M5 12h14M12 5v14"/>',
+		'square-plus-dashed': '<rect x="3" y="3" width="18" height="18" rx="5" stroke-dasharray="3 3" stroke-linecap="butt"/><path d="M8 12h8M12 8v8"/>',
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 		'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 		'chevron-left': '<path d="m15 18-6-6 6-6"/>',
@@ -53,14 +54,17 @@
 	export let name: string;
 	export let size: number = 16;
 	export let strokeWidth: number = 2;
+	// Solid icons pass fill="currentColor"; we drop the stroke so the filled
+	// shape isn't outlined and inflated by the 2px stroke.
+	export let fill: string = 'none';
 </script>
 
 <svg
 	width={size}
 	height={size}
 	viewBox="0 0 24 24"
-	fill="none"
-	stroke="currentColor"
+	{fill}
+	stroke={fill === 'none' ? 'currentColor' : 'none'}
 	stroke-width={strokeWidth}
 	stroke-linecap="round"
 	stroke-linejoin="round"
