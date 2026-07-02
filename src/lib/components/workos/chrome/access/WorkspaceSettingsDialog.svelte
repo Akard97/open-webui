@@ -167,7 +167,7 @@
 </script>
 
 <Dialog.Root open={!!req} onOpenChange={(o) => { if (!o) close(); }}>
-	<Dialog.Content class="sm:max-w-xl gap-6 rounded-2xl p-7">
+	<Dialog.Content class="sm:max-w-xl gap-6 rounded-2xl p-5 md:p-7 max-h-[90dvh] overflow-y-auto">
 		<div class="flex items-center gap-3.5">
 			<div class="size-11 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center flex-none">
 				<Icon name="layers" size={20} />

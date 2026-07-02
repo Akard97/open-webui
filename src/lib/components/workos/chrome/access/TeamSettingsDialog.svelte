@@ -155,7 +155,7 @@
 </script>
 
 <Dialog.Root open={!!req} onOpenChange={(o) => { if (!o) close(); }}>
-	<Dialog.Content class="sm:max-w-xl gap-6 rounded-2xl p-7">
+	<Dialog.Content class="sm:max-w-xl gap-6 rounded-2xl p-5 md:p-7 max-h-[90dvh] overflow-y-auto">
 		<div class="flex items-center gap-3.5">
 			<div class="size-11 rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 flex items-center justify-center text-lg font-semibold flex-none">
 				{(team?.key || team?.name || '?').trim().slice(0, 1).toUpperCase()}
