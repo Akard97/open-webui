@@ -11,6 +11,7 @@
 	import KpiBand from './overview/KpiBand.svelte';
 	import MomentumCard from './overview/MomentumCard.svelte';
 	import DistributionCard from './overview/DistributionCard.svelte';
+	import TeamTable from './overview/TeamTable.svelte';
 
 	// Live clock so overdue/day buckets roll over without a reload (spec §2).
 	let now = Date.now();
@@ -54,8 +55,7 @@
 				<MomentumCard {bins} {completion} />
 				<DistributionCard {pairs} {mix} daily={$wsActivity.daily} loaded={$wsActivity.loaded} error={$wsActivity.error} />
 			</div>
-			<!-- Task 13 mounts TeamTable -->
-			<div data-slot="team"></div>
+			<TeamTable {rows} />
 			<div class="grid grid-cols-1 xl:grid-cols-[1.35fr_1fr] gap-3 items-start">
 				<!-- Task 14 mounts AttentionList + PulseCard -->
 				<div data-slot="attention"></div>
