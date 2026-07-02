@@ -180,7 +180,7 @@
 </script>
 
 <div class="h-full overflow-auto bg-white dark:bg-gray-950">
-	<div class="max-w-[1240px] mx-auto px-9 pt-7 pb-14">
+	<div class="max-w-[1240px] mx-auto px-4 md:px-9 pt-5 md:pt-7 pb-14">
 
 		<!-- Brand -->
 		<img src={workosLogoDark} class="h-10 w-auto object-contain mb-4 block dark:hidden" alt="WorkOS" />
@@ -285,7 +285,7 @@
 						{/each}
 					</div>
 				</div>
-				<div class="px-2 pt-1 pb-2">
+				<div class="px-2 pt-1 pb-2 overflow-x-auto">
 					{#if !filtered.length}
 						<div class="py-14 text-center text-sm text-gray-400">Nothing on your plate here.</div>
 					{:else}
