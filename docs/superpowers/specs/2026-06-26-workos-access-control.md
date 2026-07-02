@@ -24,6 +24,12 @@
   fan-out includes the creator (_with_creator), remove_workspace_member never
   evicts the creator, and the flip-eviction predicate is creator-safe
   automatically. §2/§5 updated.
+
+  2026-07-02 (later still): Access console page REMOVED (frontend only) — replaced by
+  sidebar-integrated access management: kebab/right-click menus on workspace rows and
+  the team card opening TeamSettingsDialog / WorkspaceSettingsDialog
+  (chrome/access/*). GET /access/overview endpoint + tests kept (currently no
+  frontend caller). §6 updated.
 -->
 
 # WorkOS — Access Control & Visibility (Reference)
@@ -254,7 +260,7 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 ### Access console
 | Route / Helper | Gate applied | Location |
 |---|---|---|
-| `GET /access/overview` | `require_workos` only; result intrinsically scoped — one row per team where the caller's `team_role ∈ {'owner','admin'}` (app-admin: all teams incl. archived), each row's `workspaces` filtered through `can_see_workspace` so restricted workspaces the caller is not a member of are **omitted** (§9 decision holds — no owner/admin bypass); non-managers get `[]` (no error, no leak) | [workos.py](backend/open_webui/routers/workos.py) `access_overview` |
+| `GET /access/overview` | `require_workos` only; result intrinsically scoped — one row per team where the caller's `team_role ∈ {'owner','admin'}` (app-admin: all teams incl. archived), each row's `workspaces` filtered through `can_see_workspace` so restricted workspaces the caller is not a member of are **omitted** (§9 decision holds — no owner/admin bypass); non-managers get `[]` (no error, no leak). **Note:** endpoint currently has **no frontend caller** (kept deliberately). | [workos.py](backend/open_webui/routers/workos.py) `access_overview` |
 
 ### Admin
 | Route / Helper | Gate applied | Location |
@@ -315,10 +321,23 @@ The WorkOS frontend has **no authoritative access model of its own** — it is a
 
 - **Role source:** `/bootstrap` returns a flat `roles: Record<teamId, TeamRole>` map, stored in the `roles` Svelte store ([store.ts:26](src/lib/components/workos/lib/store.ts), set in `loadBootstrap` [:82–104](src/lib/components/workos/lib/store.ts)). The WorkOS-level capability gate (`features.workos` / `features.workos_admin`) is read from the Open WebUI `user` store, not the roles map.
 - **Tree is server-trimmed:** `/bootstrap` already filters restricted workspaces/workstreams ([workos.py:170](backend/open_webui/routers/workos.py:170)), so the sidebar never re-checks visibility.
-- **Predicates:** `lib/roles.ts` exposes pure predicates — `canManageTeam` (owner only), `canManageMembers` / `canCreateWorkspace` (owner||admin), `canDeleteTask` (creator OR owner/admin), `canDeleteComment` / `canDeleteAttachment` (author OR owner/admin), `canUseAdmin` (reads OWUI `user.role==='admin' || permissions.features.workos_admin`), `canUseAccessConsole` (`user.role==='admin'` OR any bootstrap team role ∈ {owner, admin} — the `workos_admin` flag deliberately does NOT pass). `canManageWorkspace` is defined+tested but **unused** (dead predicate).
+- **Predicates:** `lib/roles.ts` exposes pure predicates — `canManageTeam` (owner only), `canManageMembers` / `canCreateWorkspace` (owner||admin), `canDeleteTask` (creator OR owner/admin), `canDeleteComment` / `canDeleteAttachment` (author OR owner/admin), `canUseAdmin` (reads OWUI `user.role==='admin' || permissions.features.workos_admin`). `canManageWorkspace` is defined+tested and **used by `canEditTask`/`canEditSubtask`** (roles.ts:68).
 - **Nav gate:** `railItems.ts` shows the WorkOS item if `user.role==='admin' || permissions.features.workos ?? true` (defaults visible, mirroring backend default-ON).
-- **Admin view guard** is client-side only — `WorkOSApp.svelte` snaps the view from `admin` back to `board` when `!canUseAdmin`, and from `access` back to `board` when `!canUseAccessConsole` (both cosmetic; the server re-checks everything).
-- **Access console** (`views/access/`, view key `'access'`, sidebar shield button): team-scoped management surface for owners/admins. Reads `GET /access/overview` for first paint and lazy-loads rosters via the existing member endpoints; **all mutations go through the existing gated endpoints**, so role gates, the last-owner guard, and realtime emit/eviction come from the server unchanged. UI mirrors (server stays authoritative): owner-grant selects disabled for non-owners, last-owner row locked, restricted-workspace add-picker sourced from **team members only** (the backend does not validate the target is a team member), and the `team→restricted` flip sits behind a destructive-confirm dialog because it evicts non-member sockets via `_emit_workspace_updated`.
+- **Admin view guard** is client-side only — `WorkOSApp.svelte` snaps the view from `admin` back to `board` when `!canUseAdmin` (cosmetic; the server re-checks everything).
+- **Sidebar access management** (`chrome/access/`, since 2026-07-02, replaces the Access
+  console page): workspace rows and the team card carry kebab (⋯) + right-click menus,
+  gated by `canManageMembers(teamRole) || app-admin`, opening `TeamSettingsDialog`
+  (members roster + rename/archive/delete, owner-only General tab) and
+  `WorkspaceSettingsDialog` (visibility flip + restricted-members + rename/delete).
+  All mutations go through the existing gated endpoints — role gates, the last-owner
+  guard, and realtime emit/eviction come from the server unchanged. UI mirrors:
+  owner-grant selects disabled for non-owners, last-owner row locked,
+  restricted-workspace add-picker sourced from team members only, and the
+  `team→restricted` flip sits behind a destructive-confirm dialog
+  (`RestrictConfirmDialog`, shared by the dialog and the sidebar quick-flip). The flip
+  can evict the acting admin's own client (non-member, non-creator) — the dialog
+  detects the workspace vanishing from bootstrap and closes. Restricted rows show a
+  lock badge (visibility ships in `/bootstrap`).
 - **Pickers source the team-wide `directory` store** — both `AssigneeField` and the `@mention` composer offer users who may not see a restricted workspace; the backend now validates each `assignee_id` against `can_see_workstream` and rejects invisible ids (G1 closed), and the mention *notification* is filtered server-side.
 - **Workspace visibility is editable in the UI** (since the Access console) — created in `ModalHost`, flipped via `api.updateWorkspace({visibility})` from `WorkspacePanel.svelte`, with restricted badges in the console. Outside the console there is still no restricted badge.
 
