@@ -1054,11 +1054,9 @@ async def list_workstream_activity(
     days = max(1, min(days, 31))
     tz_offset_minutes = max(-840, min(tz_offset_minutes, 840))
     now_ms = int(time.time() * 1000)
-    # `created_at` is stored as a nanosecond epoch (see ActivityDao / _now()); convert.
-    since_ns = (now_ms - (days + 1) * 86_400_000) * 1_000_000  # one spare day so tz shifting never truncates
+    since = now_ms - (days + 1) * 86_400_000  # one spare day so tz shifting never truncates
     items = await Activity.list_for_workstream(workstream_id, limit=limit, db=db)
-    stamps_ns = await Activity.timestamps_for_workstream(workstream_id, since_ns, db=db)
-    stamps_ms = [ts // 1_000_000 for ts in stamps_ns]
+    stamps_ms = await Activity.timestamps_for_workstream(workstream_id, since, db=db)
     return {'items': items, 'daily': _daily_counts(stamps_ms, days, tz_offset_minutes, now_ms)}
 
 

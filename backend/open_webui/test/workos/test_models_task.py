@@ -3,6 +3,12 @@ import pytest
 from open_webui.models.workos import Teams, Workspaces, Workstreams, Labels, Tasks
 
 
+def test_now_is_epoch_milliseconds():
+    from open_webui.models.workos import _now
+    v = _now()
+    assert 10**12 < v < 10**14, f'_now() must be epoch ms, got {v}'
+
+
 async def _stream():
     team = await Teams.insert('Acme', 'OSL', None, 'u1')
     ws = await Workspaces.insert(team.id, 'Engineering', None, 'team', 'u1')

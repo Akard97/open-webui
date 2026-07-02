@@ -23,7 +23,7 @@ from open_webui.internal.db import Base, get_async_db_context
 
 
 def _now() -> int:
-    return int(time.time_ns())
+    return int(time.time() * 1000)
 
 
 def _id() -> str:
