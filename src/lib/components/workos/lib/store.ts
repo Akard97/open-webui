@@ -498,14 +498,15 @@ export function applyTaskEvent(event: string, payload: any): void {
 }
 
 /** Reconcile a workspace/workstream nav event into the sidebar tree.
- * §5 client-side guard: never reveal a restricted workspace from the team-wide room,
- * and only accept a workstream whose parent workspace is already visible. */
+ * The server routes restricted-workspace events to authorized sockets only
+ * (member user rooms), so restricted payloads are applied like team ones —
+ * including add-if-absent, which the team→restricted flip flow relies on.
+ * Workstreams are still only accepted when their parent workspace is visible. */
 export function applyNavEvent(event: string, payload: any): void {
 	if (!payload || !payload.id) return;
 	if (event === 'workos:workspace.created' || event === 'workos:workspace.updated') {
 		workspaces.update((l) => {
 			const exists = l.some((w) => w.id === payload.id);
-			if (payload.visibility === 'restricted') return exists ? l.map((w) => (w.id === payload.id ? payload : w)) : l;
 			return exists ? l.map((w) => (w.id === payload.id ? payload : w)) : [...l, payload];
 		});
 	} else if (event === 'workos:workspace.deleted') {
@@ -542,8 +543,10 @@ function emitSub(key: string): void {
 	const s = get(socket);
 	if (!s || !browser) return;
 	const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-	if (kind === 'team') s.emit('workos:subscribe', { auth: { token: token() }, team_id: id });
-	else s.emit('workos:subscribe', { auth: { token: token() }, workstream_id: id });
+	// No token in the payload — the server authorizes the join from the
+	// connection's established session identity.
+	if (kind === 'team') s.emit('workos:subscribe', { team_id: id });
+	else s.emit('workos:subscribe', { workstream_id: id });
 }
 function emitUnsub(key: string): void {
 	const s = get(socket);

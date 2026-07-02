@@ -54,6 +54,24 @@ async def emit_users(event: str, payload: dict, user_ids: list) -> None:
         log.debug(f'workos emit_to_users failed for {event}: {e}')
 
 
+async def evict_user(user_id: str, rooms: list) -> None:
+    try:
+        from open_webui.socket.main import workos_leave_rooms
+
+        await workos_leave_rooms(user_id, rooms)
+    except Exception as e:  # pragma: no cover - eviction is best-effort
+        log.debug(f'workos eviction failed for {user_id}: {e}')
+
+
+async def evict_workstream_room_non_members(workstream_id: str) -> None:
+    try:
+        from open_webui.socket.main import workos_evict_room_non_members
+
+        await workos_evict_room_non_members(workstream_id)
+    except Exception as e:  # pragma: no cover - eviction is best-effort
+        log.debug(f'workos room eviction failed for {workstream_id}: {e}')
+
+
 router = APIRouter()
 
 
@@ -257,7 +275,15 @@ async def remove_member(
     await require_team_role(user, team_id, db, {'owner', 'admin'})
     if await is_last_owner(team_id, user_id, db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Cannot remove the last team owner.')
-    return {'removed': await TeamMembers.remove(team_id, user_id, db=db)}
+    removed = await TeamMembers.remove(team_id, user_id, db=db)
+    # Revocation eviction: drop the ex-member's live sockets from every room
+    # under this team (app-admins retain access, so leave theirs alone).
+    if removed and not await is_app_admin(user_id, db):
+        rooms = [f'workos:team:{team_id}']
+        for w in await Workspaces.list_for_team(team_id, db=db):
+            rooms.extend(f'workos:workstream:{s.id}' for s in await Workstreams.list_for_workspace(w.id, db=db))
+        await evict_user(user_id, rooms)
+    return {'removed': removed}
 
 
 # ──────────────────────────────── workspace schemas ────────────────────────────────
@@ -277,6 +303,45 @@ class WorkspaceUpdateForm(BaseModel):
 
 
 # ──────────────────────────────── workspace endpoints ────────────────────────────────
+
+
+async def _emit_nav_event(event: str, ws, payload: dict, db, member_ids: Optional[list] = None) -> None:
+    """Route a workspace/workstream nav event by the workspace's visibility:
+    team-visible -> the team-wide room; restricted -> each member's user room,
+    so plain team members never receive restricted names/metadata."""
+    if ws.visibility == 'team':
+        await emit_event(event, f'workos:team:{ws.team_id}', payload)
+        return
+    if member_ids is None:
+        member_ids = [m.user_id for m in await WorkspaceMembers.list_for_workspace(ws.id, db=db)]
+    await emit_users(event, payload, member_ids)
+
+
+async def _emit_workspace_updated(before, updated, db) -> None:
+    """Visibility-aware routing for workspace.updated, including the flips.
+
+    team -> restricted: team-room clients get a deleted event (they drop the
+    workspace and its child workstreams), then members rebuild the subtree
+    from user-room events — emission order is load-bearing. Finally, sockets
+    that can no longer see the child workstreams are evicted from those rooms.
+    restricted -> team: the whole team gains the subtree, so it gets the full
+    update plus workstream.created events in the team room.
+    """
+    if before.visibility == 'team' and updated.visibility == 'restricted':
+        await emit_event('workos:workspace.deleted', f'workos:team:{updated.team_id}', {'id': updated.id})
+        member_ids = [m.user_id for m in await WorkspaceMembers.list_for_workspace(updated.id, db=db)]
+        streams = await Workstreams.list_for_workspace(updated.id, db=db)
+        await emit_users('workos:workspace.updated', updated.model_dump(), member_ids)
+        for s in streams:
+            await emit_users('workos:workstream.created', s.model_dump(), member_ids)
+        for s in streams:
+            await evict_workstream_room_non_members(s.id)
+    elif before.visibility == 'restricted' and updated.visibility == 'team':
+        await emit_event('workos:workspace.updated', f'workos:team:{updated.team_id}', updated.model_dump())
+        for s in await Workstreams.list_for_workspace(updated.id, db=db):
+            await emit_event('workos:workstream.created', f'workos:team:{updated.team_id}', s.model_dump())
+    else:
+        await _emit_nav_event('workos:workspace.updated', updated, updated.model_dump(), db)
 
 
 @router.get('/teams/{team_id}/workspaces')
@@ -306,7 +371,7 @@ async def create_workspace(
     ws = await Workspaces.insert(team_id, form.name, form.icon, visibility, user.id, db=db)
     if visibility == 'restricted':
         await WorkspaceMembers.add(ws.id, user.id, 'admin', db=db)
-    await emit_event('workos:workspace.created', f'workos:team:{team_id}', ws.model_dump())
+    await _emit_nav_event('workos:workspace.created', ws, ws.model_dump(), db)
     return ws
 
 
@@ -324,12 +389,12 @@ async def update_workspace(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await require_workos(request, user, db)
-    await require_workspace_manage(user, workspace_id, db)
+    before = await require_workspace_manage(user, workspace_id, db)
     fields = form.model_dump(exclude_none=True)
     if 'visibility' in fields and fields['visibility'] not in {'team', 'restricted'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid visibility.')
     updated = await Workspaces.update_fields(workspace_id, fields, db=db)
-    await emit_event('workos:workspace.updated', f'workos:team:{updated.team_id}', updated.model_dump())
+    await _emit_workspace_updated(before, updated, db)
     return updated
 
 
@@ -340,8 +405,12 @@ async def delete_workspace(
     await require_workos(request, user, db)
     ws = await require_workspace_visible(user, workspace_id, db)
     await require_team_role(user, ws.team_id, db, {'owner', 'admin'})
+    # Capture the restricted-member list before the delete, then emit after it.
+    member_ids = None
+    if ws.visibility == 'restricted':
+        member_ids = [m.user_id for m in await WorkspaceMembers.list_for_workspace(workspace_id, db=db)]
     deleted = await Workspaces.delete(workspace_id, db=db)
-    await emit_event('workos:workspace.deleted', f'workos:team:{ws.team_id}', {'id': workspace_id})
+    await _emit_nav_event('workos:workspace.deleted', ws, {'id': workspace_id}, db, member_ids=member_ids)
     return {'deleted': deleted}
 
 
@@ -392,8 +461,15 @@ async def remove_workspace_member(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await require_workos(request, user, db)
-    await require_workspace_manage(user, workspace_id, db)
-    return {'removed': await WorkspaceMembers.remove(workspace_id, user_id, db=db)}
+    ws = await require_workspace_manage(user, workspace_id, db)
+    removed = await WorkspaceMembers.remove(workspace_id, user_id, db=db)
+    # Removal from a restricted workspace revokes visibility -> evict from its
+    # workstream rooms (not the team room — the user is still a team member).
+    # Removal from a team-visible workspace revokes nothing.
+    if removed and ws.visibility == 'restricted' and not await is_app_admin(user_id, db):
+        rooms = [f'workos:workstream:{s.id}' for s in await Workstreams.list_for_workspace(workspace_id, db=db)]
+        await evict_user(user_id, rooms)
+    return {'removed': removed}
 
 
 # ──────────────────────────────── workstream schemas ────────────────────────────────
@@ -431,7 +507,7 @@ async def create_workstream(
     await require_workspace_manage(user, workspace_id, db)
     stream = await Workstreams.insert(workspace_id, form.name, form.icon, user.id, db=db)
     ws_row = await Workspaces.get_by_id(workspace_id, db=db)
-    await emit_event('workos:workstream.created', f'workos:team:{ws_row.team_id}', stream.model_dump())
+    await _emit_nav_event('workos:workstream.created', ws_row, stream.model_dump(), db)
     return stream
 
 
@@ -445,7 +521,7 @@ async def update_workstream(
     await require_workspace_manage(user, stream.workspace_id, db)
     updated = await Workstreams.update_fields(workstream_id, form.model_dump(exclude_none=True), db=db)
     ws_row = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    await emit_event('workos:workstream.updated', f'workos:team:{ws_row.team_id}', updated.model_dump())
+    await _emit_nav_event('workos:workstream.updated', ws_row, updated.model_dump(), db)
     return updated
 
 
@@ -458,7 +534,8 @@ async def delete_workstream(
     await require_workspace_manage(user, stream.workspace_id, db)
     deleted = await Workstreams.delete(workstream_id, db=db)
     ws_row = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    await emit_event('workos:workstream.deleted', f'workos:team:{ws_row.team_id}', {'id': workstream_id, 'workspace_id': stream.workspace_id})
+    await _emit_nav_event('workos:workstream.deleted', ws_row,
+                          {'id': workstream_id, 'workspace_id': stream.workspace_id}, db)
     return {'deleted': deleted}
 
 

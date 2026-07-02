@@ -312,6 +312,30 @@ async def enter_room_for_users(room: str, user_ids: list[str]):
         log.debug(f'Failed to make users {user_ids} join room {room}: {e}')
 
 
+async def workos_leave_rooms(user_id: str, rooms: list[str]) -> None:
+    """Remove all of a user's live sockets from the given WorkOS rooms.
+
+    Called when team/workspace membership is revoked so the user stops
+    receiving realtime events immediately. Like get_session_ids_from_room,
+    this only sees sockets on the local worker — best-effort in scale-out.
+    """
+    for sid in get_session_ids_from_room(f'user:{user_id}'):
+        for room in rooms:
+            await sio.leave_room(sid, room)
+
+
+async def workos_evict_room_non_members(workstream_id: str) -> None:
+    """Kick sockets that can no longer see a workstream out of its room
+    (used when a workspace flips team -> restricted)."""
+    from open_webui.utils.workos_access import can_see_workstream
+
+    room = f'workos:workstream:{workstream_id}'
+    for sid in get_session_ids_from_room(room):
+        user = SESSION_POOL.get(sid)
+        if not user or not await can_see_workstream(user['id'], user.get('role') == 'admin', workstream_id):
+            await sio.leave_room(sid, room)
+
+
 async def disconnect_user_sessions(user_id: str):
     """Disconnect all Socket.IO sessions belonging to a user.
 
@@ -476,24 +500,22 @@ async def join_note(sid, data):
 
 @sio.on('workos:subscribe')
 async def workos_subscribe(sid, data):
-    auth = data.get('auth') if isinstance(data, dict) else None
-    if not auth or 'token' not in auth:
+    if not isinstance(data, dict):
         return
-    token_data = decode_token(auth['token'])
-    if token_data is None or 'id' not in token_data:
-        return
-    user = await Users.get_user_by_id(token_data['id'])
+    # Trust the connection's established identity (set at connect/user-join),
+    # never a token in the event payload. No session -> fail closed.
+    user = SESSION_POOL.get(sid)
     if not user:
         return
 
     from open_webui.utils.workos_access import can_see_team, can_see_workstream
 
-    is_admin = user.role == 'admin'
+    is_admin = user.get('role') == 'admin'
     team_id = data.get('team_id')
     workstream_id = data.get('workstream_id')
-    if team_id and await can_see_team(user.id, is_admin, team_id):
+    if team_id and await can_see_team(user['id'], is_admin, team_id):
         await sio.enter_room(sid, f'workos:team:{team_id}')
-    if workstream_id and await can_see_workstream(user.id, is_admin, workstream_id):
+    if workstream_id and await can_see_workstream(user['id'], is_admin, workstream_id):
         await sio.enter_room(sid, f'workos:workstream:{workstream_id}')
 
 

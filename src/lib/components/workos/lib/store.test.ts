@@ -253,9 +253,24 @@ describe('nav reconcile (sidebar carry-over)', () => {
 		applyNavEvent('workos:workspace.created', mkWs({ id: 'a', visibility: 'team' }));
 		expect(get(workspaces).map((w) => w.id)).toEqual(['a']);
 	});
-	it('ignores a restricted workspace on workspace.created (§5 client guard)', () => {
+	it('applies a restricted workspace on workspace.created (server routes to members only)', () => {
 		applyNavEvent('workos:workspace.created', mkWs({ id: 'b', visibility: 'restricted' }));
+		expect(get(workspaces).map((w) => w.id)).toEqual(['b']);
+	});
+	it('rebuilds the subtree on a team→restricted flip sequence (deleted → updated → workstream.created)', () => {
+		// member client: starts with the team-visible workspace + child stream
+		workspaces.set([mkWs({ id: 'ws1', visibility: 'team' })]);
+		workstreams.set([mkSt({ id: 's1', workspace_id: 'ws1' })]);
+		// (1) team-room deleted event drops the subtree
+		applyNavEvent('workos:workspace.deleted', { id: 'ws1' });
 		expect(get(workspaces)).toHaveLength(0);
+		expect(get(workstreams)).toHaveLength(0);
+		// (2) member user-room updated event restores the workspace
+		applyNavEvent('workos:workspace.updated', mkWs({ id: 'ws1', visibility: 'restricted' }));
+		expect(get(workspaces).map((w) => w.visibility)).toEqual(['restricted']);
+		// (3) member user-room workstream.created restores the child
+		applyNavEvent('workos:workstream.created', mkSt({ id: 's1', workspace_id: 'ws1' }));
+		expect(get(workstreams).map((s) => s.id)).toEqual(['s1']);
 	});
 	it('removes a workspace on workspace.deleted', () => {
 		workspaces.set([mkWs({ id: 'a' })]);

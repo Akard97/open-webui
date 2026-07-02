@@ -220,3 +220,15 @@ Each phase is independently testable and reviewable; phases can land as separate
 
 - Run the WorkOS backend suite with the project `.venv` python (the suite needs the venv interpreter on this box): `pytest backend/open_webui/test/workos -q`. All new + existing tests green.
 - Manual smoke (recommended, not blocking): (a) try to assign a user who can't see a restricted workspace → blocked; (b) a non-assignee team member tries to edit a task they don't own → edit controls hidden, API 403; (c) add-member picker still lists users for an owner/admin; (d) last-owner removal blocked.
+
+---
+
+## 12. Addendum (2026-07-02) — realtime non-goals implemented
+
+The two realtime items this design explicitly left out of scope were implemented on 2026-07-02, alongside a predicate consolidation:
+
+- **Socket eviction on membership revocation** — `remove_member` / `remove_workspace_member` now drop the removed user's live sockets from the rooms the removal makes invisible (`workos_leave_rooms` in socket/main.py, best-effort `evict_user` wrapper in the router).
+- **Structural scoping mismatch** — workspace/workstream nav events are visibility-routed (`_emit_nav_event`): restricted-workspace events go to member `user:{id}` rooms, never the team-wide room; team↔restricted visibility flips emit an ordered rebuild sequence plus room eviction.
+- Also: `workos:subscribe` now authorizes from the connection's `SESSION_POOL` identity (payload tokens ignored), access predicates live in `backend/open_webui/utils/workos_access.py`, and member-role strings are validated at the DAO layer.
+
+See the reference doc (2026-06-26-workos-access-control.md) §2/§3/§5 for the current state.
