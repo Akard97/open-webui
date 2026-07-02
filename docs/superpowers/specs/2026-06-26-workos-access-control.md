@@ -119,6 +119,23 @@ All rows below live in the policy module since 2026-07-02 (formerly router-local
 | `is_last_owner` | [workos_access.py:101](backend/open_webui/utils/workos_access.py:101) | `True` if `user_id` is the sole owner-role member of `team_id`; used by `remove_member` guard. Closes G9. |
 | `ATTACHMENT_MIME_ALLOW` | [workos.py](backend/open_webui/routers/workos.py) | Frozenset of permitted MIME types for uploaded attachments; upload rejected if `file.content_type` not in set. Closes G11. (Router, not policy module.) |
 
+### Capability registry (2026-07-02)
+
+Every resource-write rule is table-driven in the policy module — the former scattered per-endpoint if-chains are gone. `require_capability(cap, user, db, **ctx)` walks the ordered rules and raises `403` with the capability's pinned detail string; `require_team_capability` names the `require_team_role` allowed-sets.
+
+`CAPABILITIES` (ordered rules → 403 detail):
+
+| Capability | Rule order | Used by |
+|---|---|---|
+| `task.write` | app-admin → creator → assignee → workspace-manager | `require_task_writable` → `PATCH /tasks/{id}` |
+| `task.delete` | team owner/admin (incl. app-admin via `team_role`) → creator | `DELETE /tasks/{id}` |
+| `subtask.write` | app-admin → subtask creator → task creator → assignee → workspace-manager | `require_subtask_writable` → subtask PATCH/DELETE |
+| `comment.edit` | author **only** (deliberately NO app-admin bypass) | `PATCH /comments/{id}` |
+| `comment.delete` | team owner/admin → author | `DELETE /comments/{id}` |
+| `attachment.delete` | team owner/admin → uploader | `DELETE /attachments/{id}` |
+
+`TEAM_CAPABILITIES`: `team.members.manage` {owner,admin}; `team.members.grant_privileged` {owner} (granting owner/admin); `labels.manage` {owner,admin}; `workspace.delete` {owner,admin}. Detail strings are pinned byte-for-byte by `test_policy_module.py` / `test_capability_matrix.py`.
+
 All `require_*_visible` helpers return **`404` (not `403`)** when a row is missing *or* invisible, so non-members cannot distinguish "doesn't exist" from "you can't see it."
 
 > **Note on admin omniscience:** because `team_role` returns `'admin'` for any global admin with no membership row, and `can_see_workstream`/`workspace_visible` short-circuit on `is_admin`, restricted workspaces offer **no confidentiality from platform admins**. This is intentional super-user behavior; an audit reading only the membership tables will not reflect it.

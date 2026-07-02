@@ -167,35 +167,85 @@ async def require_subtask_visible(user, subtask_id: str, db: AsyncSession):
     return subtask, task, stream
 
 
-# ──────────────────────────────── write gates ────────────────────────────────
+# ──────────────────────────── capability matrix (write gates) ────────────────────────────
+#
+# One table for every resource-write rule. Each capability maps to an ordered
+# tuple of rules (evaluated left-to-right, preserving the historical
+# short-circuit/query order) plus the exact 403 detail string. Parity notes:
+# - 'comment.edit' has NO app-admin bypass (author-only, as it always was).
+# - The delete capabilities grant app-admins via _team_manager, because
+#   team_role() returns 'admin' for any global admin.
+
+
+async def _app_admin(user, ctx, db) -> bool:
+    return user.role == 'admin'
+
+
+def _owner(key):
+    async def rule(user, ctx, db) -> bool:
+        return ctx.get(key) == user.id
+    return rule
+
+
+async def _assignee(user, ctx, db) -> bool:
+    return user.id in (ctx['task'].assignee_ids or [])
+
+
+async def _team_manager(user, ctx, db) -> bool:
+    return (await team_role(user, ctx['team_id'], db)) in {'owner', 'admin'}
+
+
+async def _ws_manager(user, ctx, db) -> bool:
+    ws = await Workspaces.get_by_id(ctx['stream'].workspace_id, db=db)
+    return await is_workspace_manager(user, ws, db)
+
+
+CAPABILITIES = {
+    'task.write':        ((_app_admin, _owner('creator_id'), _assignee, _ws_manager),
+                          'You do not have permission to edit this task.'),
+    'task.delete':       ((_team_manager, _owner('creator_id')),
+                          'Only the creator or an admin may delete.'),
+    'subtask.write':     ((_app_admin, _owner('subtask_creator_id'), _owner('creator_id'), _assignee, _ws_manager),
+                          'You do not have permission to modify this subtask.'),
+    'comment.edit':      ((_owner('author_id'),),
+                          'Only the author may edit.'),
+    'comment.delete':    ((_team_manager, _owner('author_id')),
+                          'Only the author or an admin may delete.'),
+    'attachment.delete': ((_team_manager, _owner('author_id')),
+                          'Only the uploader or an admin may delete.'),
+}
+
+
+async def require_capability(cap: str, user, db, **ctx) -> None:
+    rules, detail = CAPABILITIES[cap]
+    for rule in rules:
+        if await rule(user, ctx, db):
+            return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+# Team-role capabilities: named views over require_team_role's allowed-sets.
+TEAM_CAPABILITIES = {
+    'team.members.manage':           {'owner', 'admin'},
+    'team.members.grant_privileged': {'owner'},   # granting owner/admin is owner-only
+    'labels.manage':                 {'owner', 'admin'},
+    'workspace.delete':              {'owner', 'admin'},
+}
+
+
+async def require_team_capability(user, team_id: str, db: AsyncSession, cap: str) -> TeamModel:
+    return await require_team_role(user, team_id, db, TEAM_CAPABILITIES[cap])
 
 
 async def require_task_writable(user, task, stream, db: AsyncSession) -> None:
-    if user.role == 'admin':
-        return
-    if task.created_by_id == user.id:
-        return
-    if user.id in (task.assignee_ids or []):
-        return
-    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    if await is_workspace_manager(user, ws, db):
-        return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                        detail='You do not have permission to edit this task.')
+    await require_capability('task.write', user, db,
+                             task=task, stream=stream, creator_id=task.created_by_id)
 
 
 async def require_subtask_writable(user, subtask, task, stream, db: AsyncSession) -> None:
-    if user.role == 'admin':
-        return
-    if subtask.created_by_id == user.id:
-        return
-    if task.created_by_id == user.id or user.id in (task.assignee_ids or []):
-        return
-    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    if await is_workspace_manager(user, ws, db):
-        return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                        detail='You do not have permission to modify this subtask.')
+    await require_capability('subtask.write', user, db,
+                             task=task, stream=stream,
+                             creator_id=task.created_by_id, subtask_creator_id=subtask.created_by_id)
 
 
 # ──────────────────────────────── input validation ────────────────────────────────

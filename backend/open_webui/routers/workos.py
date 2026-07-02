@@ -30,6 +30,7 @@ from open_webui.utils.workos_access import (
     require_workspace_visible, require_workspace_manage,
     require_workstream_visible, require_task_visible, require_subtask_visible,
     require_task_writable, require_subtask_writable,
+    require_capability, require_team_capability,
     validate_assignees,
 )
 
@@ -255,7 +256,10 @@ async def update_member(
 ):
     await require_workos(request, user, db)
     # Only owners may grant/revoke owner or admin; admins may manage members.
-    await require_team_role(user, team_id, db, {'owner'} if form.role in {'owner', 'admin'} else {'owner', 'admin'})
+    await require_team_capability(
+        user, team_id, db,
+        'team.members.grant_privileged' if form.role in {'owner', 'admin'} else 'team.members.manage',
+    )
     if form.role not in TEAM_ROLES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
     if form.role != 'owner' and await is_last_owner(team_id, user_id, db):
@@ -404,7 +408,7 @@ async def delete_workspace(
 ):
     await require_workos(request, user, db)
     ws = await require_workspace_visible(user, workspace_id, db)
-    await require_team_role(user, ws.team_id, db, {'owner', 'admin'})
+    await require_team_capability(user, ws.team_id, db, 'workspace.delete')
     # Capture the restricted-member list before the delete, then emit after it.
     member_ids = None
     if ws.visibility == 'restricted':
@@ -711,9 +715,7 @@ async def delete_task(
     await require_workos(request, user, db)
     task, stream = await require_task_visible(user, task_id, db)
     ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
-    if not is_admin and task.created_by_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the creator or an admin may delete.')
+    await require_capability('task.delete', user, db, team_id=ws.team_id, creator_id=task.created_by_id)
     deleted = await Tasks.delete(task_id, db=db)
     # Auto-delete tags this task held that no surviving task references.
     deleted_label_ids = await Labels.prune_unused(task.team_id, task.labels or [], db=db)
@@ -753,7 +755,7 @@ async def update_label(
     existing = await Labels.update_fields(label_id, {}, db=db)  # fetch-only to read team_id
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
-    await require_team_role(user, existing.team_id, db, {'owner', 'admin'})
+    await require_team_capability(user, existing.team_id, db, 'labels.manage')
     return await Labels.update_fields(label_id, form.model_dump(exclude_none=True), db=db)
 
 
@@ -765,7 +767,7 @@ async def delete_label(
     existing = await Labels.update_fields(label_id, {}, db=db)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
-    await require_team_role(user, existing.team_id, db, {'owner', 'admin'})
+    await require_team_capability(user, existing.team_id, db, 'labels.manage')
     return {'deleted': await Labels.delete(label_id, db=db)}
 
 
@@ -942,8 +944,7 @@ async def update_comment(
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
     task, _ = await require_task_visible(user, existing.task_id, db)
-    if existing.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the author may edit.')
+    await require_capability('comment.edit', user, db, author_id=existing.user_id)
     body = (form.body or '').strip()
     if not body:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment body required.')
@@ -971,9 +972,7 @@ async def delete_comment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
     task, stream = await require_task_visible(user, existing.task_id, db)
     ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
-    if not is_admin and existing.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the author or an admin may delete.')
+    await require_capability('comment.delete', user, db, team_id=ws.team_id, author_id=existing.user_id)
     deleted = await Comments.delete(comment_id, db=db)
     await _emit_task_room('workos:comment.deleted',
                           task, {'id': comment_id, 'task_id': task.id, 'workstream_id': task.workstream_id,
@@ -1124,9 +1123,7 @@ async def delete_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attachment not found.')
     task, stream = await require_task_visible(user, att.task_id, db)
     ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
-    if not is_admin and att.created_by_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only the uploader or an admin may delete.')
+    await require_capability('attachment.delete', user, db, team_id=ws.team_id, author_id=att.created_by_id)
     try:
         await asyncio.to_thread(Storage.delete_file, att.storage_key)
     except Exception as e:  # pragma: no cover - best-effort
