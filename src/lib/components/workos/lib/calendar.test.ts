@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dayKey, sameDay, isToday, monthGrid, weekDays, isOverdue } from './calendar';
+import { dayKey, sameDay, isToday, monthGrid, weekDays, isOverdue, agendaDays } from './calendar';
 import type { Task } from './types';
 
 const mk = (over: Partial<Task>): Task => ({
@@ -65,5 +65,33 @@ describe('isOverdue', () => {
 		expect(isOverdue(mk({ due_date: new Date(2026, 5, 29, 23).getTime() }), now)).toBe(false);
 		expect(isOverdue(mk({ due_date: new Date(2026, 5, 30).getTime() }), now)).toBe(false);
 		expect(isOverdue(mk({ due_date: null }), now)).toBe(false);
+	});
+});
+
+describe('agendaDays', () => {
+	const mk = (id: string, due: number | null): Task =>
+		({ id, due_date: due, status: 'todo' }) as Task;
+	const cursor = new Date(2026, 6, 15); // July 2026
+
+	it('groups tasks by local day, ascending', () => {
+		const a = mk('a', new Date(2026, 6, 20, 9).getTime());
+		const b = mk('b', new Date(2026, 6, 3, 23).getTime());
+		const c = mk('c', new Date(2026, 6, 20, 18).getTime());
+		const days = agendaDays([a, b, c], cursor);
+		expect(days.map((d) => d.date.getDate())).toEqual([3, 20]);
+		expect(days[1].tasks.map((t) => t.id)).toEqual(['a', 'c']);
+	});
+
+	it('excludes undated tasks and other months', () => {
+		const inJuly = mk('x', new Date(2026, 6, 1).getTime());
+		const june = mk('y', new Date(2026, 5, 30).getTime());
+		const undated = mk('z', null);
+		const days = agendaDays([inJuly, june, undated], cursor);
+		expect(days).toHaveLength(1);
+		expect(days[0].tasks.map((t) => t.id)).toEqual(['x']);
+	});
+
+	it('returns empty for a month with no due tasks', () => {
+		expect(agendaDays([mk('a', null)], cursor)).toEqual([]);
 	});
 });

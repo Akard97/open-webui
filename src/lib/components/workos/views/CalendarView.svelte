@@ -3,12 +3,15 @@
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import DayCell from './calendar/DayCell.svelte';
 	import UnscheduledRail from './calendar/UnscheduledRail.svelte';
-	import { monthGrid, weekDays, isToday, dayKey } from '../lib/calendar';
-	import { boardFilter, filteredTasks, editTask, tasks as tasksStore } from '../lib/store';
+	import StatusDot from '../ui/StatusDot.svelte';
+	import { monthGrid, weekDays, isToday, dayKey, agendaDays } from '../lib/calendar';
+	import { boardFilter, filteredTasks, editTask, tasks as tasksStore, openTask } from '../lib/store';
+	import { STATUS_COLOR, statusShape } from '../lib/colors';
 	import type { Task } from '../lib/types';
 	import Sortable from 'sortablejs';
 	import { onDestroy, tick } from 'svelte';
 	import { get } from 'svelte/store';
+	import { mobile } from '$lib/stores';
 
 	const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -32,6 +35,9 @@
 		mode === 'month'
 			? cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 			: rangeLabel(days);
+
+	let showUnscheduled = false;
+	$: agenda = agendaDays($filteredTasks, cursor);
 
 	function rangeLabel(w: Date[]): string {
 		const f = w[0], l = w[6];
@@ -71,6 +77,7 @@
 	}
 
 	async function initSortables() {
+		if (get(mobile)) return;
 		destroySortables();
 		await tick();
 		if (!gridEl) return;
@@ -138,36 +145,84 @@
 		<div class="text-base font-semibold tracking-tight">{label}</div>
 		<button type="button" class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900 transition" onclick={today}>Today</button>
 		<div class="flex-1"></div>
-		<div class="inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-900 p-0.5 text-sm">
+		<div class="hidden md:inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-900 p-0.5 text-sm">
 			<button type="button" aria-pressed={mode === 'month'} class="px-3.5 py-1 rounded-full transition {mode === 'month' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'month')}>Month</button>
 			<button type="button" aria-pressed={mode === 'week'} class="px-3.5 py-1 rounded-full transition {mode === 'week' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'week')}>Week</button>
 		</div>
 	</div>
 
-	<!-- Grid -->
-	<div class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-900 flex gap-4 items-start" bind:this={gridEl}>
-		{#key epoch}
-			<div class="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-				<div class="grid grid-cols-7 bg-gray-50 dark:bg-gray-950">
-					{#each WEEKDAYS as w (w)}
-						<div class="px-2.5 py-2 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-400 border-b border-gray-100 dark:border-gray-900">{w}</div>
-					{/each}
+	{#if $mobile}
+		<!-- Agenda: month list grouped by day; tap opens the task. -->
+		<div class="flex-1 overflow-y-auto p-3 bg-white dark:bg-gray-900">
+			{#if unscheduled.length}
+				<button
+					class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 text-sm font-medium mb-3"
+					onclick={() => (showUnscheduled = !showUnscheduled)}
+				>
+					Unscheduled <span class="text-xs text-gray-400">{unscheduled.length}</span>
+					<span class="flex-1"></span>
+					<Icon name={showUnscheduled ? 'chevron-up' : 'chevron-down'} size={14} />
+				</button>
+				{#if showUnscheduled}
+					<div class="mb-3 rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
+						{#each unscheduled as t (t.id)}
+							<button class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left" onclick={() => openTask(t.id)}>
+								<StatusDot shape={statusShape(t.status)} color={STATUS_COLOR[t.status]} size={14} />
+								<span class="flex-1 min-w-0 text-sm truncate">{t.title}</span>
+								<span class="text-xs text-gray-400">{t.key}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			{/if}
+
+			{#each agenda as d (d.day)}
+				<div class="mb-3">
+					<div class="px-1 pb-1.5 text-xs font-semibold {isToday(d.day, Date.now()) ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}">
+						{d.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+						{#if isToday(d.day, Date.now())}· Today{/if}
+					</div>
+					<div class="rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
+						{#each d.tasks as t (t.id)}
+							<button class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left" onclick={() => openTask(t.id)}>
+								<StatusDot shape={statusShape(t.status)} color={STATUS_COLOR[t.status]} size={14} />
+								<span class="flex-1 min-w-0 text-sm truncate">{t.title}</span>
+								<span class="text-xs text-gray-400">{t.key}</span>
+							</button>
+						{/each}
+					</div>
 				</div>
-				<div class="grid grid-cols-7">
-					{#each days as d (d.getTime())}
-						<DayCell
-							date={d}
-							dimmed={mode === 'month' && d.getMonth() !== cursorMonth}
-							today={isToday(d.getTime(), Date.now())}
-							tasks={byDay.get(dayKey(d.getTime())) ?? []}
-							{cap}
-						/>
-					{/each}
+			{/each}
+			{#if !agenda.length}
+				<div class="py-10 text-center text-sm text-gray-400">No scheduled tasks this month</div>
+			{/if}
+		</div>
+	{:else}
+		<!-- Grid -->
+		<div class="flex-1 overflow-auto p-4 bg-white dark:bg-gray-900 flex gap-4 items-start" bind:this={gridEl}>
+			{#key epoch}
+				<div class="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+					<div class="grid grid-cols-7 bg-gray-50 dark:bg-gray-950">
+						{#each WEEKDAYS as w (w)}
+							<div class="px-2.5 py-2 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-400 border-b border-gray-100 dark:border-gray-900">{w}</div>
+						{/each}
+					</div>
+					<div class="grid grid-cols-7">
+						{#each days as d (d.getTime())}
+							<DayCell
+								date={d}
+								dimmed={mode === 'month' && d.getMonth() !== cursorMonth}
+								today={isToday(d.getTime(), Date.now())}
+								tasks={byDay.get(dayKey(d.getTime())) ?? []}
+								{cap}
+							/>
+						{/each}
+					</div>
 				</div>
-			</div>
-			<UnscheduledRail tasks={unscheduled} />
-		{/key}
-	</div>
+				<UnscheduledRail tasks={unscheduled} />
+			{/key}
+		</div>
+	{/if}
 </div>
 
 <style>
