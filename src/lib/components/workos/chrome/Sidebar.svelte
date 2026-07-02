@@ -2,92 +2,19 @@
 	import Icon from '../ui/Icon.svelte';
 	import SidebarIcon from '$lib/components/icons/Sidebar.svelte';
 	import ThemeSwitcher from '$lib/components/app/ThemeSwitcher.svelte';
-	import AssigneeAvatars from '../views/AssigneeAvatars.svelte';
-	import { get } from 'svelte/store';
-	import * as api from '../lib/api';
+	import TeamSwitcher from './TeamSwitcher.svelte';
+	import WorkstreamTree from './WorkstreamTree.svelte';
 	import { user } from '$lib/stores';
 	// Bundle the logo as a hashed build asset instead of loading it from the
 	// backend's /static dir, which gets wiped when the backend image is rebuilt.
 	import workosLogoDark from '../assets/workos-logo-dark.png';
 	import workosLogoLight from '../assets/workos-logo-light.png';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as ContextMenu from '$lib/components/ui/context-menu';
-	import RestrictConfirmDialog from './access/RestrictConfirmDialog.svelte';
-	import { toast } from 'svelte-sonner';
-	import { canUseAdmin, canCreateWorkspace, canManageMembers } from '../lib/roles';
-	import type { Workspace } from '../lib/types';
-	import {
-		teams, workspaces, workstreams, roles, currentTeam, currentTeamId, currentWorkstreamId,
-		selectTeam, selectWorkstream, view, openModal, unreadCount, navCollapsed, token, loadBootstrap,
-		expandedWorkspaces
-	} from '../lib/store';
-
-	let teamMenuOpen = false;
-	let teamMenuEl: HTMLElement;
-	let memberIds: string[] = [];
-
-	// Close the team switcher when clicking anywhere outside its container.
-	function onWindowClick(e: MouseEvent): void {
-		if (teamMenuOpen && teamMenuEl && !teamMenuEl.contains(e.target as Node)) teamMenuOpen = false;
-	}
-
-	$: teamWorkspaces = $workspaces.filter((w) => w.team_id === $currentTeamId);
-	$: streamsByWs = (wsId: string) => $workstreams.filter((s) => s.workspace_id === wsId);
-	$: myRole = $currentTeamId ? $roles[$currentTeamId] : undefined;
-
-	// App-admins pass every server gate; the roles map may have no entry for them.
-	$: canManage = $user?.role === 'admin' || canManageMembers(myRole);
-
-	let pendingRestrict: Workspace | null = null;
-
-	async function makeTeamVisible(ws: Workspace): Promise<void> {
-		try {
-			await api.updateWorkspace(token(), ws.id, { visibility: 'team' });
-			await loadBootstrap();
-		} catch (e: any) {
-			toast.error(typeof e === 'string' ? e : (e?.detail ?? 'Could not change visibility.'));
-		}
-	}
-
-	async function restrictWorkspace(ws: Workspace): Promise<void> {
-		try {
-			await api.updateWorkspace(token(), ws.id, { visibility: 'restricted' });
-			await loadBootstrap();
-		} catch (e: any) {
-			toast.error(typeof e === 'string' ? e : (e?.detail ?? 'Could not change visibility.'));
-		} finally {
-			pendingRestrict = null;
-		}
-	}
-
-	// One action list feeds both the kebab dropdown and the right-click menu.
-	type WsAction = { icon: string; label: string; sep?: boolean; run?: () => void };
-	function wsActions(ws: Workspace): WsAction[] {
-		return [
-			{ icon: 'settings', label: 'Workspace settings…', run: () => openModal.set({ kind: 'workspace-settings', workspaceId: ws.id }) },
-			{ icon: 'plus', label: 'New workstream', run: () => openModal.set({ kind: 'workstream', workspaceId: ws.id }) },
-			{ icon: '', label: '', sep: true },
-			ws.visibility === 'restricted'
-				? { icon: 'eye', label: 'Make team-visible', run: () => void makeTeamVisible(ws) }
-				: { icon: 'lock', label: 'Restrict workspace…', run: () => (pendingRestrict = ws) }
-		];
-	}
+	import { canUseAdmin } from '../lib/roles';
+	import { currentTeam, view, unreadCount, navCollapsed } from '../lib/store';
 
 	// Two-letter team mark for the collapsed rail (prefer the short key).
 	$: teamBadge = (($currentTeam?.key || $currentTeam?.name || '?').trim().slice(0, 2)).toUpperCase();
-
-	// Load the active team's roster so the switcher card can show its members.
-	$: void loadMembers($currentTeamId);
-	async function loadMembers(id: string | null): Promise<void> {
-		if (!id) { memberIds = []; return; }
-		const ms = await api.listTeamMembers(token(), id).catch(() => []);
-		if (get(currentTeamId) !== id) return; // a newer team switch won the race
-		memberIds = ms.map((m) => m.user_id);
-	}
-
 </script>
-
-<svelte:window onclick={onWindowClick} onkeydown={(e) => { if (e.key === 'Escape') teamMenuOpen = false; }} />
 
 {#if $navCollapsed}
 	<!-- Collapsed: icon rail -->
@@ -191,148 +118,11 @@
 			</div>
 		</div>
 
-		<!-- Teams (directly above Workspaces) -->
-		<div class="mt-4 px-[0.4375rem] relative text-gray-800 dark:text-gray-200" bind:this={teamMenuEl}>
-			<div class="py-1.5 pl-2.5 text-xs font-medium text-gray-600 dark:text-gray-400">Team</div>
-			<ContextMenu.Root>
-				<ContextMenu.Trigger class="block w-full" disabled={!canManage}>
-					<button
-						class="group w-full flex flex-col gap-2.5 rounded-xl px-3 py-2.5 transition outline-none bg-gray-100 dark:bg-gray-900 ring-1 ring-black/5 dark:ring-white/10 hover:bg-gray-200 dark:hover:bg-gray-850"
-						onclick={() => (teamMenuOpen = !teamMenuOpen)}
-					>
-						<div class="flex items-center gap-2.5 w-full">
-							<span class="flex-none size-7 rounded-lg flex items-center justify-center text-[11px] font-semibold bg-brand-600 text-white dark:bg-brand-500 dark:text-brand-950">{teamBadge}</span>
-							<span class="flex-1 min-w-0 text-left text-sm font-semibold truncate translate-y-[0.5px] text-gray-900 dark:text-white">{$currentTeam?.name ?? 'No team'}</span>
-							<span class="text-gray-400 dark:text-gray-500 transition group-hover:text-gray-600 dark:group-hover:text-gray-300"><Icon name="chevrons-up-down" size={15} /></span>
-						</div>
-						{#if memberIds.length}
-							<div class="flex items-center gap-2 pl-0.5">
-								<AssigneeAvatars ids={memberIds} max={4} size={20} />
-								<span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">{memberIds.length} member{memberIds.length === 1 ? '' : 's'}</span>
-							</div>
-						{/if}
-					</button>
-				</ContextMenu.Trigger>
-				{#if canManage && $currentTeamId}
-					<ContextMenu.Content class="w-52">
-						<ContextMenu.Item onSelect={() => openModal.set({ kind: 'team-settings', teamId: $currentTeamId })}>
-							<span class="inline-flex items-center gap-2"><Icon name="settings" size={14} /> Team settings…</span>
-						</ContextMenu.Item>
-					</ContextMenu.Content>
-				{/if}
-			</ContextMenu.Root>
-			{#if teamMenuOpen}
-				<div class="absolute left-[0.4375rem] right-[0.4375rem] mt-1 z-20 rounded-xl border border-gray-100 dark:border-gray-850 bg-white dark:bg-gray-900 shadow-lg p-1">
-					{#each $teams as t (t.id)}
-						<button
-							class="flex items-center gap-2 w-full px-2.5 h-8 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-850"
-							onclick={() => { selectTeam(t.id); teamMenuOpen = false; }}
-						>
-							<span class="flex-1 text-left truncate">{t.name}</span>
-							{#if t.id === $currentTeamId}<Icon name="check" size={14} />{/if}
-						</button>
-					{/each}
-					{#if canManage && $currentTeamId}
-						<button class="flex items-center gap-2 w-full px-2.5 h-8 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-850" onclick={() => { openModal.set({ kind: 'team-settings', teamId: $currentTeamId }); teamMenuOpen = false; }}>
-							<Icon name="settings" size={14} /> Team settings…
-						</button>
-					{/if}
-					<button
-						class="flex items-center gap-2 w-full px-2.5 h-8 rounded-lg text-sm text-primary hover:bg-gray-100 dark:hover:bg-gray-850"
-						onclick={() => { openModal.set({ kind: 'team' }); teamMenuOpen = false; }}
-					>
-						<Icon name="plus" size={14} /> New team
-					</button>
-				</div>
-			{/if}
-		</div>
+		<TeamSwitcher />
 
 		<!-- Workspaces -->
 		<div class="flex-1 overflow-y-auto scrollbar-hidden px-2 mt-4 pb-2">
-			<div class="group w-full rounded-xl flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-900 transition text-gray-600 dark:text-gray-400">
-				<div class="w-full py-1.5 pl-2 flex items-center gap-1.5 text-xs font-medium">
-					<div class="translate-y-[0.5px] pl-0.5">Workspaces</div>
-				</div>
-				{#if canCreateWorkspace(myRole) && $currentTeamId}
-					<button class="z-10 mr-2 invisible group-hover:visible self-center p-0.5 hover:bg-gray-200 dark:hover:bg-gray-850 rounded-lg transition" title="New workspace" onclick={() => openModal.set({ kind: 'workspace', teamId: $currentTeamId })}>
-						<Icon name="plus" size={12} strokeWidth={2.5} />
-					</button>
-				{/if}
-			</div>
-			{#each teamWorkspaces as ws (ws.id)}
-				<ContextMenu.Root>
-					<ContextMenu.Trigger class="block w-full" disabled={!canManage}>
-						<div class="text-gray-800 dark:text-gray-200">
-							<div class="group/ws w-full flex items-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-900 transition">
-								<button
-									class="flex-1 min-w-0 flex items-center gap-1.5 px-[11px] py-[6px] text-sm"
-									onclick={() => expandedWorkspaces.update((m) => ({ ...m, [ws.id]: !m[ws.id] }))}
-								>
-									<Icon name={$expandedWorkspaces[ws.id] ? 'chevron-down' : 'chevron-right'} size={12} />
-									<span class="flex-1 text-left truncate">{ws.name}</span>
-									{#if ws.visibility === 'restricted'}
-										<span class="text-gray-400 dark:text-gray-500 flex-none" title="Restricted workspace"><Icon name="lock" size={12} /></span>
-									{/if}
-								</button>
-								{#if canManage}
-									<DropdownMenu.Root>
-										<DropdownMenu.Trigger
-											class="mr-1.5 p-1 rounded-lg text-gray-500 dark:text-gray-400 opacity-0 group-hover/ws:opacity-100 data-[state=open]:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-850 transition"
-											title="Workspace actions"
-										>
-											<Icon name="more-horizontal" size={14} />
-										</DropdownMenu.Trigger>
-										<DropdownMenu.Content align="start" class="w-52">
-											{#each wsActions(ws) as a, i (i)}
-												{#if a.sep}
-													<DropdownMenu.Separator />
-												{:else}
-													<DropdownMenu.Item onSelect={a.run}>
-														<span class="inline-flex items-center gap-2"><Icon name={a.icon} size={14} /> {a.label}</span>
-													</DropdownMenu.Item>
-												{/if}
-											{/each}
-										</DropdownMenu.Content>
-									</DropdownMenu.Root>
-								{/if}
-							</div>
-							{#if $expandedWorkspaces[ws.id]}
-								<div class="ws-tree">
-									{#each streamsByWs(ws.id) as s (s.id)}
-										<button
-											class="ws-tree-item w-full flex items-center rounded-lg pl-2 pr-[11px] py-[6px] text-sm transition {$currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
-											onclick={() => { selectWorkstream(s.id); view.set('board'); }}
-										>
-											<span class="flex-1 text-left truncate">{s.name}</span>
-										</button>
-									{/each}
-									{#if canCreateWorkspace(myRole)}
-										<button
-											class="ws-tree-item w-full flex items-center gap-1.5 rounded-lg pl-2 pr-[11px] py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-											onclick={() => openModal.set({ kind: 'workstream', workspaceId: ws.id })}
-										>
-											<Icon name="square-plus-dashed" size={16} /> New workstream
-										</button>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					</ContextMenu.Trigger>
-					{#if canManage}
-						<ContextMenu.Content class="w-52">
-							{#each wsActions(ws) as a, i (i)}
-								{#if a.sep}
-									<ContextMenu.Separator />
-								{:else}
-									<ContextMenu.Item onSelect={a.run}>
-										<span class="inline-flex items-center gap-2"><Icon name={a.icon} size={14} /> {a.label}</span>
-									</ContextMenu.Item>
-								{/if}
-							{/each}
-						</ContextMenu.Content>
-					{/if}
-				</ContextMenu.Root>
-			{/each}
+			<WorkstreamTree />
 		</div>
 
 		<!-- Footer -->
@@ -347,52 +137,3 @@
 		</div>
 	</aside>
 {/if}
-
-<RestrictConfirmDialog
-	open={pendingRestrict !== null}
-	name={pendingRestrict?.name ?? ''}
-	busy={false}
-	onCancel={() => (pendingRestrict = null)}
-	onConfirm={() => pendingRestrict && void restrictWorkspace(pendingRestrict)}
-/>
-
-<style>
-	/* File-explorer-style tree guides under a workspace. Item left edge sits at
-	   22px, and the 2px line is centred at 17px — directly under the workspace
-	   chevron's centre. */
-	.ws-tree {
-		margin-left: 0.5rem; /* 8px  */
-		padding-left: 1.25rem; /* 20px -> item left edge at 28px */
-	}
-	.ws-tree-item {
-		position: relative;
-	}
-	/* Per-item vertical segment: they stack into one continuous line, and the
-	   last item stops at its own centre so the run terminates in an elbow. */
-	.ws-tree-item::before {
-		content: '';
-		position: absolute;
-		left: -11px; /* line at 17px — under the chevron centre */
-		top: 0;
-		bottom: 0;
-		width: 1px;
-		background: rgb(229 231 235); /* gray-200 */
-	}
-	.ws-tree-item:last-child::before {
-		bottom: 50%;
-	}
-	/* Horizontal elbow from the vertical line to the item. */
-	.ws-tree-item::after {
-		content: '';
-		position: absolute;
-		left: -11px;
-		top: 50%;
-		width: 11px;
-		height: 1px;
-		background: rgb(229 231 235); /* gray-200 */
-	}
-	:global(.dark) .ws-tree-item::before,
-	:global(.dark) .ws-tree-item::after {
-		background: rgb(31 41 55); /* gray-800 */
-	}
-</style>
