@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from './types';
-import { computeKpis, isOverdue, daysLate, startOfLocalDay, addLocalDays, agoLabel } from './overview';
+import { computeKpis, isOverdue, daysLate, startOfLocalDay, addLocalDays, agoLabel, localWeekStart, weeklyMomentum, completionTime } from './overview';
 
 // now = local 2026-06-17 (Wednesday) 12:00
 const NOW = new Date(2026, 5, 17, 12, 0).getTime();
@@ -86,5 +86,47 @@ describe('agoLabel', () => {
 		expect(agoLabel(NOW - 5 * 60_000, NOW)).toBe('5m');
 		expect(agoLabel(NOW - 3 * 3_600_000, NOW)).toBe('3h');
 		expect(agoLabel(NOW - 2 * 86_400_000, NOW)).toBe('2d');
+	});
+});
+
+describe('weeklyMomentum', () => {
+	// NOW is Wednesday 2026-06-17; its Monday is 2026-06-15 local.
+	it('localWeekStart returns the local Monday', () => {
+		expect(localWeekStart(NOW)).toBe(new Date(2026, 5, 15).getTime());
+		// Sunday belongs to the week started the previous Monday
+		expect(localWeekStart(new Date(2026, 5, 21, 10, 0).getTime())).toBe(new Date(2026, 5, 15).getTime());
+	});
+
+	it('bins created and completed into local Monday-start weeks, oldest first', () => {
+		const mon = new Date(2026, 5, 15).getTime();
+		const prevMon = new Date(2026, 5, 8).getTime();
+		const bins = weeklyMomentum([
+			task({ created_at: mon + 3_600_000 }),                                        // this week: created
+			task({ created_at: prevMon + 3_600_000 }),                                    // last week: created
+			task({ created_at: prevMon + 1, status: 'done', completed_at: mon + 1000 }),  // created last wk, done this wk
+			task({ status: 'canceled', created_at: mon + 1 })                             // excluded
+		], NOW, 2);
+		expect(bins).toHaveLength(2);
+		expect(bins[0].start).toBe(prevMon);
+		expect(bins[0].created).toBe(2);
+		expect(bins[0].completed).toBe(0);
+		expect(bins[1].created).toBe(1);
+		expect(bins[1].completed).toBe(1);
+		expect(bins[1].current).toBe(true);
+		expect(bins[0].current).toBe(false);
+	});
+});
+
+describe('completionTime', () => {
+	it('averages created→completed over the calendar window, 1 decimal, null when empty', () => {
+		const windowStart = new Date(2026, 5, 15 - 7 * 5).getTime(); // 6-week window start
+		const ct = completionTime([
+			task({ status: 'done', created_at: NOW - 5 * 86_400_000, completed_at: NOW - 86_400_000 }),   // 4d
+			task({ status: 'done', created_at: NOW - 3 * 86_400_000, completed_at: NOW - 86_400_000 }),   // 2d
+			task({ status: 'done', created_at: windowStart - 20 * 86_400_000, completed_at: windowStart - 10 * 86_400_000 }) // prev window: 10d
+		], NOW, 6);
+		expect(ct.avgDays).toBe(3);
+		expect(ct.prevAvgDays).toBe(10);
+		expect(completionTime([], NOW, 6)).toEqual({ avgDays: null, prevAvgDays: null });
 	});
 });

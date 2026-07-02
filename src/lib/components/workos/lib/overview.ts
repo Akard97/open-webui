@@ -83,3 +83,52 @@ export function computeKpis(all: Task[], now: number): OverviewKpis {
 		new7d: w.filter((t) => t.created_at > now - 7 * DAY && t.created_at <= now).length
 	};
 }
+
+export function localWeekStart(now: number): number {
+	const d = new Date(now);
+	const dow = (d.getDay() + 6) % 7; // Monday = 0
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow).getTime();
+}
+
+export interface WeekBin {
+	start: number; end: number; label: string;
+	created: number; completed: number; current: boolean;
+}
+
+export function weeklyMomentum(all: Task[], now: number, weeks: number): WeekBin[] {
+	const w = all.filter(notCanceled);
+	const thisWeek = localWeekStart(now);
+	const bins: WeekBin[] = [];
+	for (let i = weeks - 1; i >= 0; i--) {
+		const start = addLocalDays(thisWeek, -7 * i);
+		const end = addLocalDays(start, 7);
+		bins.push({
+			start, end,
+			label: new Date(start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+			created: w.filter((t) => t.created_at >= start && t.created_at < end).length,
+			completed: w.filter(
+				(t) => t.status === 'done' && t.completed_at != null && t.completed_at >= start && t.completed_at < end
+			).length,
+			current: i === 0
+		});
+	}
+	return bins;
+}
+
+export interface CompletionTime { avgDays: number | null; prevAvgDays: number | null }
+
+// Average created→completed lead time over the chart's calendar window
+// (labelled "avg completion time" in the UI — we do not measure in_progress→done).
+export function completionTime(all: Task[], now: number, weeks: number): CompletionTime {
+	const w = all.filter(notCanceled);
+	const start = addLocalDays(localWeekStart(now), -7 * (weeks - 1));
+	const prevStart = addLocalDays(start, -7 * weeks);
+	const avg = (a: number, b: number): number | null => {
+		const xs = w
+			.filter((t) => t.status === 'done' && t.completed_at != null && t.completed_at >= a && t.completed_at < b)
+			.map((t) => (t.completed_at as number) - t.created_at);
+		if (!xs.length) return null;
+		return Math.round((xs.reduce((s, x) => s + x, 0) / xs.length / DAY) * 10) / 10;
+	};
+	return { avgDays: avg(start, now + 1), prevAvgDays: avg(prevStart, start) };
+}
