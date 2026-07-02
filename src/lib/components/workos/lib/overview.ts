@@ -1,8 +1,9 @@
 // Overview page metrics — every number on the Overview derives from a pure
 // function here so it can be unit-tested. Spec: docs/superpowers/specs/
 // 2026-07-02-workos-overview-design.md §2–§3 (canonical definitions).
-import type { Task } from './types';
-import { dueDayStartLocal, dueDayEndLocal } from './progress';
+import type { Task, TaskPriority, TaskStatus } from './types';
+import { dueDayStartLocal, dueDayEndLocal, taskHealth, plannedProgress, actualProgress } from './progress';
+import { PRIORITY_ORDER, STATUS_ORDER } from './types';
 
 const DAY = 86_400_000;
 
@@ -131,4 +132,114 @@ export function completionTime(all: Task[], now: number, weeks: number): Complet
 		return Math.round((xs.reduce((s, x) => s + x, 0) / xs.length / DAY) * 10) / 10;
 	};
 	return { avgDays: avg(start, now + 1), prevAvgDays: avg(prevStart, start) };
+}
+
+export interface PriorityPair { key: TaskPriority | 'none'; label: string; n: number }
+
+export function priorityPairs(all: Task[]): PriorityPair[] {
+	const open = all.filter(isOpen);
+	const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+	const pairs: PriorityPair[] = PRIORITY_ORDER.map((p) => ({
+		key: p, label: cap(p), n: open.filter((t) => t.priority === p).length
+	}));
+	const none = open.filter((t) => !t.priority).length;
+	if (none > 0) pairs.push({ key: 'none', label: 'None', n: none });
+	return pairs;
+}
+
+export interface StatusSlice { status: TaskStatus; n: number; pct: number }
+
+export function statusMix(all: Task[]): { total: number; slices: StatusSlice[] } {
+	const w = all.filter(notCanceled);
+	const slices = STATUS_ORDER.map((s) => {
+		const n = w.filter((t) => t.status === s).length;
+		return { status: s, n, pct: w.length ? (n / w.length) * 100 : 0 };
+	});
+	return { total: w.length, slices };
+}
+
+export type MemberHealth = 'needs_support' | 'watch' | 'on_track';
+export interface TeamRow {
+	userId: string | null; open: number; inProgress: number; inReview: number;
+	overdue: number; load: number; health: MemberHealth | null;
+}
+
+// Multi-assignee rule (spec §3.4): a task counts fully for EACH assignee, so
+// columns may sum past the global totals. Load is relative to the busiest member.
+export function teamRows(all: Task[], now: number, nameOf: (id: string) => string): TeamRow[] {
+	const open = all.filter(isOpen);
+	const byUser = new Map<string, Task[]>();
+	const unassigned: Task[] = [];
+	for (const t of open) {
+		const ids = t.assignee_ids ?? [];
+		if (!ids.length) { unassigned.push(t); continue; }
+		for (const id of ids) byUser.set(id, [...(byUser.get(id) ?? []), t]);
+	}
+	const rows: TeamRow[] = [...byUser.entries()].map(([userId, ts]) => {
+		const overdueN = ts.filter((t) => isOverdue(t, now)).length;
+		const behind = ts.filter((t) => taskHealth(t, now) === 'behind').length;
+		const atRisk = ts.filter((t) => taskHealth(t, now) === 'at_risk').length;
+		const riskHigh = overdueN + behind;
+		const health: MemberHealth =
+			riskHigh >= 2 ? 'needs_support' : riskHigh === 1 || atRisk >= 2 ? 'watch' : 'on_track';
+		return {
+			userId,
+			open: ts.length,
+			inProgress: ts.filter((t) => t.status === 'in_progress').length,
+			inReview: ts.filter((t) => t.status === 'in_review').length,
+			overdue: overdueN, load: 0, health
+		};
+	});
+	rows.sort((a, b) => b.open - a.open || nameOf(a.userId as string).localeCompare(nameOf(b.userId as string)));
+	const maxOpen = Math.max(1, ...rows.map((r) => r.open));
+	for (const r of rows) r.load = r.open / maxOpen;
+	if (unassigned.length) {
+		rows.push({
+			userId: null, open: unassigned.length, inProgress: 0, inReview: 0,
+			overdue: 0, load: Math.min(1, unassigned.length / maxOpen), health: null
+		});
+	}
+	return rows;
+}
+
+export type AttentionClass = 'overdue' | 'behind' | 'at_risk' | 'due_soon';
+export interface AttentionItem {
+	task: Task; cls: AttentionClass;
+	daysLate: number | null; gap: number | null; dueLabel: 'today' | 'tomorrow' | null;
+}
+
+const CLS_RANK: Record<AttentionClass, number> = { overdue: 0, behind: 1, at_risk: 2, due_soon: 3 };
+
+export function attentionList(all: Task[], now: number): AttentionItem[] {
+	const open = all.filter(isOpen);
+	const startToday = startOfLocalDay(now);
+	const startTomorrow = addLocalDays(startToday, 1);
+	const startAfter = addLocalDays(startToday, 2);
+	const items: AttentionItem[] = [];
+	for (const t of open) {
+		if (isOverdue(t, now)) {
+			items.push({ task: t, cls: 'overdue', daysLate: daysLate(t.due_date as number, now), gap: null, dueLabel: null });
+			continue;
+		}
+		const h = taskHealth(t, now);
+		if (h === 'behind' || h === 'at_risk') {
+			const gap = (plannedProgress(t.start_date, t.due_date, now) ?? 0) - actualProgress(t);
+			items.push({ task: t, cls: h, daysLate: null, gap, dueLabel: null });
+			continue;
+		}
+		if (t.due_date != null) {
+			const day = dueDayStartLocal(t.due_date);
+			if (day >= startToday && day < startAfter) {
+				items.push({
+					task: t, cls: 'due_soon', daysLate: null, gap: null,
+					dueLabel: day < startTomorrow ? 'today' : 'tomorrow'
+				});
+			}
+		}
+	}
+	return items.sort((a, b) => {
+		if (CLS_RANK[a.cls] !== CLS_RANK[b.cls]) return CLS_RANK[a.cls] - CLS_RANK[b.cls];
+		if (a.cls === 'overdue' || a.cls === 'due_soon') return (a.task.due_date ?? 0) - (b.task.due_date ?? 0);
+		return (b.gap ?? 0) - (a.gap ?? 0);
+	});
 }

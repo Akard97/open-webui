@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from './types';
-import { computeKpis, isOverdue, daysLate, startOfLocalDay, addLocalDays, agoLabel, localWeekStart, weeklyMomentum, completionTime } from './overview';
+import { computeKpis, isOverdue, daysLate, startOfLocalDay, addLocalDays, agoLabel, localWeekStart, weeklyMomentum, completionTime, priorityPairs, statusMix, teamRows, attentionList } from './overview';
 
 // now = local 2026-06-17 (Wednesday) 12:00
 const NOW = new Date(2026, 5, 17, 12, 0).getTime();
@@ -128,5 +128,92 @@ describe('completionTime', () => {
 		expect(ct.avgDays).toBe(3);
 		expect(ct.prevAvgDays).toBe(10);
 		expect(completionTime([], NOW, 6)).toEqual({ avgDays: null, prevAvgDays: null });
+	});
+});
+
+describe('priorityPairs / statusMix', () => {
+	it('priority pairs cover OPEN and sum to open count; None only when present', () => {
+		const list = [
+			task({ priority: 'urgent' }), task({ priority: 'high' }), task({ priority: null }),
+			task({ priority: 'urgent', status: 'done', completed_at: NOW })
+		];
+		const pairs = priorityPairs(list);
+		expect(pairs.map((p) => p.key)).toEqual(['urgent', 'high', 'medium', 'low', 'none']);
+		expect(pairs.reduce((s, p) => s + p.n, 0)).toBe(3);
+		expect(priorityPairs([task({ priority: 'low' })]).some((p) => p.key === 'none')).toBe(false);
+	});
+
+	it('statusMix covers non-canceled tasks in STATUS_ORDER and pct sums to 100', () => {
+		const mix = statusMix([
+			task({ status: 'todo' }), task({ status: 'in_progress' }),
+			task({ status: 'done', completed_at: NOW }), task({ status: 'canceled' })
+		]);
+		expect(mix.total).toBe(3);
+		expect(mix.slices.map((s) => s.status)).toEqual(['backlog', 'todo', 'in_progress', 'in_review', 'done']);
+		expect(Math.round(mix.slices.reduce((s, x) => s + x.pct, 0))).toBe(100);
+	});
+});
+
+describe('teamRows', () => {
+	const names: Record<string, string> = { a: 'Amal', b: 'Basel', c: 'Celine' };
+	const nameOf = (id: string) => names[id] ?? id;
+
+	it('counts a multi-assignee task fully for each assignee', () => {
+		const rows = teamRows([task({ assignee_ids: ['a', 'b'] })], NOW, nameOf);
+		expect(rows.filter((r) => r.userId).map((r) => r.open)).toEqual([1, 1]);
+	});
+
+	it('load is relative to the busiest member; unassigned row last, capped at 1', () => {
+		const rows = teamRows([
+			task({ assignee_ids: ['a'] }), task({ assignee_ids: ['a'] }), task({ assignee_ids: ['b'] }),
+			task({}), task({}), task({})
+		], NOW, nameOf);
+		const a = rows.find((r) => r.userId === 'a')!;
+		const b = rows.find((r) => r.userId === 'b')!;
+		const un = rows[rows.length - 1];
+		expect(a.load).toBe(1);
+		expect(b.load).toBe(0.5);
+		expect(un.userId).toBeNull();
+		expect(un.open).toBe(3);
+		expect(un.load).toBe(1); // 3/2 capped
+		expect(un.health).toBeNull();
+	});
+
+	it('health: 2+ overdue/behind → needs_support; exactly 1 → watch; else on_track', () => {
+		const overdue1 = task({ assignee_ids: ['a'], due_date: dueUtc(2026, 5, 10) });
+		const overdue2 = task({ assignee_ids: ['a'], due_date: dueUtc(2026, 5, 11) });
+		const fine = task({ assignee_ids: ['b'] });
+		const oneLate = task({ assignee_ids: ['c'], due_date: dueUtc(2026, 5, 10) });
+		const rows = teamRows([overdue1, overdue2, fine, oneLate], NOW, nameOf);
+		expect(rows.find((r) => r.userId === 'a')!.health).toBe('needs_support');
+		expect(rows.find((r) => r.userId === 'b')!.health).toBe('on_track');
+		expect(rows.find((r) => r.userId === 'c')!.health).toBe('watch');
+	});
+
+	it('sorts by open desc then name', () => {
+		const rows = teamRows([
+			task({ assignee_ids: ['c'] }), task({ assignee_ids: ['b'] }), task({ assignee_ids: ['b'] }),
+			task({ assignee_ids: ['a'] })
+		], NOW, nameOf);
+		expect(rows.map((r) => r.userId)).toEqual(['b', 'a', 'c']);
+	});
+});
+
+describe('attentionList', () => {
+	it('classifies once per task with severity ordering: overdue, behind, at_risk, due_soon', () => {
+		const overdue = task({ due_date: dueUtc(2026, 5, 14) });
+		const overdueWorse = task({ due_date: dueUtc(2026, 5, 10) });
+		// behind: planned far ahead of actual (started 20d ago, due in 10d, 0% done → gap ≥ 25)
+		const behind = task({ start_date: dueUtc(2026, 4, 28), due_date: dueUtc(2026, 5, 27), progress: 0 });
+		// at risk: gap in [10, 25)
+		const atRisk = task({ start_date: dueUtc(2026, 5, 7), due_date: dueUtc(2026, 6, 17), progress: 10 });
+		const dueToday = task({ due_date: dueUtc(2026, 5, 17), progress: 100 });
+		const calm = task({ due_date: dueUtc(2026, 6, 30) });
+		const items = attentionList([calm, dueToday, atRisk, behind, overdue, overdueWorse], NOW);
+		expect(items.map((i) => i.cls)).toEqual(['overdue', 'overdue', 'behind', 'at_risk', 'due_soon']);
+		expect(items[0].task.id).toBe(overdueWorse.id); // most late first
+		expect(items[0].daysLate).toBe(7);
+		expect(items[4].dueLabel).toBe('today');
+		expect(items.some((i) => i.task.id === calm.id)).toBe(false);
 	});
 });
