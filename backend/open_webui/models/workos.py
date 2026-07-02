@@ -961,6 +961,37 @@ class ActivityDao:
             )
             return [ActivityModel.model_validate(r) for r in res.scalars().all()]
 
+    async def list_for_workstream(
+        self, workstream_id: str, limit: int = 30, db: Optional[AsyncSession] = None
+    ) -> list:
+        """Newest activities across the workstream's tasks, joined with task key/title."""
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosActivity, WorkosTask.key, WorkosTask.title)
+                .join(WorkosTask, WorkosTask.id == WorkosActivity.task_id)
+                .where(WorkosTask.workstream_id == workstream_id)
+                .order_by(WorkosActivity.created_at.desc())
+                .limit(limit)
+            )
+            out = []
+            for row, task_key, task_title in res.all():
+                item = ActivityModel.model_validate(row).model_dump()
+                item['task_key'] = task_key
+                item['task_title'] = task_title
+                out.append(item)
+            return out
+
+    async def timestamps_for_workstream(
+        self, workstream_id: str, since_ms: int, db: Optional[AsyncSession] = None
+    ) -> list:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosActivity.created_at)
+                .join(WorkosTask, WorkosTask.id == WorkosActivity.task_id)
+                .where(WorkosTask.workstream_id == workstream_id, WorkosActivity.created_at >= since_ms)
+            )
+            return [r[0] for r in res.all()]
+
 
 Comments = CommentsDao()
 Activity = ActivityDao()

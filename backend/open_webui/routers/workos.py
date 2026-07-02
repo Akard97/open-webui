@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import time
 import uuid as _uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -1025,6 +1027,39 @@ async def list_activity(
     await _require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
     return await Activity.list_for_task(task_id, db=db)
+
+
+def _daily_counts(timestamps: list, days: int, tz_offset_minutes: int, now_ms: int) -> list:
+    """Bucket epoch-ms timestamps into the viewer's last `days` local calendar days
+    (oldest first). tz_offset_minutes is minutes AHEAD of UTC (JS: -getTimezoneOffset())."""
+    tz = timezone(timedelta(minutes=tz_offset_minutes))
+    today = datetime.fromtimestamp(now_ms / 1000, tz).date()
+    ordered = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
+    counts = {d.isoformat(): 0 for d in ordered}
+    for ts in timestamps:
+        key = datetime.fromtimestamp(ts / 1000, tz).date().isoformat()
+        if key in counts:
+            counts[key] += 1
+    return [{'day': k, 'n': v} for k, v in counts.items()]
+
+
+@router.get('/workstreams/{workstream_id}/activity')
+async def list_workstream_activity(
+    request: Request, workstream_id: str, limit: int = 30, days: int = 14, tz_offset_minutes: int = 0,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await _require_workos(request, user, db)
+    await require_workstream_visible(user, workstream_id, db)
+    limit = max(1, min(limit, 100))
+    days = max(1, min(days, 31))
+    tz_offset_minutes = max(-840, min(tz_offset_minutes, 840))
+    now_ms = int(time.time() * 1000)
+    # `created_at` is stored as a nanosecond epoch (see ActivityDao / _now()); convert.
+    since_ns = (now_ms - (days + 1) * 86_400_000) * 1_000_000  # one spare day so tz shifting never truncates
+    items = await Activity.list_for_workstream(workstream_id, limit=limit, db=db)
+    stamps_ns = await Activity.timestamps_for_workstream(workstream_id, since_ns, db=db)
+    stamps_ms = [ts // 1_000_000 for ts in stamps_ns]
+    return {'items': items, 'daily': _daily_counts(stamps_ms, days, tz_offset_minutes, now_ms)}
 
 
 # ──────────────────────────────── attachment endpoints ────────────────────────────────

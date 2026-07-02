@@ -183,6 +183,7 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 | `PATCH /comments/{id}` | `_require_workos`; fetch (`404`); `require_task_visible`; **author-only** (`403` else); new mentions re-checked | [workos.py:900](backend/open_webui/routers/workos.py:900) |
 | `DELETE /comments/{id}` | `_require_workos`; fetch (`404`); `require_task_visible`; **author OR team owner/admin** (`403` else) | [workos.py:929](backend/open_webui/routers/workos.py:929) |
 | `GET /tasks/{id}/activity` | `_require_workos` + `require_task_visible` | [workos.py:949](backend/open_webui/routers/workos.py:949) |
+| `GET /workstreams/{id}/activity` | `_require_workos` + `require_workstream_visible` — workstream-scoped activity list (items joined w/ task key/title) + tz-aware daily histogram; `limit`≤100, `days`≤31 clamped | [workos.py:1046](backend/open_webui/routers/workos.py:1046) |
 
 ### Attachments
 | Route / Helper | Gate applied | Location |
