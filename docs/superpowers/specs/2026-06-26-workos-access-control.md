@@ -5,6 +5,12 @@
   verification of every reported gap. Line citations were spot-checked against source.
   KEEP IN SYNC whenever access/visibility logic changes (can_see_*, require_*_visible,
   notify(), socket workos:subscribe, WORKOS_RULES).
+
+  2026-07-02: all access predicates + require_* gates were consolidated into
+  backend/open_webui/utils/workos_access.py (the policy module — single source of
+  truth). §2/§3 cite the new locations; router line cites in §4 predate the
+  consolidation and have shifted up by ~120 lines (helper defs removed), but the
+  gate-per-endpoint mapping is unchanged.
 -->
 
 # WorkOS — Access Control & Visibility (Reference)
@@ -42,7 +48,7 @@ Key structural facts:
 
 ## 2. The core mechanism
 
-Two pure boolean functions in the model layer are the canonical visibility logic. The router's `require_*_visible` helpers (§3) are request-path twins that raise `404` instead of returning `False`.
+All canonical visibility logic lives in the **policy module** [utils/workos_access.py](backend/open_webui/utils/workos_access.py) (since 2026-07-02): pure boolean predicates (`can_see_team` / `can_see_workspace` / `can_see_workstream`) plus their request-path twins, the `require_*` helpers (§3), which raise `404` instead of returning `False`. The router, `notify()`, and the socket `workos:subscribe` handler all import from this one module — there are no duplicate copies of the rule anymore (the former router-local `workspace_visible` and the inline bootstrap filter were folded into `can_see_workspace`).
 
 ### `WorkosWorkspace.visibility`
 [workos.py:68](backend/open_webui/models/workos.py:68) — `Column(Text, default='team')`, comment `"team | restricted"`. The single per-workspace switch:
@@ -51,24 +57,28 @@ Two pure boolean functions in the model layer are the canonical visibility logic
 
 Default on raw insert is `'team'`; the DAO insert takes `visibility` as an explicit arg ([workos.py:286](backend/open_webui/models/workos.py:286)), so the create path always sets it.
 
-### `can_see_team(user_id, is_admin, team_id)` — [workos.py:1102](backend/open_webui/models/workos.py:1102)
+### `can_see_team(user_id, is_admin, team_id)` — [workos_access.py:56](backend/open_webui/utils/workos_access.py:56)
 
-| Line | Branch | Meaning |
-|---|---|---|
-| [1103–1104](backend/open_webui/models/workos.py:1103) | `if is_admin: return Teams.get_by_id(team_id) is not None` | App-admin sees the team **iff it exists** — no membership row needed. |
-| [1105](backend/open_webui/models/workos.py:1105) | `return TeamMembers.get(team_id, user_id) is not None` | Non-admin sees the team **iff a membership row exists**, *any role* (owner/admin/member all qualify). |
+| Branch | Meaning |
+|---|---|
+| `if is_admin: return Teams.get_by_id(team_id) is not None` | App-admin sees the team **iff it exists** — no membership row needed. |
+| `return TeamMembers.get(team_id, user_id) is not None` | Non-admin sees the team **iff a membership row exists**, *any role* (owner/admin/member all qualify). |
 
 Only **row existence** is tested — the three team roles are equivalent for *visibility*.
 
-### `can_see_workstream(user_id, is_admin, workstream_id)` — [workos.py:1108](backend/open_webui/models/workos.py:1108)
+### `can_see_workspace(user_id, is_admin, workspace)` — [workos_access.py:62](backend/open_webui/utils/workos_access.py:62)
 
-| Line | Branch | Meaning |
-|---|---|---|
-| [1111–1113](backend/open_webui/models/workos.py:1111) | resolve stream; `if not stream: return False` | Unknown/deleted workstream → no access. |
-| [1114–1116](backend/open_webui/models/workos.py:1114) | resolve parent workspace; `if not ws: return False` | Orphaned workstream (missing parent) → no access. |
-| [1117–1118](backend/open_webui/models/workos.py:1117) | `if not can_see_team(...): return False` | **Outer wall:** must pass the team gate first. Short-circuits regardless of workspace visibility. |
-| [1119–1120](backend/open_webui/models/workos.py:1119) | `if ws.visibility == 'team' or is_admin: return True` | Team-visible workspace → any team member passes; **or** app-admin passes even when restricted. |
-| [1121](backend/open_webui/models/workos.py:1121) | `return WorkspaceMembers.get(ws.id, user_id) is not None` | Reached **only** when `restricted` AND not admin: need an explicit workspace-member row, *any workspace role*. |
+The canonical per-workspace rule (takes a resolved workspace row):
+
+| Branch | Meaning |
+|---|---|
+| `if not can_see_team(...): return False` | **Outer wall:** must pass the team gate first. Short-circuits regardless of workspace visibility. Note this means an app-admin cannot see a workspace orphaned by a deleted team (pre-consolidation the router path allowed it; unified 2026-07-02 to the stricter semantic — unreachable via normal flows). |
+| `if workspace.visibility == 'team' or is_admin: return True` | Team-visible workspace → any team member passes; **or** app-admin passes even when restricted. |
+| `return WorkspaceMembers.get(workspace.id, user_id) is not None` | Reached **only** when `restricted` AND not admin: need an explicit workspace-member row, *any workspace role*. |
+
+### `can_see_workstream(user_id, is_admin, workstream_id)` — [workos_access.py:75](backend/open_webui/utils/workos_access.py:75)
+
+Resolves the workstream (`False` if unknown/deleted), then its parent workspace (`False` if orphaned), then delegates to `can_see_workspace`. Workstreams have no visibility of their own.
 
 **Task visibility = `can_see_workstream(task.workstream_id)`.** Collapsed: *team gate passes* AND (*workspace is `'team'`* OR *app-admin* OR *explicit restricted-workspace member*). Tasks cannot be made more or less visible than their workstream.
 
@@ -85,26 +95,29 @@ Only **row existence** is tested — the three team roles are equivalent for *vi
 
 Roles are unvalidated free text at the model layer; a typo'd value is silently stored (harmless for visibility, which tests existence only).
 
-### Role-resolution & gate helpers (router)
+### Role-resolution & gate helpers (policy module — [utils/workos_access.py](backend/open_webui/utils/workos_access.py))
+
+All rows below live in the policy module since 2026-07-02 (formerly router-local; the leading underscores were dropped when they moved). `ATTACHMENT_MIME_ALLOW` is the one exception — it stays in the router (transport concern, not access policy).
 
 | Helper | Location | Behavior |
 |---|---|---|
-| `team_role(user, team_id)` | [workos.py:66](backend/open_webui/routers/workos.py:66) | Returns `'admin'` immediately for global admins (**no membership row required**); else the `TeamMembers.get(...).role` or `None`. `None` == not visible. |
-| `require_team_visible` | [workos.py:73](backend/open_webui/routers/workos.py:73) | `404` if team missing OR `team_role is None`. Passers: global admins + any team member. |
-| `require_team_role(..., allowed)` | [workos.py:80](backend/open_webui/routers/workos.py:80) | `require_team_visible` first; global admin early-returns ([:82–83](backend/open_webui/routers/workos.py:82)); else `team_role ∈ allowed` else `403 'Insufficient role.'` Used with `{'owner','admin'}` / `{'owner'}`. |
-| `workspace_visible(user, ws)` | [workos.py:303](backend/open_webui/routers/workos.py:303) | bool predicate: `False` if not in team; `True` if `visibility=='team'` or global admin; else requires a `WorkspaceMembers` row. |
-| `require_workspace_visible` | [workos.py:311](backend/open_webui/routers/workos.py:311) | `404` if missing OR not `workspace_visible`. |
-| `require_workspace_manage` | [workos.py:318](backend/open_webui/routers/workos.py:318) | `require_workspace_visible` first (so a team owner/admin who is **not** a member of a *restricted* workspace is blocked at the `404` visibility step, never reaching manage). Then pass if `team_role ∈ {'owner','admin'}` OR workspace-member `role == 'admin'`; else `403`. |
-| `require_workstream_visible` | [workos.py:463](backend/open_webui/routers/workos.py:463) | `404` if missing, then delegates to `require_workspace_visible`. Returns `(stream, ws)`. No own visibility flag. |
-| `require_task_visible` | [workos.py:581](backend/open_webui/routers/workos.py:581) | `404` if missing, then `require_workstream_visible`. Returns `(task, stream)`. **No per-task ACL; assignees get no extra read access.** |
-| `require_subtask_visible` | [workos.py:1086](backend/open_webui/routers/workos.py:1086) | `404` if missing, then `require_task_visible`. Returns `(subtask, task, stream)`. |
-| `_recipient_is_admin` | [workos.py](backend/open_webui/routers/workos.py) | bool predicate: `True` if recipient's `role == 'admin'`; used by `notify()` to let platform admins always receive notifications regardless of workstream visibility. |
-| `_validate_assignees` | [workos.py](backend/open_webui/routers/workos.py) | validates each id in `assignee_ids` via `can_see_workstream`; rejects the whole request if any id fails. Closes G1. |
-| `_is_workspace_manager` | [workos.py](backend/open_webui/routers/workos.py) | bool predicate: `True` if `team_role ∈ {'owner','admin'}` OR workspace-member `role == 'admin'`; used by write-gate helpers. |
-| `require_task_writable` | [workos.py](backend/open_webui/routers/workos.py) | `403` unless caller is creator, an assignee, or `_is_workspace_manager`. Called after `require_task_visible`. Closes G2. |
-| `require_subtask_writable` | [workos.py](backend/open_webui/routers/workos.py) | `403` unless caller is subtask creator or `_is_workspace_manager`. Called after `require_subtask_visible`. Closes G5 + G6. |
-| `_is_last_owner` | [workos.py](backend/open_webui/routers/workos.py) | `True` if `user_id` is the sole owner-role member of `team_id`; used by `remove_member` guard. Closes G9. |
-| `ATTACHMENT_MIME_ALLOW` | [workos.py](backend/open_webui/routers/workos.py) | Frozenset of permitted MIME types for uploaded attachments; upload rejected if `file.content_type` not in set. Closes G11. |
+| `require_workos` / `require_workos_admin` | [workos_access.py:39](backend/open_webui/utils/workos_access.py:39) | Feature gates (§7): `401 'WorkOS access required.'` / `403 'WorkOS admin required.'` unless global admin or `has_permission`. |
+| `team_role(user, team_id)` | [workos_access.py:87](backend/open_webui/utils/workos_access.py:87) | Returns `'admin'` immediately for global admins (**no membership row required**); else the `TeamMembers.get(...).role` or `None`. `None` == not visible. |
+| `require_team_visible` | [workos_access.py:115](backend/open_webui/utils/workos_access.py:115) | `404` if team missing OR `team_role is None`. Passers: global admins + any team member. |
+| `require_team_role(..., allowed)` | [workos_access.py:122](backend/open_webui/utils/workos_access.py:122) | `require_team_visible` first; global admin early-returns; else `team_role ∈ allowed` else `403 'Insufficient role.'` Used with `{'owner','admin'}` / `{'owner'}`. |
+| `can_see_workspace(user_id, is_admin, ws)` | [workos_access.py:62](backend/open_webui/utils/workos_access.py:62) | The canonical workspace predicate (§2). Replaces the former router `workspace_visible` and the inline bootstrap filter. |
+| `require_workspace_visible` | [workos_access.py:131](backend/open_webui/utils/workos_access.py:131) | `404` if missing OR not `can_see_workspace`. |
+| `require_workspace_manage` | [workos_access.py:138](backend/open_webui/utils/workos_access.py:138) | `require_workspace_visible` first (so a team owner/admin who is **not** a member of a *restricted* workspace is blocked at the `404` visibility step, never reaching manage). Then pass if `is_workspace_manager`; else `403`. |
+| `require_workstream_visible` | [workos_access.py:145](backend/open_webui/utils/workos_access.py:145) | `404` if missing, then delegates to `require_workspace_visible`. Returns `(stream, ws)`. No own visibility flag. |
+| `require_task_visible` | [workos_access.py:153](backend/open_webui/utils/workos_access.py:153) | `404` if missing, then `require_workstream_visible`. Returns `(task, stream)`. **No per-task ACL; assignees get no extra read access.** |
+| `require_subtask_visible` | [workos_access.py:161](backend/open_webui/utils/workos_access.py:161) | `404` if missing, then `require_task_visible`. Returns `(subtask, task, stream)`. |
+| `is_app_admin` (was `_recipient_is_admin`) | [workos_access.py:107](backend/open_webui/utils/workos_access.py:107) | bool predicate: `True` if recipient's `role == 'admin'`; used by `notify()` to let platform admins always receive notifications regardless of workstream visibility. |
+| `validate_assignees` | [workos_access.py:203](backend/open_webui/utils/workos_access.py:203) | validates each id in `assignee_ids` via `can_see_workstream`; rejects the whole request if any id fails. Closes G1. |
+| `is_workspace_manager` | [workos_access.py:94](backend/open_webui/utils/workos_access.py:94) | bool predicate: `True` if `team_role ∈ {'owner','admin'}` OR workspace-member `role == 'admin'`; used by write-gate helpers. |
+| `require_task_writable` | [workos_access.py:172](backend/open_webui/utils/workos_access.py:172) | `403` unless caller is app-admin, creator, an assignee, or `is_workspace_manager`. Called after `require_task_visible`. Closes G2. |
+| `require_subtask_writable` | [workos_access.py:186](backend/open_webui/utils/workos_access.py:186) | `403` unless caller is app-admin, subtask creator, task creator/assignee, or `is_workspace_manager`. Called after `require_subtask_visible`. Closes G5 + G6. |
+| `is_last_owner` | [workos_access.py:101](backend/open_webui/utils/workos_access.py:101) | `True` if `user_id` is the sole owner-role member of `team_id`; used by `remove_member` guard. Closes G9. |
+| `ATTACHMENT_MIME_ALLOW` | [workos.py](backend/open_webui/routers/workos.py) | Frozenset of permitted MIME types for uploaded attachments; upload rejected if `file.content_type` not in set. Closes G11. (Router, not policy module.) |
 
 All `require_*_visible` helpers return **`404` (not `403`)** when a row is missing *or* invisible, so non-members cannot distinguish "doesn't exist" from "you can't see it."
 
@@ -217,10 +230,10 @@ All routes are authenticated with `get_verified_user` and call `_require_workos`
 ### Foundation gates / model helpers
 | Helper | Behavior | Location |
 |---|---|---|
-| `_require_workos` | `401` unless `role=='admin'` or `has_permission('features.workos')` | [workos.py:52](backend/open_webui/routers/workos.py:52) |
-| `_require_workos_admin` | `403` unless `role=='admin'` or `has_permission('features.workos_admin')` | [workos.py:59](backend/open_webui/routers/workos.py:59) |
+| `require_workos` | `401` unless `role=='admin'` or `has_permission('features.workos')` | [workos_access.py:39](backend/open_webui/utils/workos_access.py:39) |
+| `require_workos_admin` | `403` unless `role=='admin'` or `has_permission('features.workos_admin')` | [workos_access.py:46](backend/open_webui/utils/workos_access.py:46) |
 | `has_permission` | dotted-key resolver over group perms → default perms | [access_control/__init__.py](backend/open_webui/utils/access_control/__init__.py) |
-| `can_see_team` / `can_see_workstream` | non-raising bool twins used outside the request path (notifications/mentions/socket join) | [workos.py:1102](backend/open_webui/models/workos.py:1102) / [:1108](backend/open_webui/models/workos.py:1108) |
+| `can_see_team` / `can_see_workspace` / `can_see_workstream` | non-raising bool predicates used outside the request path (notifications/mentions/socket join) | [workos_access.py:56](backend/open_webui/utils/workos_access.py:56) / [:62](backend/open_webui/utils/workos_access.py:62) / [:75](backend/open_webui/utils/workos_access.py:75) |
 
 ---
 

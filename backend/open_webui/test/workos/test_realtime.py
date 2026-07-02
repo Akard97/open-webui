@@ -2,7 +2,8 @@ import pytest
 from types import SimpleNamespace
 
 import open_webui.routers.workos as wr
-from open_webui.models.workos import can_see_team, can_see_workstream, Teams, TeamMembers, Workspaces, Workstreams
+from open_webui.models.workos import Teams, TeamMembers, Workspaces, Workstreams
+from open_webui.utils.workos_access import can_see_team, can_see_workstream
 from open_webui.test.workos.test_router_teams import _client, U1, U2
 
 

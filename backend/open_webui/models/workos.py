@@ -1156,24 +1156,5 @@ class NotificationsDao:
 Attachments = AttachmentsDao()
 Notifications = NotificationsDao()
 
-
-async def can_see_team(user_id: str, is_admin: bool, team_id: str, db: Optional[AsyncSession] = None) -> bool:
-    if is_admin:
-        return (await Teams.get_by_id(team_id, db=db)) is not None
-    return (await TeamMembers.get(team_id, user_id, db=db)) is not None
-
-
-async def can_see_workstream(
-    user_id: str, is_admin: bool, workstream_id: str, db: Optional[AsyncSession] = None
-) -> bool:
-    stream = await Workstreams.get_by_id(workstream_id, db=db)
-    if not stream:
-        return False
-    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    if not ws:
-        return False
-    if not await can_see_team(user_id, is_admin, ws.team_id, db=db):
-        return False
-    if ws.visibility == 'team' or is_admin:
-        return True
-    return (await WorkspaceMembers.get(ws.id, user_id, db=db)) is not None
+# Visibility predicates (can_see_team / can_see_workspace / can_see_workstream)
+# live in open_webui.utils.workos_access — the WorkOS access-policy module.

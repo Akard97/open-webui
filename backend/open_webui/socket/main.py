@@ -486,7 +486,7 @@ async def workos_subscribe(sid, data):
     if not user:
         return
 
-    from open_webui.models.workos import can_see_team, can_see_workstream
+    from open_webui.utils.workos_access import can_see_team, can_see_workstream
 
     is_admin = user.role == 'admin'
     team_id = data.get('team_id')

@@ -12,16 +12,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import get_async_session
 from open_webui.utils.auth import get_verified_user
-from open_webui.utils.access_control import has_permission
 from open_webui.storage.provider import Storage
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
     Labels, Tasks, Comments, Activity, Attachments, Notifications, Subtasks,
     TeamModel, WorkspaceModel, WorkstreamModel, TaskModel, LabelModel,
     CommentModel, ActivityModel, AttachmentModel, NotificationModel,
-    parse_mentions, task_change_activities, can_see_workstream,
+    parse_mentions, task_change_activities,
 )
 from open_webui.models.users import Users
+from open_webui.utils.workos_access import (
+    require_workos, require_workos_admin,
+    can_see_workspace, can_see_workstream, team_role,
+    is_last_owner, is_app_admin,
+    require_team_visible, require_team_role,
+    require_workspace_visible, require_workspace_manage,
+    require_workstream_visible, require_task_visible, require_subtask_visible,
+    require_task_writable, require_subtask_writable,
+    validate_assignees,
+)
 
 log = logging.getLogger(__name__)
 
@@ -49,44 +58,8 @@ router = APIRouter()
 TEAM_ROLES = {'owner', 'admin', 'member'}
 
 
-# ──────────────────────────── permission / access helpers ────────────────────────────
-
-
-async def _require_workos(request: Request, user, db: AsyncSession) -> None:
-    if user.role != 'admin' and not await has_permission(
-        user.id, 'features.workos', request.app.state.config.USER_PERMISSIONS, db=db
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='WorkOS access required.')
-
-
-async def _require_workos_admin(request: Request, user, db: AsyncSession) -> None:
-    if user.role != 'admin' and not await has_permission(
-        user.id, 'features.workos_admin', request.app.state.config.USER_PERMISSIONS, db=db
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='WorkOS admin required.')
-
-
-async def team_role(user, team_id: str, db: AsyncSession) -> Optional[str]:
-    if user.role == 'admin':
-        return 'admin'
-    m = await TeamMembers.get(team_id, user.id, db=db)
-    return m.role if m else None
-
-
-async def require_team_visible(user, team_id: str, db: AsyncSession) -> TeamModel:
-    team = await Teams.get_by_id(team_id, db=db)
-    if not team or await team_role(user, team_id, db) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Team not found.')
-    return team
-
-
-async def require_team_role(user, team_id: str, db: AsyncSession, allowed: set) -> TeamModel:
-    team = await require_team_visible(user, team_id, db)
-    if user.role == 'admin':
-        return team
-    if (await team_role(user, team_id, db)) not in allowed:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient role.')
-    return team
+# Access predicates and require_* gates live in open_webui.utils.workos_access —
+# the single source of truth for WorkOS visibility/role policy.
 
 
 # ──────────────────────────────── schemas ────────────────────────────────
@@ -138,7 +111,7 @@ async def list_all_users() -> list:
 
 @router.get('/directory')
 async def directory(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     teams = await (Teams.list_all(db=db) if user.role == 'admin' else Teams.list_for_user(user.id, db=db))
     ids: set = set()
     for t in teams:
@@ -155,7 +128,7 @@ async def list_users(
 ):
     # Full app roster for the team "Add a user…" picker — gated to the people who
     # can actually add members (team owners/admins, or a global admin).
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
     return await list_all_users()
 
@@ -165,7 +138,7 @@ async def list_users(
 
 @router.get('/bootstrap')
 async def bootstrap(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     teams = await Teams.list_for_user(user.id, db=db) if user.role != 'admin' else await Teams.list_all(db=db)
     roles: dict = {}
     workspaces = []
@@ -173,7 +146,7 @@ async def bootstrap(request: Request, user=Depends(get_verified_user), db: Async
     for t in teams:
         roles[t.id] = await team_role(user, t.id, db)
         for w in await Workspaces.list_for_team(t.id, db=db):
-            if w.visibility == 'team' or user.role == 'admin' or await WorkspaceMembers.get(w.id, user.id, db=db):
+            if await can_see_workspace(user.id, user.role == 'admin', w, db=db):
                 workspaces.append(w)
                 workstreams.extend(await Workstreams.list_for_workspace(w.id, db=db))
     return {
@@ -187,7 +160,7 @@ async def bootstrap(request: Request, user=Depends(get_verified_user), db: Async
 
 @router.get('/teams')
 async def list_teams(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     return await (Teams.list_all(db=db) if user.role == 'admin' else Teams.list_for_user(user.id, db=db))
 
 
@@ -195,7 +168,7 @@ async def list_teams(request: Request, user=Depends(get_verified_user), db: Asyn
 async def create_team(
     request: Request, form: TeamForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     rules = request.app.state.config.WORKOS_RULES or {}
     if rules.get('team_creation') == 'admins_only' and user.role != 'admin':
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Team creation is restricted to admins.')
@@ -211,7 +184,7 @@ async def create_team(
 async def get_team(
     request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     return await require_team_visible(user, team_id, db)
 
 
@@ -220,7 +193,7 @@ async def update_team(
     request: Request, team_id: str, form: TeamUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner'})
     fields = {k: v for k, v in form.model_dump(exclude_none=True).items()}
     return await Teams.update_fields(team_id, fields, db=db)
@@ -230,7 +203,7 @@ async def update_team(
 async def delete_team(
     request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner'})
     return {'deleted': await Teams.delete(team_id, db=db)}
 
@@ -239,7 +212,7 @@ async def delete_team(
 async def list_members(
     request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_visible(user, team_id, db)
     return await TeamMembers.list_for_team(team_id, db=db)
 
@@ -249,7 +222,7 @@ async def add_member(
     request: Request, team_id: str, form: MemberForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
     if form.role not in TEAM_ROLES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
@@ -258,23 +231,17 @@ async def add_member(
     return await TeamMembers.add(team_id, form.user_id, form.role, db=db)
 
 
-async def _is_last_owner(team_id: str, user_id: str, db: AsyncSession) -> bool:
-    members = await TeamMembers.list_for_team(team_id, db=db)
-    owners = [m for m in members if m.role == 'owner']
-    return len(owners) == 1 and owners[0].user_id == user_id
-
-
 @router.patch('/teams/{team_id}/members/{user_id}')
 async def update_member(
     request: Request, team_id: str, user_id: str, form: MemberRoleForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     # Only owners may grant/revoke owner or admin; admins may manage members.
     await require_team_role(user, team_id, db, {'owner'} if form.role in {'owner', 'admin'} else {'owner', 'admin'})
     if form.role not in TEAM_ROLES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
-    if form.role != 'owner' and await _is_last_owner(team_id, user_id, db):
+    if form.role != 'owner' and await is_last_owner(team_id, user_id, db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Cannot demote the last team owner.')
     updated = await TeamMembers.update_role(team_id, user_id, form.role, db=db)
     if not updated:
@@ -287,9 +254,9 @@ async def remove_member(
     request: Request, team_id: str, user_id: str,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
-    if await _is_last_owner(team_id, user_id, db):
+    if await is_last_owner(team_id, user_id, db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Cannot remove the last team owner.')
     return {'removed': await TeamMembers.remove(team_id, user_id, db=db)}
 
@@ -313,38 +280,6 @@ class WorkspaceUpdateForm(BaseModel):
     archived: Optional[bool] = None
 
 
-# ──────────────────────────── workspace permission helpers ────────────────────────────
-
-
-async def workspace_visible(user, workspace, db: AsyncSession) -> bool:
-    if await team_role(user, workspace.team_id, db) is None:
-        return False
-    if workspace.visibility == 'team' or user.role == 'admin':
-        return True
-    return (await WorkspaceMembers.get(workspace.id, user.id, db=db)) is not None
-
-
-async def require_workspace_visible(user, workspace_id: str, db: AsyncSession):
-    ws = await Workspaces.get_by_id(workspace_id, db=db)
-    if not ws or not await workspace_visible(user, ws, db):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Workspace not found.')
-    return ws
-
-
-async def _is_workspace_manager(user, workspace, db: AsyncSession) -> bool:
-    if (await team_role(user, workspace.team_id, db)) in {'owner', 'admin'}:
-        return True
-    wm = await WorkspaceMembers.get(workspace.id, user.id, db=db)
-    return bool(wm and wm.role == 'admin')
-
-
-async def require_workspace_manage(user, workspace_id: str, db: AsyncSession):
-    ws = await require_workspace_visible(user, workspace_id, db)
-    if await _is_workspace_manager(user, ws, db):
-        return ws
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Workspace management requires admin.')
-
-
 # ──────────────────────────────── workspace endpoints ────────────────────────────────
 
 
@@ -352,11 +287,11 @@ async def require_workspace_manage(user, workspace_id: str, db: AsyncSession):
 async def list_workspaces(
     request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_visible(user, team_id, db)
     out = []
     for ws in await Workspaces.list_for_team(team_id, db=db):
-        if await workspace_visible(user, ws, db):
+        if await can_see_workspace(user.id, user.role == 'admin', ws, db=db):
             out.append(ws)
     return out
 
@@ -366,7 +301,7 @@ async def create_workspace(
     request: Request, team_id: str, form: WorkspaceForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_role(user, team_id, db, {'owner', 'admin'})
     rules = request.app.state.config.WORKOS_RULES or {}
     visibility = form.visibility or rules.get('default_workspace_visibility') or 'team'
@@ -383,7 +318,7 @@ async def create_workspace(
 async def get_workspace(
     request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     return await require_workspace_visible(user, workspace_id, db)
 
 
@@ -392,7 +327,7 @@ async def update_workspace(
     request: Request, workspace_id: str, form: WorkspaceUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
     fields = form.model_dump(exclude_none=True)
     if 'visibility' in fields and fields['visibility'] not in {'team', 'restricted'}:
@@ -406,7 +341,7 @@ async def update_workspace(
 async def delete_workspace(
     request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     ws = await require_workspace_visible(user, workspace_id, db)
     await require_team_role(user, ws.team_id, db, {'owner', 'admin'})
     deleted = await Workspaces.delete(workspace_id, db=db)
@@ -421,7 +356,7 @@ async def delete_workspace(
 async def list_workspace_members(
     request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_visible(user, workspace_id, db)
     return await WorkspaceMembers.list_for_workspace(workspace_id, db=db)
 
@@ -431,7 +366,7 @@ async def add_workspace_member(
     request: Request, workspace_id: str, form: MemberForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
     if form.role not in WORKSPACE_ROLES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
@@ -445,7 +380,7 @@ async def update_workspace_member(
     request: Request, workspace_id: str, user_id: str, form: MemberRoleForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
     if form.role not in WORKSPACE_ROLES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
@@ -460,7 +395,7 @@ async def remove_workspace_member(
     request: Request, workspace_id: str, user_id: str,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
     return {'removed': await WorkspaceMembers.remove(workspace_id, user_id, db=db)}
 
@@ -479,17 +414,6 @@ class WorkstreamUpdateForm(BaseModel):
     archived: Optional[bool] = None
 
 
-# ──────────────────────────── workstream permission helpers ────────────────────────────
-
-
-async def require_workstream_visible(user, workstream_id: str, db: AsyncSession):
-    stream = await Workstreams.get_by_id(workstream_id, db=db)
-    if not stream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Workstream not found.')
-    ws = await require_workspace_visible(user, stream.workspace_id, db)
-    return stream, ws
-
-
 # ──────────────────────────────── workstream endpoints ────────────────────────────────
 
 
@@ -497,7 +421,7 @@ async def require_workstream_visible(user, workstream_id: str, db: AsyncSession)
 async def list_workstreams(
     request: Request, workspace_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_visible(user, workspace_id, db)
     return await Workstreams.list_for_workspace(workspace_id, db=db)
 
@@ -507,7 +431,7 @@ async def create_workstream(
     request: Request, workspace_id: str, form: WorkstreamForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workspace_manage(user, workspace_id, db)
     stream = await Workstreams.insert(workspace_id, form.name, form.icon, user.id, db=db)
     ws_row = await Workspaces.get_by_id(workspace_id, db=db)
@@ -520,7 +444,7 @@ async def update_workstream(
     request: Request, workstream_id: str, form: WorkstreamUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     await require_workspace_manage(user, stream.workspace_id, db)
     updated = await Workstreams.update_fields(workstream_id, form.model_dump(exclude_none=True), db=db)
@@ -533,7 +457,7 @@ async def update_workstream(
 async def delete_workstream(
     request: Request, workstream_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     await require_workspace_manage(user, stream.workspace_id, db)
     deleted = await Workstreams.delete(workstream_id, db=db)
@@ -597,15 +521,7 @@ class LabelUpdateForm(BaseModel):
     color: Optional[str] = None
 
 
-# ──────────────────────────── task permission helpers ────────────────────────────
-
-
-async def require_task_visible(user, task_id: str, db: AsyncSession):
-    task = await Tasks.get_by_id(task_id, db=db)
-    if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Task not found.')
-    stream, _ = await require_workstream_visible(user, task.workstream_id, db)
-    return task, stream
+# ──────────────────────────── task field validation ────────────────────────────
 
 
 def _validate_task_fields(fields: dict, *, current: Optional[dict] = None) -> None:
@@ -624,34 +540,11 @@ def _validate_task_fields(fields: dict, *, current: Optional[dict] = None) -> No
 # ──────────────────────────────── task endpoints ────────────────────────────────
 
 
-async def _validate_assignees(assignee_ids, workstream_id, db):
-    for uid in assignee_ids or []:
-        if not await can_see_workstream(uid, await _recipient_is_admin(uid, db), workstream_id, db=db):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail='One or more assignees cannot access this workstream.',
-            )
-
-
-async def require_task_writable(user, task, stream, db: AsyncSession) -> None:
-    if user.role == 'admin':
-        return
-    if task.created_by_id == user.id:
-        return
-    if user.id in (task.assignee_ids or []):
-        return
-    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    if await _is_workspace_manager(user, ws, db):
-        return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                        detail='You do not have permission to edit this task.')
-
-
 @router.get('/workstreams/{workstream_id}/tasks')
 async def list_tasks(
     request: Request, workstream_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workstream_visible(user, workstream_id, db)
     return await Tasks.list_for_workstream(workstream_id, db=db)
 
@@ -660,7 +553,7 @@ async def list_tasks(
 async def list_my_tasks(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     is_admin = user.role == 'admin'
     teams = await Teams.list_all(db=db) if is_admin else await Teams.list_for_user(user.id, db=db)
     candidates = await Tasks.list_for_user(user.id, [t.id for t in teams], db=db)
@@ -676,11 +569,11 @@ async def create_task(
     request: Request, workstream_id: str, form: TaskCreateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     _validate_task_fields(form.model_dump())
     team = await require_team_visible(user, (await Workspaces.get_by_id(stream.workspace_id, db=db)).team_id, db)
-    await _validate_assignees(form.assignee_ids, workstream_id, db)
+    await validate_assignees(form.assignee_ids, workstream_id, db)
     task = await Tasks.insert(
         workstream_id, team.id, team.key, form.title, user.id,
         description=form.description, status=form.status, priority=form.priority,
@@ -696,7 +589,7 @@ async def create_task(
 async def get_task(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     task, _ = await require_task_visible(user, task_id, db)
     return task
 
@@ -706,13 +599,13 @@ async def update_task(
     request: Request, task_id: str, form: TaskUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     task, stream = await require_task_visible(user, task_id, db)
     await require_task_writable(user, task, stream, db)
     fields = form.model_dump(exclude_none=True)
     _validate_task_fields(fields, current=task.model_dump())
     if 'assignee_ids' in fields:
-        await _validate_assignees(fields['assignee_ids'], task.workstream_id, db)
+        await validate_assignees(fields['assignee_ids'], task.workstream_id, db)
     before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)
     # Auto-delete tags that this edit orphaned (removed here and used by no other task).
@@ -742,7 +635,7 @@ async def update_task(
 async def delete_task(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     task, stream = await require_task_visible(user, task_id, db)
     ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
     is_admin = (await team_role(user, ws.team_id, db)) in {'owner', 'admin'}
@@ -762,7 +655,7 @@ async def delete_task(
 async def list_labels(
     request: Request, team_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_team_visible(user, team_id, db)
     return await Labels.list_for_team(team_id, db=db)
 
@@ -772,7 +665,7 @@ async def create_label(
     request: Request, team_id: str, form: LabelForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     # Any member who can see the team may create tags (tags are a shared, lightweight resource).
     await require_team_visible(user, team_id, db)
     return await Labels.insert(team_id, form.name, form.color, db=db)
@@ -783,7 +676,7 @@ async def update_label(
     request: Request, label_id: str, form: LabelUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     existing = await Labels.update_fields(label_id, {}, db=db)  # fetch-only to read team_id
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
@@ -795,7 +688,7 @@ async def update_label(
 async def delete_label(
     request: Request, label_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     existing = await Labels.update_fields(label_id, {}, db=db)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Label not found.')
@@ -820,7 +713,7 @@ class SettingsForm(BaseModel):
 async def admin_list_teams(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos_admin(request, user, db)
+    await require_workos_admin(request, user, db)
     out = []
     for team in await Teams.list_all(db=db):
         members = await TeamMembers.list_for_team(team.id, db=db)
@@ -836,7 +729,7 @@ async def admin_list_teams(
 async def admin_get_settings(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos_admin(request, user, db)
+    await require_workos_admin(request, user, db)
     return request.app.state.config.WORKOS_RULES
 
 
@@ -845,7 +738,7 @@ async def admin_update_settings(
     request: Request, form: SettingsForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos_admin(request, user, db)
+    await require_workos_admin(request, user, db)
     if form.team_creation is not None and form.team_creation not in {'all_users', 'admins_only'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid team_creation.')
     if form.default_workspace_visibility is not None and form.default_workspace_visibility not in {'team', 'restricted'}:
@@ -878,11 +771,6 @@ def _actor_name(user) -> str:
     return getattr(user, 'name', None) or user.id
 
 
-async def _recipient_is_admin(uid: str, db) -> bool:
-    u = await Users.get_user_by_id(uid, db=db)
-    return bool(u and u.role == 'admin')
-
-
 async def notify(
     request: Request, db, *, recipients: set, actor, type: str, task, comment_id=None, snippet=None, extra=None,
 ):
@@ -892,7 +780,7 @@ async def notify(
     targets = {r for r in recipients if r and r != actor.id}
     visible = set()
     for uid in targets:
-        if await can_see_workstream(uid, await _recipient_is_admin(uid, db), task.workstream_id, db=db):
+        if await can_see_workstream(uid, await is_app_admin(uid, db), task.workstream_id, db=db):
             visible.add(uid)
     targets = visible
     if not targets:
@@ -936,7 +824,7 @@ async def _emit_task_room(event: str, task, payload: dict) -> None:
 async def list_comments(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
     return await Comments.list_for_task(task_id, db=db)
 
@@ -946,7 +834,7 @@ async def create_comment(
     request: Request, task_id: str, form: CommentForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     task, _ = await require_task_visible(user, task_id, db)
     body = (form.body or '').strip()
     if not body:
@@ -961,7 +849,7 @@ async def create_comment(
     # Notification fan-out: mentioned first, then commented (minus those mentioned).
     mentioned = set()
     for m in mentions:
-        if await can_see_workstream(m, await _recipient_is_admin(m, db), task.workstream_id, db=db):
+        if await can_see_workstream(m, await is_app_admin(m, db), task.workstream_id, db=db):
             mentioned.add(m)
     await notify(request, db, recipients=mentioned, actor=user, type='mentioned', task=task,
                  comment_id=comment.id, snippet=body)
@@ -976,7 +864,7 @@ async def update_comment(
     request: Request, comment_id: str, form: CommentForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     existing = await Comments.get_by_id(comment_id, db=db)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
@@ -1004,7 +892,7 @@ async def update_comment(
 async def delete_comment(
     request: Request, comment_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     existing = await Comments.get_by_id(comment_id, db=db)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
@@ -1024,7 +912,7 @@ async def delete_comment(
 async def list_activity(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
     return await Activity.list_for_task(task_id, db=db)
 
@@ -1048,7 +936,7 @@ async def list_workstream_activity(
     request: Request, workstream_id: str, limit: int = 30, days: int = 14, tz_offset_minutes: int = 0,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_workstream_visible(user, workstream_id, db)
     limit = max(1, min(limit, 100))
     days = max(1, min(days, 31))
@@ -1087,7 +975,7 @@ async def upload_attachment(
     request: Request, task_id: str, file: UploadFile = File(...), comment_id: Optional[str] = None,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     task, _ = await require_task_visible(user, task_id, db)
     contents = await file.read()
     limit = _max_attachment_bytes(request)
@@ -1123,7 +1011,7 @@ async def upload_attachment(
 async def list_attachments(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
     return await Attachments.list_for_task(task_id, db=db)
 
@@ -1133,7 +1021,7 @@ async def download_attachment(
     request: Request, attachment_id: str,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     att = await Attachments.get_by_id(attachment_id, db=db)
     if not att:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attachment not found.')
@@ -1157,7 +1045,7 @@ async def delete_attachment(
     request: Request, attachment_id: str,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     att = await Attachments.get_by_id(attachment_id, db=db)
     if not att:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attachment not found.')
@@ -1190,7 +1078,7 @@ async def list_notifications(
     request: Request, unread_only: bool = False, limit: int = 50, before: Optional[int] = None,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     limit = max(1, min(limit, 200))
     return await Notifications.list_for_user(user.id, unread_only=unread_only, limit=limit, before=before, db=db)
 
@@ -1200,20 +1088,12 @@ async def mark_notifications_read(
     request: Request, form: MarkReadForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await Notifications.mark_read(user.id, ids=form.ids, all=form.all, db=db)
     return {'unread': await Notifications.unread_count(user.id, db=db)}
 
 
 # ──────────────────────────────── subtask endpoints ────────────────────────────────
-
-
-async def require_subtask_visible(user, subtask_id: str, db: AsyncSession):
-    subtask = await Subtasks.get_by_id(subtask_id, db=db)
-    if not subtask:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Subtask not found.')
-    task, stream = await require_task_visible(user, subtask.task_id, db)
-    return subtask, task, stream
 
 
 async def _emit_parent_after_subtask(task_id: str, db: AsyncSession):
@@ -1227,7 +1107,7 @@ async def _emit_parent_after_subtask(task_id: str, db: AsyncSession):
 async def list_subtasks(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
     return await Subtasks.list_for_task(task_id, db=db)
 
@@ -1237,7 +1117,7 @@ async def create_subtask(
     request: Request, task_id: str, form: SubtaskCreateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     task, _ = await require_task_visible(user, task_id, db)
     if not form.title.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Subtask title is required.')
@@ -1250,26 +1130,12 @@ async def create_subtask(
     return subtask
 
 
-async def require_subtask_writable(user, subtask, task, stream, db: AsyncSession) -> None:
-    if user.role == 'admin':
-        return
-    if subtask.created_by_id == user.id:
-        return
-    if task.created_by_id == user.id or user.id in (task.assignee_ids or []):
-        return
-    ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
-    if await _is_workspace_manager(user, ws, db):
-        return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                        detail='You do not have permission to modify this subtask.')
-
-
 @router.patch('/subtasks/{subtask_id}')
 async def update_subtask(
     request: Request, subtask_id: str, form: SubtaskUpdateForm,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     subtask, task, stream = await require_subtask_visible(user, subtask_id, db)
     await require_subtask_writable(user, subtask, task, stream, db)
     fields = form.model_dump(exclude_none=True)
@@ -1296,7 +1162,7 @@ async def update_subtask(
 async def delete_subtask(
     request: Request, subtask_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
-    await _require_workos(request, user, db)
+    await require_workos(request, user, db)
     subtask, task, stream = await require_subtask_visible(user, subtask_id, db)
     await require_subtask_writable(user, subtask, task, stream, db)
     deleted = await Subtasks.delete(subtask_id, db=db)

@@ -7,6 +7,7 @@ from httpx import ASGITransport
 from fastapi import FastAPI
 
 import open_webui.routers.workos as wr
+import open_webui.utils.workos_access as wa
 from open_webui.utils.auth import get_verified_user
 
 
@@ -24,7 +25,7 @@ def _make_app(user, rules=None):
 def _client(monkeypatch, *, user, allow=True, rules=None):
     async def _hp(user_id, key, permissions, db=None):
         return allow
-    monkeypatch.setattr(wr, 'has_permission', _hp)
+    monkeypatch.setattr(wa, 'has_permission', _hp)
     return httpx.AsyncClient(transport=ASGITransport(app=_make_app(user, rules)), base_url='http://test')
 
 
