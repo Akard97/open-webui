@@ -2,6 +2,14 @@
 
 **Date:** 2026-07-02
 **Status:** Approved (shell, views, task detail, dialogs — all four sections approved by user)
+
+> **Amendment 2026-07-03 (post-smoke, user-directed):** the bottom tab bar is gone.
+> Mobile navigation now mirrors the chat tool's pattern: the global Osool app bar sits on
+> top, and a WorkOS header row (`chrome/MobileHeader.svelte` — drawer toggle w/ unread dot
+> + breadcrumb title) sits under it; the toggle opens the nav drawer. My Work and Inbox
+> moved into the drawer above the team switcher (mirroring the desktop sidebar panel).
+> `BottomNav.svelte` deleted; the Topbar title row is desktop-only (mobile header carries
+> the title). §1's "bottom tab bar + safe-area" text below is superseded by this.
 **Goal:** WorkOS fully usable on phones. Today the shell renders a fixed ~312px sidebar (56px icon rail + 256px tree panel) inside a horizontal flex root, leaving ~63px of content on a 375px phone. Views have almost no breakpoints (15 total across 7 files).
 
 ## Decisions (from brainstorming)
