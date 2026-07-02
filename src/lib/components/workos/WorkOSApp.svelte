@@ -13,6 +13,7 @@
 	import InboxView from './views/InboxView.svelte';
 	import MyWorkView from './views/MyWorkView.svelte';
 	import ModalHost from './views/ModalHost.svelte';
+	import TeamSettingsDialog from './chrome/access/TeamSettingsDialog.svelte';
 	import { canUseAdmin, canUseAccessConsole } from './lib/roles';
 	import { user } from '$lib/stores';
 	import {
@@ -71,4 +72,5 @@
 		</div>
 	</div>
 	<ModalHost />
+	<TeamSettingsDialog />
 </div>
