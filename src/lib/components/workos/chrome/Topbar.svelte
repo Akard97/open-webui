@@ -21,8 +21,8 @@
 </script>
 
 <header class="flex-none border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-	<!-- Title row -->
-	<div class="h-12 md:h-14 flex items-center gap-3 px-4">
+	<!-- Title row (desktop only — the mobile header row already shows the breadcrumb title) -->
+	<div class="hidden md:flex h-14 items-center gap-3 px-4">
 		<Icon name="layers" size={18} />
 		<span class="text-base font-semibold truncate">
 			{parentWorkspace ? `${parentWorkspace.name} · ` : ''}{ws?.name ?? $currentTeam?.name ?? 'WorkOS'}

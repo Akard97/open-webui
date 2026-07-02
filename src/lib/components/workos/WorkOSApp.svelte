@@ -3,7 +3,7 @@
 	import './styles.css';
 	import Sidebar from './chrome/Sidebar.svelte';
 	import Topbar from './chrome/Topbar.svelte';
-	import BottomNav from './chrome/BottomNav.svelte';
+	import MobileHeader from './chrome/MobileHeader.svelte';
 	import NavDrawer from './chrome/NavDrawer.svelte';
 	import BoardView from './views/BoardView.svelte';
 	import ListView from './views/ListView.svelte';
@@ -41,6 +41,11 @@
 		<Sidebar />
 	{/if}
 	<div class="flex-1 flex flex-col min-w-0">
+		<!-- Mobile: WorkOS header row under the global app bar (mirrors the chat tool's
+		     pattern) — its toggle opens the nav drawer. -->
+		{#if $mobile}
+			<MobileHeader />
+		{/if}
 		<!-- Topbar is workstream chrome (title + tabs); global views (My Work, Inbox, Admin) carry their own header. -->
 		{#if $view === 'board' || $view === 'list' || $view === 'calendar' || $view === 'overview'}
 			<Topbar />
@@ -72,9 +77,6 @@
 				<TaskDetail />
 			{/if}
 		</div>
-		{#if $mobile}
-			<BottomNav />
-		{/if}
 	</div>
 	{#if $mobile}
 		<NavDrawer />
