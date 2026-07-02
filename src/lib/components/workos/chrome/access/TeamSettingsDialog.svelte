@@ -155,14 +155,14 @@
 </script>
 
 <Dialog.Root open={!!req} onOpenChange={(o) => { if (!o) close(); }}>
-	<Dialog.Content class="max-w-lg">
-		<div class="flex items-center gap-3">
-			<div class="size-9 rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 flex items-center justify-center text-sm font-semibold flex-none">
+	<Dialog.Content class="sm:max-w-xl gap-6 rounded-2xl p-7">
+		<div class="flex items-center gap-3.5">
+			<div class="size-11 rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 flex items-center justify-center text-lg font-semibold flex-none">
 				{(team?.key || team?.name || '?').trim().slice(0, 1).toUpperCase()}
 			</div>
 			<div class="flex-1 min-w-0">
-				<Dialog.Title>Team settings</Dialog.Title>
-				<Dialog.Description class="truncate">
+				<Dialog.Title class="text-lg">Team settings</Dialog.Title>
+				<Dialog.Description class="truncate mt-0.5">
 					{team?.name ?? ''}{loaded ? ` · ${members.length} member${members.length === 1 ? '' : 's'}` : ''}
 				</Dialog.Description>
 			</div>
@@ -180,12 +180,12 @@
 				{#if !loaded}
 					<div class="py-8 text-sm text-gray-400">Loading…</div>
 				{:else}
-					<div class="flex flex-col max-h-80 overflow-y-auto">
+					<div class="flex flex-col max-h-80 overflow-y-auto -mx-1 px-1">
 						{#each members as m (m.user_id)}
 							{@const lastOwner = isLastOwner(ownerIds, m.user_id)}
-							<div class="flex items-center gap-3 py-2.5 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
-								<span class="size-8 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 text-[11px] font-semibold inline-flex items-center justify-center flex-none">{initials(m.user_id)}</span>
-								<span class="flex-1 min-w-0 text-sm truncate">{nameOf(m.user_id)}</span>
+							<div class="flex items-center gap-3 py-3 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
+								<span class="size-9 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 text-[11px] font-semibold inline-flex items-center justify-center flex-none">{initials(m.user_id)}</span>
+								<span class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 truncate">{nameOf(m.user_id)}</span>
 								{#if lastOwner}
 									<span class="text-[13px] text-gray-400 flex items-center gap-1.5 px-1" title="The last owner cannot be demoted or removed">
 										<Icon name="lock" size={13} /> Last owner
@@ -223,7 +223,7 @@
 						{/each}
 					</div>
 
-					<div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+					<div class="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
 						<span class="text-gray-400 flex-none"><Icon name="user-plus" size={16} /></span>
 						<Select.Root type="single" bind:value={addUserId} disabled={busy || !candidates.length}>
 							<Select.Trigger class="flex-1 min-w-0 h-9 justify-between font-normal">
@@ -258,17 +258,17 @@
 
 			{#if isOwner}
 				<Tabs.Content value="general">
-					<div class="flex flex-col gap-4 pt-1">
+					<div class="flex flex-col gap-6 pt-2">
 						<div>
-							<div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Team name</div>
-							<div class="flex items-center gap-2">
+							<div class="text-[13px] font-medium text-gray-800 dark:text-gray-200 mb-2.5">Team name</div>
+							<div class="flex items-center gap-2.5">
 								<input
-									class="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent outline-none focus:border-gray-400 dark:focus:border-gray-600"
+									class="flex-1 text-sm text-gray-900 dark:text-gray-100 px-3.5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent outline-none focus:border-gray-500 dark:focus:border-gray-500 transition"
 									bind:value={nameDraft}
 									onkeydown={(e) => { if (e.key === 'Enter') void saveRename(); }}
 								/>
 								<button
-									class="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850 transition disabled:opacity-50"
+									class="text-sm px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-850 transition disabled:opacity-50 flex-none"
 									disabled={busy || !nameDraft.trim() || nameDraft.trim() === team?.name}
 									onclick={() => void saveRename()}
 								>
@@ -277,16 +277,16 @@
 							</div>
 						</div>
 
-						<div class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2.5">
+						<div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3.5">
 							<div class="min-w-0">
-								<div class="text-sm font-medium flex items-center gap-1.5">
+								<div class="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
 									<span class="size-2 rounded-full {team?.archived ? 'bg-gray-400' : 'bg-green-500'} flex-none"></span>
 									{team?.archived ? 'Archived' : 'Active'}
 								</div>
-								<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Archiving hides the team without deleting anything.</div>
+								<div class="text-[13px] text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">Archiving hides the team without deleting anything.</div>
 							</div>
 							<button
-								class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-850 transition disabled:opacity-50 flex-none"
+								class="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 inline-flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-850 transition disabled:opacity-50 flex-none"
 								disabled={busy}
 								onclick={() => void toggleArchived()}
 							>
@@ -294,13 +294,13 @@
 							</button>
 						</div>
 
-						<div class="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/60 px-3 py-2.5">
+						<div class="flex items-center gap-3.5 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50/50 dark:bg-red-950/20 px-4 py-3.5">
 							<div class="flex-1 min-w-0">
-								<div class="text-sm font-medium text-red-600 dark:text-red-400">Delete team</div>
-								<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Removes all workspaces, workstreams and tasks. Cannot be undone.</div>
+								<div class="text-sm font-medium text-red-700 dark:text-red-400">Delete team</div>
+								<div class="text-[13px] text-red-600/80 dark:text-red-400/70 mt-1 leading-relaxed">Removes all workspaces, workstreams and tasks. Cannot be undone.</div>
 							</div>
 							<button
-								class="text-sm px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition flex-none"
+								class="text-sm font-medium px-4 py-2 rounded-lg border border-red-300 dark:border-red-900/60 text-red-700 dark:text-red-400 hover:bg-red-100/70 dark:hover:bg-red-950/40 transition flex-none"
 								disabled={busy}
 								onclick={() => (confirmDelete = true)}
 							>
@@ -315,15 +315,15 @@
 </Dialog.Root>
 
 <Dialog.Root bind:open={confirmDelete}>
-	<Dialog.Content class="max-w-md">
-		<Dialog.Title>Delete team?</Dialog.Title>
-		<Dialog.Description>
-			This permanently deletes <span class="font-medium">{team?.name ?? ''}</span> with all of its
+	<Dialog.Content class="sm:max-w-md gap-4 rounded-2xl p-6">
+		<Dialog.Title class="text-lg">Delete team?</Dialog.Title>
+		<Dialog.Description class="leading-relaxed">
+			This permanently deletes <span class="font-medium text-gray-700 dark:text-gray-200">{team?.name ?? ''}</span> with all of its
 			workspaces, workstreams and tasks. This cannot be undone.
 		</Dialog.Description>
-		<div class="flex justify-end gap-2 mt-4">
-			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850 transition" onclick={() => (confirmDelete = false)}>Cancel</button>
-			<button class="text-sm font-medium px-3.5 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" disabled={busy} onclick={() => void deleteTeam()}>Delete team</button>
+		<div class="flex justify-end gap-2 mt-2">
+			<button class="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-850 transition" onclick={() => (confirmDelete = false)}>Cancel</button>
+			<button class="text-sm font-medium px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" disabled={busy} onclick={() => void deleteTeam()}>Delete team</button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
