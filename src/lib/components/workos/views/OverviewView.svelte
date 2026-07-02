@@ -8,6 +8,7 @@
 		computeKpis, weeklyMomentum, completionTime, priorityPairs, statusMix,
 		teamRows, attentionList, isOpen
 	} from '../lib/overview';
+	import KpiBand from './overview/KpiBand.svelte';
 
 	// Live clock so overdue/day buckets roll over without a reload (spec §2).
 	let now = Date.now();
@@ -42,8 +43,11 @@
 				<div class="text-sm text-gray-500">Add tasks on the board and this overview fills itself in.</div>
 			</div>
 		{:else}
-			<!-- Task 10 mounts KpiBand here -->
-			<div data-slot="kpi"></div>
+			<KpiBand
+				{kpis} {weeks} onWeeks={(w) => (weeks = w)}
+				workspaceName={parentWorkspace?.name ?? ''} workstreamName={ws?.name ?? ''}
+				taskCount={mix.total} {peopleCount}
+			/>
 			<div class="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr] gap-3 items-start">
 				<!-- Task 11 mounts MomentumCard -->
 				<div data-slot="momentum"></div>
