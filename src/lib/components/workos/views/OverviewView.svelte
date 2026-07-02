@@ -9,6 +9,7 @@
 		teamRows, attentionList, isOpen
 	} from '../lib/overview';
 	import KpiBand from './overview/KpiBand.svelte';
+	import MomentumCard from './overview/MomentumCard.svelte';
 
 	// Live clock so overdue/day buckets roll over without a reload (spec §2).
 	let now = Date.now();
@@ -49,8 +50,7 @@
 				taskCount={mix.total} {peopleCount}
 			/>
 			<div class="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr] gap-3 items-start">
-				<!-- Task 11 mounts MomentumCard -->
-				<div data-slot="momentum"></div>
+				<MomentumCard {bins} {completion} />
 				<!-- Task 12 mounts DistributionCard -->
 				<div data-slot="distribution"></div>
 			</div>
