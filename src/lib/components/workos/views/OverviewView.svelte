@@ -12,6 +12,8 @@
 	import MomentumCard from './overview/MomentumCard.svelte';
 	import DistributionCard from './overview/DistributionCard.svelte';
 	import TeamTable from './overview/TeamTable.svelte';
+	import AttentionList from './overview/AttentionList.svelte';
+	import PulseCard from './overview/PulseCard.svelte';
 
 	// Live clock so overdue/day buckets roll over without a reload (spec §2).
 	let now = Date.now();
@@ -57,9 +59,8 @@
 			</div>
 			<TeamTable {rows} />
 			<div class="grid grid-cols-1 xl:grid-cols-[1.35fr_1fr] gap-3 items-start">
-				<!-- Task 14 mounts AttentionList + PulseCard -->
-				<div data-slot="attention"></div>
-				<div data-slot="pulse"></div>
+				<AttentionList items={attention} />
+				<PulseCard items={$wsActivity.items} loaded={$wsActivity.loaded} error={$wsActivity.error} {now} />
 			</div>
 		{/if}
 	</div>
