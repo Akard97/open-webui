@@ -76,3 +76,26 @@ async def test_subtask_counts_enrich_task_models():
     parent = next(t for t in listed if t.id == task.id)
     assert parent.subtask_total == 2
     assert parent.subtask_completed == 1
+
+
+@pytest.mark.asyncio
+async def test_completed_at_not_restamped_on_done_resave():
+    team, s = await _stream()
+    t = await Tasks.insert(s.id, team.id, team.key, 'Task', 'u1', status='todo')
+    done1 = await Tasks.update_fields(t.id, {'status': 'done'})
+    assert done1.completed_at is not None
+    import asyncio
+    await asyncio.sleep(0.002)  # ensure a later _now() would differ
+    done2 = await Tasks.update_fields(t.id, {'status': 'done', 'title': 'Renamed'})
+    assert done2.completed_at == done1.completed_at
+
+
+@pytest.mark.asyncio
+async def test_completed_at_cleared_on_reopen_and_restamped_on_redone():
+    team, s = await _stream()
+    t = await Tasks.insert(s.id, team.id, team.key, 'Task', 'u1', status='todo')
+    done = await Tasks.update_fields(t.id, {'status': 'done'})
+    reopened = await Tasks.update_fields(t.id, {'status': 'in_progress'})
+    assert reopened.completed_at is None
+    redone = await Tasks.update_fields(t.id, {'status': 'done'})
+    assert redone.completed_at is not None and redone.completed_at >= done.completed_at

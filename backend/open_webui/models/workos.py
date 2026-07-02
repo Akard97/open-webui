@@ -705,9 +705,12 @@ class TasksDao:
             row = res.scalars().first()
             if not row:
                 return None
+            prev_status = row.status
             for k, v in fields.items():
                 setattr(row, k, v)
-            if 'status' in fields:
+            if 'status' in fields and fields['status'] != prev_status:
+                # Stamp only on a real transition; a no-op re-save of 'done' must not
+                # shift completion history (feeds the Overview momentum chart).
                 row.completed_at = _now() if fields['status'] == 'done' else None
             row.updated_at = _now()
             await db.commit()
