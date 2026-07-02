@@ -22,7 +22,7 @@
 
 <header class="flex-none border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
 	<!-- Title row -->
-	<div class="h-14 flex items-center gap-3 px-4">
+	<div class="h-12 md:h-14 flex items-center gap-3 px-4">
 		<Icon name="layers" size={18} />
 		<span class="text-base font-semibold truncate">
 			{parentWorkspace ? `${parentWorkspace.name} · ` : ''}{ws?.name ?? $currentTeam?.name ?? 'WorkOS'}
@@ -34,22 +34,24 @@
 		<div class="flex-1"></div>
 
 		{#if ws}
-			<div class="flex -space-x-2">
+			<div class="hidden md:flex items-center gap-3">
+				<div class="flex -space-x-2">
 				{#each assignees as id (id)}
 					<span class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
 				{/each}
 			</div>
 			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true" tabindex="-1"><Icon name="share-2" size={14} /> Share</button>
 			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-900" aria-disabled="true" tabindex="-1"><Icon name="zap" size={14} /> Automation</button>
+			</div>
 		{/if}
 	</div>
 
 	<!-- Tab row -->
 	{#if ws && $view !== 'admin'}
-		<div class="flex items-center gap-1 px-4">
+		<div class="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hidden">
 			{#each TABS as t (t.key)}
 				<button
-					class="px-3 py-2.5 text-sm inline-flex items-center gap-1.5 border-b-2 -mb-px {$view === t.key ? 'border-primary text-primary font-medium' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}"
+					class="flex-none whitespace-nowrap px-3 py-2.5 text-sm inline-flex items-center gap-1.5 border-b-2 -mb-px {$view === t.key ? 'border-primary text-primary font-medium' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}"
 					class:opacity-75={!t.live}
 					onclick={() => selectTab(t)}
 					aria-disabled={!t.live}
