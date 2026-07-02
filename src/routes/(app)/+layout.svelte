@@ -397,9 +397,12 @@
 {/if}
 
 {#if $user}
-	<div class="app relative">
+	<!-- h-full (not h-screen): the root layout's shell owns the viewport — on mobile it
+	     reserves the app-bar row, so asserting h-screen here overflows the slot region
+	     and the shell's overflow-hidden clips the bottom (e.g. WorkOS's bottom nav). -->
+	<div class="app relative h-full">
 		<div
-			class=" text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-900 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
+			class=" text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-900 h-full max-h-[100dvh] overflow-auto flex flex-row justify-end"
 		>
 			{#if !['user', 'admin'].includes($user?.role)}
 				<AccountPending />
