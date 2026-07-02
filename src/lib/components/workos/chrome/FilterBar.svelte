@@ -31,71 +31,11 @@
 
 <svelte:window onclick={onWindowClick} />
 
-<div class="flex-none flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-	<!-- Status -->
-	<div class="relative" data-facet="status">
-		<button class="filter-chip" onclick={() => toggle('status')}>
-			<span class="text-gray-400">Status</span><span class="font-medium">{count($filter.statuses.length) || ' All'}</span>
-			<Icon name="chevron-down" size={13} />
-		</button>
-		{#if open === 'status'}
-			<div class="filter-menu">
-				{#each STATUS_ORDER as s (s)}
-					<label class="filter-item"><input type="checkbox" checked={$filter.statuses.includes(s)} onchange={() => flip('statuses', s)} /> {STATUS_LABEL[s]}</label>
-				{/each}
-			</div>
-		{/if}
-	</div>
-	<!-- Priority -->
-	<div class="relative" data-facet="priority">
-		<button class="filter-chip" onclick={() => toggle('priority')}>
-			<span class="text-gray-400">Priority</span><span class="font-medium">{count($filter.priorities.length) || ' All'}</span>
-			<Icon name="chevron-down" size={13} />
-		</button>
-		{#if open === 'priority'}
-			<div class="filter-menu">
-				{#each PRIORITY_ORDER as p (p)}
-					<label class="filter-item"><input type="checkbox" checked={$filter.priorities.includes(p)} onchange={() => flip('priorities', p)} /> {p}</label>
-				{/each}
-			</div>
-		{/if}
-	</div>
-	<!-- Label -->
-	<div class="relative" data-facet="label">
-		<button class="filter-chip" onclick={() => toggle('label')}>
-			<span class="text-gray-400">Label</span><span class="font-medium">{count($filter.labelIds.length) || ' All'}</span>
-			<Icon name="chevron-down" size={13} />
-		</button>
-		{#if open === 'label'}
-			<div class="filter-menu">
-				{#each $labels as l (l.id)}
-					<label class="filter-item"><input type="checkbox" checked={$filter.labelIds.includes(l.id)} onchange={() => flip('labelIds', l.id)} /> {l.name}</label>
-				{/each}
-			</div>
-		{/if}
-	</div>
-	<!-- Assignee (hidden on My Work) -->
-	{#if showAssignee}
-		<div class="relative" data-facet="assignee">
-			<button class="filter-chip" onclick={() => toggle('assignee')}>
-				<span class="text-gray-400">Assignee</span><span class="font-medium">{count($filter.assigneeIds.length) || ' All'}</span>
-				<Icon name="chevron-down" size={13} />
-			</button>
-			{#if open === 'assignee'}
-				<div class="filter-menu">
-					{#each dirEntries as [id, u] (id)}
-						<label class="filter-item"><input type="checkbox" checked={$filter.assigneeIds.includes(id)} onchange={() => flip('assigneeIds', id)} /> {u.name}</label>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	{/if}
-
-	<div class="flex-1"></div>
-
-	<div class="relative">
+<div class="flex-none flex flex-col md:flex-row md:items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+	<!-- Search: full-width row on mobile, right-aligned on desktop -->
+	<div class="relative md:order-2">
 		<input
-			class="text-sm pl-8 pr-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent w-56"
+			class="text-sm pl-8 pr-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent w-full md:w-56"
 			placeholder="Search title or key…"
 			value={$filter.text}
 			oninput={(e) => filter.update((f) => ({ ...f, text: (e.target as HTMLInputElement).value }))}
@@ -103,8 +43,72 @@
 		<span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"><Icon name="search" size={14} /></span>
 	</div>
 
+	<!-- Facet chips: wrap on mobile, single row + spacer role on desktop -->
+	<div class="flex flex-wrap items-center gap-2 md:order-1 md:flex-1 md:flex-nowrap">
+		<!-- Status -->
+		<div class="relative" data-facet="status">
+			<button class="filter-chip" onclick={() => toggle('status')}>
+				<span class="text-gray-400">Status</span><span class="font-medium">{count($filter.statuses.length) || ' All'}</span>
+				<Icon name="chevron-down" size={13} />
+			</button>
+			{#if open === 'status'}
+				<div class="filter-menu">
+					{#each STATUS_ORDER as s (s)}
+						<label class="filter-item"><input type="checkbox" checked={$filter.statuses.includes(s)} onchange={() => flip('statuses', s)} /> {STATUS_LABEL[s]}</label>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<!-- Priority -->
+		<div class="relative" data-facet="priority">
+			<button class="filter-chip" onclick={() => toggle('priority')}>
+				<span class="text-gray-400">Priority</span><span class="font-medium">{count($filter.priorities.length) || ' All'}</span>
+				<Icon name="chevron-down" size={13} />
+			</button>
+			{#if open === 'priority'}
+				<div class="filter-menu">
+					{#each PRIORITY_ORDER as p (p)}
+						<label class="filter-item"><input type="checkbox" checked={$filter.priorities.includes(p)} onchange={() => flip('priorities', p)} /> {p}</label>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<!-- Label -->
+		<div class="relative" data-facet="label">
+			<button class="filter-chip" onclick={() => toggle('label')}>
+				<span class="text-gray-400">Label</span><span class="font-medium">{count($filter.labelIds.length) || ' All'}</span>
+				<Icon name="chevron-down" size={13} />
+			</button>
+			{#if open === 'label'}
+				<div class="filter-menu">
+					{#each $labels as l (l.id)}
+						<label class="filter-item"><input type="checkbox" checked={$filter.labelIds.includes(l.id)} onchange={() => flip('labelIds', l.id)} /> {l.name}</label>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<!-- Assignee (hidden on My Work) -->
+		{#if showAssignee}
+			<div class="relative" data-facet="assignee">
+				<button class="filter-chip" onclick={() => toggle('assignee')}>
+					<span class="text-gray-400">Assignee</span><span class="font-medium">{count($filter.assigneeIds.length) || ' All'}</span>
+					<Icon name="chevron-down" size={13} />
+				</button>
+				{#if open === 'assignee'}
+					<div class="filter-menu">
+						{#each dirEntries as [id, u] (id)}
+							<label class="filter-item"><input type="checkbox" checked={$filter.assigneeIds.includes(id)} onchange={() => flip('assigneeIds', id)} /> {u.name}</label>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
 	<!-- Optional trailing controls (e.g. List view's Columns picker + Add new), placed after the search. -->
-	<slot />
+	<div class="flex items-center gap-2 md:order-3">
+		<slot />
+	</div>
 </div>
 
 <style>
