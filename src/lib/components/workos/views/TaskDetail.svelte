@@ -36,6 +36,7 @@
 		return 'ring';
 	}
 
+	let showDetails = false;
 	let editingTitle = false;
 	let titleDraft = '';
 	let editingStart = false;
@@ -229,7 +230,7 @@
 	<Dialog.Root open={true} onOpenChange={(o) => { if (!o) closeTask(); }}>
 		<Dialog.Content
 			showCloseButton={false}
-			class="flex flex-col gap-0 p-0 overflow-hidden w-[95vw] max-w-[1100px] sm:max-w-[1100px] max-h-[85vh] bg-white dark:bg-gray-950"
+			class="flex flex-col gap-0 p-0 overflow-hidden w-[95vw] max-w-[1100px] sm:max-w-[1100px] max-h-[85vh] max-md:w-screen max-md:max-w-none max-md:h-dvh max-md:max-h-dvh max-md:rounded-none max-md:border-0 bg-white dark:bg-gray-950"
 		>
 			<Dialog.Title class="sr-only">{t.title}</Dialog.Title>
 			<Dialog.Description class="sr-only">Task details</Dialog.Description>
@@ -238,7 +239,7 @@
 
 			<div class="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
 				<!-- LEFT: title, properties, description -->
-				<div class="w-full md:w-[440px] md:flex-none md:min-h-0 md:overflow-y-auto px-7 py-5 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800">
+				<div class="w-full md:w-[440px] md:flex-none md:min-h-0 md:overflow-y-auto px-4 py-4 md:px-7 md:py-5 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800">
 					<!-- Title -->
 					{#if editingTitle}
 						<!-- svelte-ignore a11y_autofocus -->
@@ -258,6 +259,17 @@
 						</button>
 					{/if}
 
+					<!-- Mobile: properties/description/attachments collapse behind one toggle -->
+					<button
+						class="md:hidden w-full flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm font-medium mb-4"
+						onclick={() => (showDetails = !showDetails)}
+					>
+						Details
+						<span class="text-xs font-normal text-gray-400">status, dates, assignees…</span>
+						<span class="flex-1"></span>
+						<Icon name={showDetails ? 'chevron-up' : 'chevron-down'} size={14} />
+					</button>
+					<div class="{showDetails ? 'block' : 'hidden'} md:block">
 					<!-- Properties -->
 					<div class="space-y-1.5">
 						<!-- Status -->
@@ -509,10 +521,11 @@
 
 					<!-- Attachments -->
 					<AttachmentsPanel />
+					</div>
 				</div>
 
 				<!-- RIGHT: tabs -->
-				<div class="w-full md:flex-1 md:min-w-0 md:min-h-0 md:overflow-y-auto px-7 py-5">
+				<div class="w-full md:flex-1 md:min-w-0 md:min-h-0 md:overflow-y-auto px-4 py-4 md:px-7 md:py-5">
 					<!-- Tabs -->
 					<div>
 						<Tabs.Root value="comments">
@@ -531,7 +544,9 @@
 								<div class="divide-y divide-gray-100 dark:divide-gray-900">
 									{#each sortedComments as c (c.id)}<CommentItem comment={c} />{/each}
 								</div>
-								<CommentComposer taskId={t.id} />
+								<div class="max-md:sticky max-md:bottom-0 max-md:bg-white max-md:dark:bg-gray-950 max-md:pb-[env(safe-area-inset-bottom)]">
+									<CommentComposer taskId={t.id} />
+								</div>
 							</Tabs.Content>
 
 							<Tabs.Content value="activities">

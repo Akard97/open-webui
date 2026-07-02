@@ -27,7 +27,10 @@
 </script>
 
 <div class="flex items-center gap-1 px-2.5 h-12 shrink-0 border-b border-gray-200 dark:border-gray-800">
-	<Button variant="ghost" size="icon-sm" title="Expand" class="text-gray-400">
+	<Button variant="ghost" size="icon-sm" title="Back" class="md:hidden text-gray-500" onclick={closeTask}>
+		<Icon name="arrow-left" size={18} />
+	</Button>
+	<Button variant="ghost" size="icon-sm" title="Expand" class="hidden md:inline-flex text-gray-400">
 		<Icon name="maximize" size={16} />
 	</Button>
 	<div class="flex items-center gap-1.5 min-w-0 text-xs text-gray-400">
@@ -56,7 +59,7 @@
 			{/if}
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>
-	<Button variant="ghost" size="icon-sm" title="Close" class="text-gray-500" onclick={closeTask}>
+	<Button variant="ghost" size="icon-sm" title="Close" class="max-md:hidden text-gray-500" onclick={closeTask}>
 		<Icon name="x" size={16} />
 	</Button>
 </div>
