@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
@@ -71,7 +71,7 @@
 				<button
 					type="button"
 					aria-pressed={$timelineZoom === z}
-					class="px-3 py-1 rounded-full transition capitalize {$timelineZoom === z ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}"
+					class="px-3 py-1 rounded-full transition capitalize {$timelineZoom === z ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}"
 					onclick={() => timelineZoom.set(z)}
 				>{z}</button>
 			{/each}
@@ -85,7 +85,7 @@
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
-				placeholder="Task title…"
+				placeholder="Task titleâ€¦"
 				bind:value={newTitle}
 				onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creatingNew = false; newTitle = ''; } }}
 				autofocus
@@ -106,9 +106,9 @@
 				<!-- Background layer: weekends, gridlines, today line -->
 				<div class="absolute top-0 bottom-0 pointer-events-none" style="left: {railW}px; width: {chartW}px;">
 					{#each weekendDays as d (d)}
-						<div class="absolute top-0 bottom-0 bg-gray-50 dark:bg-gray-900/40" style="left: {dayToX(d, win, dayWidth)}px; width: {dayWidth}px; background-image: repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.025), rgb(0 0 0 / 0.025) 4px, transparent 4px, transparent 8px);"></div>
+						<div class="absolute top-0 bottom-0 bg-gray-50 dark:bg-gray-900/40" style="left: {dayToX(d, win, dayWidth)}px; width: {dayWidth}px; background-image: repeating-linear-gradient(-45deg, rgb(107 114 128 / 0.08), rgb(107 114 128 / 0.08) 4px, transparent 4px, transparent 8px);"></div>
 					{/each}
-					<div class="absolute inset-0" style="background: repeating-linear-gradient(to right, transparent, transparent {gridPeriod - 1}px, rgb(0 0 0 / 0.05) {gridPeriod - 1}px, rgb(0 0 0 / 0.05) {gridPeriod}px); background-position: {gridOffset}px 0;"></div>
+					<div class="absolute inset-0" style="background: repeating-linear-gradient(to right, transparent, transparent {gridPeriod - 1}px, rgb(107 114 128 / 0.12) {gridPeriod - 1}px, rgb(107 114 128 / 0.12) {gridPeriod}px); background-position: {gridOffset}px 0;"></div>
 					<div class="absolute top-0 bottom-0 w-0.5 bg-primary z-10" style="left: {tlx}px;">
 						<span class="absolute top-0 -left-[17px] px-1 py-px rounded bg-primary text-primary-foreground text-[8px] font-bold tracking-wide">TODAY</span>
 					</div>
@@ -130,7 +130,7 @@
 					<div class="flex flex-col items-center justify-center gap-2 py-16 text-center" style="width: {railW + chartW}px;">
 						<span class="sticky left-0 flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500" style="max-width: 100vw;">
 							<Icon name="chart-gantt" size={28} />
-							<span class="text-sm">Nothing scheduled yet — add dates to tasks or create one with “Add new”.</span>
+							<span class="text-sm">Nothing scheduled yet â€” add dates to tasks or create one with â€œAdd newâ€.</span>
 						</span>
 					</div>
 				{/if}
@@ -138,3 +138,4 @@
 		</div>
 	</div>
 </div>
+

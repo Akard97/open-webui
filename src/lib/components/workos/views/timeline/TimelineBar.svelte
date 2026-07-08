@@ -31,6 +31,7 @@
 					class="absolute top-1/2 -translate-y-1/2 z-10"
 					style="left: {geom.left + geom.width / 2 - 8}px;"
 					title={t.title}
+					aria-label={t.title}
 					onclick={() => openTask(t.id)}
 				>
 					<span class="block w-4 h-4 rotate-45 rounded-[3px]" style="background:{color}; box-shadow: 0 1px 4px {color}66;"></span>
@@ -40,9 +41,11 @@
 					{...props}
 					type="button"
 					class="absolute top-1/2 -translate-y-1/2 h-6 rounded-md z-10 flex items-center px-2 gap-1.5 text-[10px] font-semibold text-white whitespace-nowrap overflow-hidden"
-					style="left: {geom.left}px; width: {geom.width}px; background: {t.status === 'done'
+					style="left: {geom.left}px; width: {geom.width}px; background: {t.status === 'done' || pct <= 0 || pct >= 100
 						? color
 						: `linear-gradient(to right, ${color} ${pct}%, ${color}42 ${pct}%)`}; box-shadow: 0 1px 3px {color}55;"
+					title={t.title}
+					aria-label={t.title}
 					onclick={() => openTask(t.id)}
 				>
 					{#if geom.width >= 64}<span class="flex-none">{stateText}</span>{/if}
