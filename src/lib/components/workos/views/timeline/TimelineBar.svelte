@@ -30,6 +30,7 @@
 	type Mode = 'move' | 'start' | 'end';
 	let mode: Mode | null = null;
 	let x0 = 0;
+	let sl0 = 0;
 	let dx = 0;
 	let canceled = false;
 
@@ -50,13 +51,14 @@
 		e.stopPropagation();
 		mode = m;
 		x0 = e.clientX;
+		sl0 = scroller?.scrollLeft ?? 0;
 		dx = 0;
 		canceled = false;
 		(e.currentTarget as Element).setPointerCapture(e.pointerId);
 	}
 	function move(e: PointerEvent) {
 		if (!mode || canceled) return;
-		dx = e.clientX - x0;
+		dx = e.clientX - x0 + ((scroller?.scrollLeft ?? 0) - sl0);
 		// Edge auto-pan: keep dragging usable past the viewport.
 		if (scroller) {
 			const r = scroller.getBoundingClientRect();
@@ -106,13 +108,14 @@
 					{...props}
 					role="button"
 					tabindex="0"
-					class="group absolute top-1/2 -translate-y-1/2 z-10 touch-none {disabled ? '' : 'cursor-grab'} {mode ? 'cursor-grabbing' : ''}"
+					class="group absolute top-1/2 -translate-y-1/2 z-10 {disabled ? '' : 'cursor-grab touch-none'} {mode ? 'cursor-grabbing' : ''}"
 					style="left: {geom.left + geom.width / 2 - 8}px;"
 					title={t.title}
 					aria-label={t.title}
 					onpointerdown={(e) => down(e, 'move')}
 					onpointermove={move}
 					onpointerup={up}
+					onclick={() => { if (disabled) openTask(t.id); }}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openTask(t.id); }}
 				>
 					<span class="block w-4 h-4 rotate-45 rounded-[3px]" style="background:{color}; box-shadow: 0 1px 4px {color}66;"></span>
@@ -130,7 +133,7 @@
 					{...props}
 					role="button"
 					tabindex="0"
-					class="group absolute top-1/2 -translate-y-1/2 h-6 rounded-md z-10 flex items-center px-2 gap-1.5 text-[10px] font-semibold text-white whitespace-nowrap touch-none select-none {disabled ? '' : 'cursor-grab'} {mode ? 'cursor-grabbing' : ''}"
+					class="group absolute top-1/2 -translate-y-1/2 h-6 rounded-md z-10 flex items-center px-2 gap-1.5 text-[10px] font-semibold text-white whitespace-nowrap select-none {disabled ? '' : 'cursor-grab touch-none'} {mode ? 'cursor-grabbing' : ''}"
 					title={t.title}
 					aria-label={t.title}
 					style="left: {geom.left}px; width: {geom.width}px; background: {t.status === 'done' || pct <= 0 || pct >= 100
@@ -139,6 +142,7 @@
 					onpointerdown={(e) => down(e, 'move')}
 					onpointermove={move}
 					onpointerup={up}
+					onclick={() => { if (disabled) openTask(t.id); }}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openTask(t.id); }}
 				>
 					{#if geom.width >= 64}<span class="flex-none overflow-hidden">{stateText}</span>{/if}

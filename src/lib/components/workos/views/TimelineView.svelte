@@ -40,7 +40,7 @@
 	let scroller: HTMLElement | null = null;
 	function scrollToToday() {
 		if (!scroller) return;
-		scroller.scrollLeft = Math.max(0, railW + tlx - scroller.clientWidth * 0.3);
+		scroller.scrollLeft = Math.max(0, tlx - (scroller.clientWidth - railW) * 0.3);
 	}
 	// Initial scroll per workstream + zoom (re-anchors today after either changes).
 	let scrolledFor = '';
@@ -74,14 +74,16 @@
 	let rowsEl: HTMLElement | null = null;
 	let hoverDay: number | null = null;
 	function laneDay(e: DragEvent): number | null {
-		if (!rowsEl) return null;
+		if (!rowsEl || !scroller) return null;
+		if (e.clientX - scroller.getBoundingClientRect().left < railW) return null;
 		const x = e.clientX - rowsEl.getBoundingClientRect().left - railW;
 		return x < 0 ? null : xToDay(x, win, dayWidth);
 	}
 	function dragOver(e: DragEvent) {
 		if (!e.dataTransfer?.types.includes('text/workos-task')) return;
-		e.preventDefault(); // allow drop
-		hoverDay = laneDay(e);
+		const day = laneDay(e);
+		hoverDay = day;
+		if (day != null) e.preventDefault();
 	}
 	async function drop(e: DragEvent) {
 		const id = e.dataTransfer?.getData('text/workos-task');
@@ -202,7 +204,7 @@
 				<!-- Rows -->
 				{#if items.length}
 					{#each items as item (item.task.id)}
-						<div class="flex border-b border-gray-100 dark:border-gray-900" style="height: {rowH}px;">
+						<div class="flex border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-900/30" style="height: {rowH}px;">
 							<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-900" style="width: {railW}px;">
 								<TimelineRail {item} {today} compact={$mobile} />
 							</div>
