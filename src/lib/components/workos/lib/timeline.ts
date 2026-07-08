@@ -166,3 +166,27 @@ export function monthSpans(win: TimelineWindow): MonthSpan[] {
 	}
 	return spans;
 }
+
+// ── Drag edits ──────────────────────────────────────────────────────────────
+export interface DatePatch {
+	start_date?: number | null;
+	due_date?: number | null;
+}
+
+/** Shift the whole item by dayDelta. Only fields the task actually has are
+ * returned, so a start-only bar never gains a due date from a move. */
+export function applyMove(item: TimelineItem, dayDelta: number): DatePatch {
+	const p: DatePatch = {};
+	if (item.task.start_date != null) p.start_date = dayToTs(tsToDay(item.task.start_date) + dayDelta);
+	if (item.task.due_date != null) p.due_date = dayToTs(tsToDay(item.task.due_date) + dayDelta);
+	return p;
+}
+
+/** Move one edge by dayDelta, clamped so the item never inverts (1-day min).
+ * Creates the missing date when resizing the open side of a one-sided item. */
+export function applyResize(item: TimelineItem, edge: 'start' | 'end', dayDelta: number): DatePatch {
+	if (edge === 'start') {
+		return { start_date: dayToTs(Math.min(item.startDay + dayDelta, item.endDay)) };
+	}
+	return { due_date: dayToTs(Math.max(item.endDay + dayDelta, item.startDay)) };
+}

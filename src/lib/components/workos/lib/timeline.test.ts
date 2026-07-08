@@ -4,7 +4,8 @@ import {
 	DAY_MS, tsToDay, dayToTs, todayDay,
 	classifyTask, timelineItems, unscheduledTasks,
 	computeWindow, MIN_WINDOW_DAYS,
-	ZOOM_DAY_WIDTH, parseZoom, dayToX, xToDay, todayLineX, barGeometry, isWeekend, isWeekStart, dayNumber, monthSpans
+	ZOOM_DAY_WIDTH, parseZoom, dayToX, xToDay, todayLineX, barGeometry, isWeekend, isWeekStart, dayNumber, monthSpans,
+	applyMove, applyResize
 } from './timeline';
 
 // Minimal task factory — only the fields the timeline math reads.
@@ -186,5 +187,47 @@ describe('header helpers', () => {
 			{ label: 'June 2026', startDay: start, days: 3 },
 			{ label: 'July 2026', startDay: start + 3, days: 7 }
 		]);
+	});
+});
+
+describe('applyMove', () => {
+	const s = D('2026-07-01'), e = D('2026-07-05');
+	it('shifts both dates of a full bar', () => {
+		const item = timelineItems([makeTask({ start_date: dayToTs(s), due_date: dayToTs(e) })])[0];
+		expect(applyMove(item, 3)).toEqual({ start_date: dayToTs(s + 3), due_date: dayToTs(e + 3) });
+		expect(applyMove(item, -2)).toEqual({ start_date: dayToTs(s - 2), due_date: dayToTs(e - 2) });
+	});
+	it('start-only bar moves only start_date', () => {
+		const item = timelineItems([makeTask({ start_date: dayToTs(s) })])[0];
+		expect(applyMove(item, 4)).toEqual({ start_date: dayToTs(s + 4) });
+	});
+	it('milestone moves only due_date', () => {
+		const item = timelineItems([makeTask({ due_date: dayToTs(e) })])[0];
+		expect(applyMove(item, -1)).toEqual({ due_date: dayToTs(e - 1) });
+	});
+});
+
+describe('applyResize', () => {
+	const s = D('2026-07-01'), e = D('2026-07-05');
+	const bar = () => timelineItems([makeTask({ start_date: dayToTs(s), due_date: dayToTs(e) })])[0];
+	it('start edge moves start_date only', () => {
+		expect(applyResize(bar(), 'start', 2)).toEqual({ start_date: dayToTs(s + 2) });
+	});
+	it('end edge moves due_date only', () => {
+		expect(applyResize(bar(), 'end', -1)).toEqual({ due_date: dayToTs(e - 1) });
+	});
+	it('clamps to a 1-day minimum (start cannot pass end, end cannot pass start)', () => {
+		expect(applyResize(bar(), 'start', 99)).toEqual({ start_date: dayToTs(e) });
+		expect(applyResize(bar(), 'end', -99)).toEqual({ due_date: dayToTs(s) });
+	});
+	it('end edge on a start-only bar creates a due_date ≥ start', () => {
+		const item = timelineItems([makeTask({ start_date: dayToTs(s) })])[0];
+		expect(applyResize(item, 'end', 3)).toEqual({ due_date: dayToTs(s + 3) });
+		expect(applyResize(item, 'end', -5)).toEqual({ due_date: dayToTs(s) });
+	});
+	it('start edge on a milestone creates a start_date ≤ due', () => {
+		const item = timelineItems([makeTask({ due_date: dayToTs(e) })])[0];
+		expect(applyResize(item, 'start', -3)).toEqual({ start_date: dayToTs(e - 3) });
+		expect(applyResize(item, 'start', 4)).toEqual({ start_date: dayToTs(e) });
 	});
 });
