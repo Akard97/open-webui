@@ -1209,6 +1209,7 @@ Replace the file with:
 					class="group absolute top-1/2 -translate-y-1/2 z-10 touch-none {disabled ? '' : 'cursor-grab'} {mode ? 'cursor-grabbing' : ''}"
 					style="left: {geom.left + geom.width / 2 - 8}px;"
 					title={t.title}
+					aria-label={t.title}
 					onpointerdown={(e) => down(e, 'move')}
 					onpointermove={move}
 					onpointerup={up}
@@ -1230,7 +1231,9 @@ Replace the file with:
 					role="button"
 					tabindex="0"
 					class="group absolute top-1/2 -translate-y-1/2 h-6 rounded-md z-10 flex items-center px-2 gap-1.5 text-[10px] font-semibold text-white whitespace-nowrap touch-none select-none {disabled ? '' : 'cursor-grab'} {mode ? 'cursor-grabbing' : ''}"
-					style="left: {geom.left}px; width: {geom.width}px; background: {t.status === 'done'
+					title={t.title}
+					aria-label={t.title}
+					style="left: {geom.left}px; width: {geom.width}px; background: {t.status === 'done' || pct <= 0 || pct >= 100
 						? color
 						: `linear-gradient(to right, ${color} ${pct}%, ${color}42 ${pct}%)`}; box-shadow: 0 1px 3px {color}55;"
 					onpointerdown={(e) => down(e, 'move')}
