@@ -5,12 +5,14 @@
 	import TimelineHeader from './timeline/TimelineHeader.svelte';
 	import TimelineRail from './timeline/TimelineRail.svelte';
 	import TimelineBar from './timeline/TimelineBar.svelte';
+	import UnscheduledPanel from './timeline/UnscheduledPanel.svelte';
+	import { toast } from 'svelte-sonner';
 	import {
-		boardFilter, filteredTasks, currentWorkstream, timelineZoom, addTask
+		boardFilter, filteredTasks, currentWorkstream, timelineZoom, addTask, editTask
 	} from '../lib/store';
 	import {
 		timelineItems, computeWindow, todayDay, todayLineX, dayToX, isWeekend, dayToTs,
-		ZOOM_ORDER, ZOOM_DAY_WIDTH
+		ZOOM_ORDER, ZOOM_DAY_WIDTH, unscheduledTasks, xToDay
 	} from '../lib/timeline';
 
 	const RAIL_W = 260;
@@ -61,6 +63,48 @@
 		const ts = dayToTs(todayDay(Date.now()));
 		await addTask(ws.id, { title, start_date: ts, due_date: ts });
 	}
+
+	$: unscheduled = unscheduledTasks($filteredTasks);
+	let railCollapsed = false;
+
+	// HTML5 drop target state: the hovered chart day while a rail card is dragged.
+	let rowsEl: HTMLElement | null = null;
+	let hoverDay: number | null = null;
+	function laneDay(e: DragEvent): number | null {
+		if (!rowsEl) return null;
+		const x = e.clientX - rowsEl.getBoundingClientRect().left - railW;
+		return x < 0 ? null : xToDay(x, win, dayWidth);
+	}
+	function dragOver(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('text/workos-task')) return;
+		e.preventDefault(); // allow drop
+		hoverDay = laneDay(e);
+	}
+	async function drop(e: DragEvent) {
+		const id = e.dataTransfer?.getData('text/workos-task');
+		const day = laneDay(e);
+		hoverDay = null;
+		if (!id || day == null) return;
+		e.preventDefault();
+		try {
+			await editTask(id, { start_date: dayToTs(day), due_date: dayToTs(day) });
+		} catch {
+			toast.error('Could not schedule the task');
+		}
+	}
+
+	// Per-chart quick add (bottom row).
+	let addingRow = false;
+	let rowTitle = '';
+	async function submitRow() {
+		const ws = $currentWorkstream;
+		const title = rowTitle.trim();
+		if (!title || !ws) return;
+		rowTitle = '';
+		addingRow = false;
+		const ts = dayToTs(todayDay(Date.now()));
+		await addTask(ws.id, { title, start_date: ts, due_date: ts });
+	}
 </script>
 
 <div class="h-full flex flex-col min-h-0">
@@ -103,7 +147,15 @@
 		<div bind:this={scroller} class="flex-1 overflow-auto min-w-0">
 			<TimelineHeader {win} {dayWidth} zoom={$timelineZoom} {today} {railW} />
 
-			<div class="relative" style="width: {railW + chartW}px;">
+			<div
+				bind:this={rowsEl}
+				role="list"
+				class="relative"
+				style="width: {railW + chartW}px;"
+				ondragover={dragOver}
+				ondragleave={() => (hoverDay = null)}
+				ondrop={drop}
+			>
 				<!-- Background layer: weekends, gridlines, today line -->
 				<div class="absolute top-0 bottom-0 pointer-events-none" style="left: {railW}px; width: {chartW}px;">
 					{#each weekendDays as d (d)}
@@ -114,6 +166,12 @@
 						<span class="absolute top-0 -left-[17px] px-1 py-px rounded bg-primary text-primary-foreground text-[8px] font-bold tracking-wide">TODAY</span>
 					</div>
 				</div>
+
+				{#if hoverDay != null}
+					<div class="absolute top-0 bottom-0 z-30 border-l-2 border-dashed border-primary pointer-events-none" style="left: {railW + dayToX(hoverDay, win, dayWidth)}px;">
+						<span class="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[9px] font-bold whitespace-nowrap">Schedule here</span>
+					</div>
+				{/if}
 
 				<!-- Rows -->
 				{#if items.length}
@@ -135,7 +193,29 @@
 						</span>
 					</div>
 				{/if}
+
+				<!-- Add-task row -->
+				<div class="flex" style="height: {ROW_H}px;">
+					<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 flex items-center px-3" style="width: {railW}px;">
+						{#if addingRow}
+							<!-- svelte-ignore a11y_autofocus -->
+							<input
+								class="text-sm px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-full"
+								placeholder="Task title…"
+								bind:value={rowTitle}
+								onkeydown={(e) => { if (e.key === 'Enter') submitRow(); if (e.key === 'Escape') { addingRow = false; rowTitle = ''; } }}
+								autofocus
+							/>
+						{:else}
+							<button class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:opacity-80" onclick={() => { addingRow = true; rowTitle = ''; }}>
+								<Icon name="plus" size={15} /> Add task
+							</button>
+						{/if}
+					</div>
+				</div>
 			</div>
 		</div>
+
+		<UnscheduledPanel tasks={unscheduled} bind:collapsed={railCollapsed} />
 	</div>
 </div>
