@@ -123,7 +123,7 @@
 								<TimelineRail {item} {today} />
 							</div>
 							<div class="relative flex-none" style="width: {chartW}px;">
-								<TimelineBar {item} {win} {dayWidth} {today} />
+								<TimelineBar {item} {win} {dayWidth} {today} {scroller} />
 							</div>
 						</div>
 					{/each}
