@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
@@ -85,7 +85,8 @@
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
-				placeholder="Task titleâ€¦"
+				placeholder="Task title…"
+				aria-label="Task title"
 				bind:value={newTitle}
 				onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creatingNew = false; newTitle = ''; } }}
 				autofocus
@@ -130,7 +131,7 @@
 					<div class="flex flex-col items-center justify-center gap-2 py-16 text-center" style="width: {railW + chartW}px;">
 						<span class="sticky left-0 flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500" style="max-width: 100vw;">
 							<Icon name="chart-gantt" size={28} />
-							<span class="text-sm">Nothing scheduled yet â€” add dates to tasks or create one with â€œAdd newâ€.</span>
+							<span class="text-sm">Nothing scheduled yet — add dates to tasks or create one with “Add new”.</span>
 						</span>
 					</div>
 				{/if}
@@ -138,4 +139,3 @@
 		</div>
 	</div>
 </div>
-
