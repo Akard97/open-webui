@@ -12,11 +12,12 @@
 		{ key: 'overview', label: 'Overview', icon: 'layers', live: true },
 		{ key: 'list', label: 'List', icon: 'list', live: true },
 		{ key: 'board', label: 'Board', icon: 'columns', live: true },
+		{ key: 'timeline', label: 'Timeline', icon: 'chart-gantt', live: true },
 		{ key: 'calendar', label: 'Calendar', icon: 'calendar', live: true },
 		{ key: 'files', label: 'Files', icon: 'paperclip', live: false }
 	];
 	function selectTab(t: (typeof TABS)[number]) {
-		if (t.live) view.set(t.key as 'board' | 'list' | 'calendar' | 'overview');
+		if (t.live) view.set(t.key as 'board' | 'list' | 'calendar' | 'overview' | 'timeline');
 	}
 </script>
 

@@ -9,6 +9,7 @@
 	import ListView from './views/ListView.svelte';
 	import OverviewView from './views/OverviewView.svelte';
 	import CalendarView from './views/CalendarView.svelte';
+	import TimelineView from './views/TimelineView.svelte';
 	import TaskDetail from './views/TaskDetail.svelte';
 	import AdminApp from './views/admin/AdminApp.svelte';
 	import InboxView from './views/InboxView.svelte';
@@ -47,7 +48,7 @@
 			<MobileHeader />
 		{/if}
 		<!-- Topbar is workstream chrome (title + tabs); global views (My Work, Inbox, Admin) carry their own header. -->
-		{#if $view === 'board' || $view === 'list' || $view === 'calendar' || $view === 'overview'}
+		{#if $view === 'board' || $view === 'list' || $view === 'calendar' || $view === 'overview' || $view === 'timeline'}
 			<Topbar />
 		{/if}
 		<div class="flex-1 relative min-h-0 bg-gray-50 dark:bg-gray-900">
@@ -70,6 +71,8 @@
 				<ListView />
 			{:else if $view === 'calendar'}
 				<CalendarView />
+			{:else if $view === 'timeline'}
+				<TimelineView />
 			{:else}
 				<BoardView />
 			{/if}

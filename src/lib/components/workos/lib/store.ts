@@ -14,8 +14,9 @@ import {
 } from './types';
 import { applyFilters, emptyFilter } from './filters';
 import { defaultColumnPrefs, parseColumnPrefs, type ColumnPrefs } from './columns';
+import { parseZoom, type ZoomKey } from './timeline';
 
-export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview';
+export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview' | 'timeline';
 
 export type ModalRequest =
 	| { kind: 'team' }
@@ -78,6 +79,13 @@ export const listColumns: Writable<ColumnPrefs> = writable(
 	browser ? parseColumnPrefs(localStorage.getItem(LIST_COLUMNS_KEY)) : defaultColumnPrefs()
 );
 if (browser) listColumns.subscribe((v) => localStorage.setItem(LIST_COLUMNS_KEY, JSON.stringify(v)));
+
+// Timeline zoom preset, persisted per browser like the list columns.
+const TIMELINE_ZOOM_KEY = 'workos:timeline-zoom';
+export const timelineZoom: Writable<ZoomKey> = writable(
+	browser ? parseZoom(localStorage.getItem(TIMELINE_ZOOM_KEY)) : 'month'
+);
+if (browser) timelineZoom.subscribe((v) => localStorage.setItem(TIMELINE_ZOOM_KEY, v));
 
 export const comments: Writable<Comment[]> = writable([]);
 export const activity: Writable<Activity[]> = writable([]);
