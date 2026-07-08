@@ -83,3 +83,86 @@ export function computeWindow(items: TimelineItem[], today: number): TimelineWin
 	if (hi - lo + 1 < MIN_WINDOW_DAYS) hi = lo + MIN_WINDOW_DAYS - 1;
 	return { startDay: lo, endDay: hi, days: hi - lo + 1 };
 }
+
+// ── Zoom ────────────────────────────────────────────────────────────────────
+export type ZoomKey = 'week' | 'month' | 'quarter';
+export const ZOOM_ORDER: ZoomKey[] = ['week', 'month', 'quarter'];
+export const ZOOM_DAY_WIDTH: Record<ZoomKey, number> = { week: 48, month: 24, quarter: 8 };
+
+export function parseZoom(raw: string | null): ZoomKey {
+	return raw === 'week' || raw === 'month' || raw === 'quarter' ? raw : 'month';
+}
+
+// ── Scale ───────────────────────────────────────────────────────────────────
+export function dayToX(day: number, win: TimelineWindow, dayWidth: number): number {
+	return (day - win.startDay) * dayWidth;
+}
+export function xToDay(x: number, win: TimelineWindow, dayWidth: number): number {
+	return win.startDay + Math.floor(x / dayWidth);
+}
+/** The today marker sits mid-column of today's day. */
+export function todayLineX(today: number, win: TimelineWindow, dayWidth: number): number {
+	return dayToX(today, win, dayWidth) + dayWidth / 2;
+}
+
+// ── Geometry ────────────────────────────────────────────────────────────────
+export interface BarGeom {
+	left: number;
+	width: number;
+	/** Hatched overdue tail after the bar, 0 when not overdue. */
+	slipWidth: number;
+}
+
+export function barGeometry(
+	item: TimelineItem,
+	win: TimelineWindow,
+	dayWidth: number,
+	today: number
+): BarGeom {
+	const left = dayToX(item.startDay, win, dayWidth);
+	const width = (item.endDay - item.startDay + 1) * dayWidth;
+	const open = item.task.status !== 'done' && item.task.status !== 'canceled';
+	const slipWidth =
+		open && item.endDay < today
+			? Math.max(0, todayLineX(today, win, dayWidth) - (left + width))
+			: 0;
+	return { left, width, slipWidth };
+}
+
+// ── Header helpers (all UTC — matches the storage convention) ───────────────
+export function utcDate(day: number): Date {
+	return new Date(day * DAY_MS);
+}
+export function isWeekend(day: number): boolean {
+	const wd = utcDate(day).getUTCDay();
+	return wd === 0 || wd === 6;
+}
+export function isWeekStart(day: number): boolean {
+	return utcDate(day).getUTCDay() === 1; // Monday
+}
+export function dayNumber(day: number): number {
+	return utcDate(day).getUTCDate();
+}
+export function weekdayShort(day: number): string {
+	return utcDate(day).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+}
+
+export interface MonthSpan {
+	label: string;
+	startDay: number;
+	days: number;
+}
+export function monthSpans(win: TimelineWindow): MonthSpan[] {
+	const spans: MonthSpan[] = [];
+	for (let d = win.startDay; d <= win.endDay; d++) {
+		const label = utcDate(d).toLocaleDateString('en-US', {
+			month: 'long',
+			year: 'numeric',
+			timeZone: 'UTC'
+		});
+		const last = spans[spans.length - 1];
+		if (last && last.label === label) last.days += 1;
+		else spans.push({ label, startDay: d, days: 1 });
+	}
+	return spans;
+}

@@ -3,7 +3,8 @@ import type { Task } from './types';
 import {
 	DAY_MS, tsToDay, dayToTs, todayDay,
 	classifyTask, timelineItems, unscheduledTasks,
-	computeWindow, MIN_WINDOW_DAYS
+	computeWindow, MIN_WINDOW_DAYS,
+	ZOOM_DAY_WIDTH, parseZoom, dayToX, xToDay, todayLineX, barGeometry, isWeekend, isWeekStart, dayNumber, monthSpans
 } from './timeline';
 
 // Minimal task factory — only the fields the timeline math reads.
@@ -114,5 +115,76 @@ describe('computeWindow', () => {
 		expect(w.startDay).toBeLessThanOrEqual(today);
 		expect(w.endDay).toBeGreaterThanOrEqual(today);
 		expect(w.days).toBeGreaterThanOrEqual(MIN_WINDOW_DAYS);
+	});
+});
+
+describe('zoom + scale', () => {
+	it('parseZoom accepts the three presets and defaults to month', () => {
+		expect(parseZoom('week')).toBe('week');
+		expect(parseZoom('quarter')).toBe('quarter');
+		expect(parseZoom(null)).toBe('month');
+		expect(parseZoom('bogus')).toBe('month');
+	});
+	it('dayToX/xToDay round-trip at every preset width', () => {
+		const win = { startDay: 100, endDay: 199, days: 100 };
+		for (const w of Object.values(ZOOM_DAY_WIDTH)) {
+			expect(dayToX(107, win, w)).toBe(7 * w);
+			expect(xToDay(7 * w, win, w)).toBe(107);
+			expect(xToDay(7 * w + w - 1, win, w)).toBe(107); // anywhere in the column
+		}
+	});
+	it('todayLineX sits mid-column', () => {
+		const win = { startDay: 100, endDay: 199, days: 100 };
+		expect(todayLineX(107, win, 24)).toBe(7 * 24 + 12);
+	});
+});
+
+describe('barGeometry', () => {
+	const win = { startDay: 100, endDay: 199, days: 100 };
+	const w = 24;
+	it('bar spans inclusive days', () => {
+		const item = { task: makeTask({ status: 'in_progress' }), kind: 'bar' as const, startDay: 110, endDay: 114 };
+		const g = barGeometry(item, win, w, 120);
+		expect(g.left).toBe(10 * w);
+		expect(g.width).toBe(5 * w); // 5 inclusive days
+	});
+	it('open + past-due grows a slip tail up to the today line', () => {
+		const item = { task: makeTask({ status: 'in_progress' }), kind: 'bar' as const, startDay: 110, endDay: 114 };
+		const g = barGeometry(item, win, w, 120);
+		// tail: from bar end (day 115 boundary) to mid-column of day 120
+		expect(g.slipWidth).toBe(todayLineX(120, win, w) - (g.left + g.width));
+		expect(g.slipWidth).toBeGreaterThan(0);
+	});
+	it('done tasks and future tasks have no slip', () => {
+		const done = { task: makeTask({ status: 'done' }), kind: 'bar' as const, startDay: 110, endDay: 114 };
+		expect(barGeometry(done, win, w, 120).slipWidth).toBe(0);
+		const future = { task: makeTask({ status: 'todo' }), kind: 'bar' as const, startDay: 130, endDay: 134 };
+		expect(barGeometry(future, win, w, 120).slipWidth).toBe(0);
+	});
+	it('due today → no slip (the due day is not overdue)', () => {
+		const item = { task: makeTask({ status: 'todo' }), kind: 'bar' as const, startDay: 118, endDay: 120 };
+		expect(barGeometry(item, win, w, 120).slipWidth).toBe(0);
+	});
+});
+
+describe('header helpers', () => {
+	it('weekend/week-start use UTC weekdays', () => {
+		const sat = Date.UTC(2026, 6, 11) / DAY_MS; // 2026-07-11 = Saturday
+		expect(isWeekend(sat)).toBe(true);
+		expect(isWeekend(sat + 1)).toBe(true); // Sunday
+		expect(isWeekend(sat + 2)).toBe(false); // Monday
+		expect(isWeekStart(sat + 2)).toBe(true);
+	});
+	it('dayNumber reads the UTC date', () => {
+		expect(dayNumber(Date.UTC(2026, 6, 9) / DAY_MS)).toBe(9);
+	});
+	it('monthSpans groups the window by UTC month with day counts', () => {
+		const start = Date.UTC(2026, 5, 28) / DAY_MS; // Jun 28
+		const win = { startDay: start, endDay: start + 9, days: 10 }; // Jun 28 – Jul 7
+		const spans = monthSpans(win);
+		expect(spans).toEqual([
+			{ label: 'June 2026', startDay: start, days: 3 },
+			{ label: 'July 2026', startDay: start + 3, days: 7 }
+		]);
 	});
 });
