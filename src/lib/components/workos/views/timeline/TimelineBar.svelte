@@ -117,7 +117,7 @@
 				>
 					<span class="block w-4 h-4 rotate-45 rounded-[3px]" style="background:{color}; box-shadow: 0 1px 4px {color}66;"></span>
 					{#if !disabled}
-						<span class="{GRIP} -left-2.5" onpointerdown={(e) => down(e, 'start')} onpointermove={move} onpointerup={up}></span>
+						<span class="{GRIP} -left-2.5" onpointerdown={(e) => down(e, 'start')}></span>
 					{/if}
 					{#if mode}
 						<span class="absolute -top-7 left-0 px-2 py-0.5 rounded-md bg-gray-900 text-white text-[10px] font-medium whitespace-nowrap z-30">
@@ -148,8 +148,8 @@
 						</span>
 					{/if}
 					{#if !disabled}
-						<span class="{GRIP} -left-[3px]" onpointerdown={(e) => down(e, 'start')} onpointermove={move} onpointerup={up}></span>
-						<span class="{GRIP} -right-[3px]" onpointerdown={(e) => down(e, 'end')} onpointermove={move} onpointerup={up}></span>
+						<span class="{GRIP} -left-[3px]" onpointerdown={(e) => down(e, 'start')}></span>
+						<span class="{GRIP} -right-[3px]" onpointerdown={(e) => down(e, 'end')}></span>
 					{/if}
 					{#if mode}
 						<span class="absolute -top-7 left-0 px-2 py-0.5 rounded-md bg-gray-900 text-white text-[10px] font-medium whitespace-nowrap z-30">
