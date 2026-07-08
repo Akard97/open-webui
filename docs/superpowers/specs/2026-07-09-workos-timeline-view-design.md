@@ -129,9 +129,10 @@ the bar showing the pending range (`Jul 9 → Jul 14`).
   the new task appears on the chart immediately (status defaults to backlog).
 - **Cancel/scroll**: Esc cancels an in-flight drag; dragging near the viewport
   edge auto-scrolls the chart.
-- **Write gating**: when `!canEditTask(task, userId, role)` (existing
-  `lib/roles` predicate) the bar shows no handles or grab cursor and drags are
-  inert — cosmetic only; the server re-checks `PATCH /tasks/{id}` regardless.
+- **Write gating**: follows the existing inline-edit precedent (List cells,
+  Board drag, Calendar drag are not client-gated) — drags are attempted
+  optimistically and the server enforces `require_task_writable`; on a 403 the
+  store's `editTask` rollback restores the bar and a toast reports the failure.
 
 ## Data flow
 
