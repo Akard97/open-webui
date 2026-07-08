@@ -7,17 +7,19 @@
 	import TimelineBar from './timeline/TimelineBar.svelte';
 	import UnscheduledPanel from './timeline/UnscheduledPanel.svelte';
 	import { toast } from 'svelte-sonner';
+	import { mobile } from '$lib/stores';
 	import {
-		boardFilter, filteredTasks, currentWorkstream, timelineZoom, addTask, editTask
+		boardFilter, filteredTasks, currentWorkstream, timelineZoom, addTask, editTask, openTask
 	} from '../lib/store';
 	import {
 		timelineItems, computeWindow, todayDay, todayLineX, dayToX, isWeekend, dayToTs,
 		ZOOM_ORDER, ZOOM_DAY_WIDTH, unscheduledTasks, xToDay
 	} from '../lib/timeline';
+	import { STATUS_COLOR } from '../lib/colors';
 
 	const RAIL_W = 260;
-	const ROW_H = 46;
-	$: railW = RAIL_W;
+	$: railW = $mobile ? 150 : RAIL_W;
+	$: rowH = $mobile ? 40 : 46;
 
 	// `now` refreshes when the workstream changes so the today line/slip tails
 	// stay correct in long-lived sessions.
@@ -66,6 +68,7 @@
 
 	$: unscheduled = unscheduledTasks($filteredTasks);
 	let railCollapsed = false;
+	let showUnscheduled = false;
 
 	// HTML5 drop target state: the hovered chart day while a rail card is dragged.
 	let rowsEl: HTMLElement | null = null;
@@ -142,6 +145,29 @@
 		{/if}
 	</FilterBar>
 
+	{#if $mobile && unscheduled.length}
+		<div class="flex-none px-3 pt-3 bg-white dark:bg-gray-950">
+			<button
+				class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 text-sm font-medium"
+				onclick={() => (showUnscheduled = !showUnscheduled)}
+			>
+				Unscheduled <span class="text-xs text-gray-400">{unscheduled.length}</span>
+				<span class="flex-1"></span>
+				<Icon name={showUnscheduled ? 'chevron-up' : 'chevron-down'} size={14} />
+			</button>
+			{#if showUnscheduled}
+				<div class="mt-2 rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
+					{#each unscheduled as t (t.id)}
+						<button class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left" onclick={() => openTask(t.id)}>
+							<span class="flex-none w-2 h-2 rounded-full" style="background:{STATUS_COLOR[t.status]}"></span>
+							<span class="flex-1 min-w-0 text-sm truncate">{t.title}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="flex-1 flex min-h-0 bg-white dark:bg-gray-950">
 		<!-- Chart: one scroller for both axes; header sticky top, rail cells sticky left -->
 		<div bind:this={scroller} class="flex-1 overflow-auto min-w-0">
@@ -176,12 +202,12 @@
 				<!-- Rows -->
 				{#if items.length}
 					{#each items as item (item.task.id)}
-						<div class="flex border-b border-gray-100 dark:border-gray-900" style="height: {ROW_H}px;">
+						<div class="flex border-b border-gray-100 dark:border-gray-900" style="height: {rowH}px;">
 							<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-900" style="width: {railW}px;">
-								<TimelineRail {item} {today} />
+								<TimelineRail {item} {today} compact={$mobile} />
 							</div>
 							<div class="relative flex-none" style="width: {chartW}px;">
-								<TimelineBar {item} {win} {dayWidth} {today} {scroller} />
+								<TimelineBar {item} {win} {dayWidth} {today} {scroller} disabled={$mobile} />
 							</div>
 						</div>
 					{/each}
@@ -195,7 +221,7 @@
 				{/if}
 
 				<!-- Add-task row -->
-				<div class="flex" style="height: {ROW_H}px;">
+				<div class="flex" style="height: {rowH}px;">
 					<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 flex items-center px-3" style="width: {railW}px;">
 						{#if addingRow}
 							<!-- svelte-ignore a11y_autofocus -->
@@ -216,6 +242,8 @@
 			</div>
 		</div>
 
-		<UnscheduledPanel tasks={unscheduled} bind:collapsed={railCollapsed} />
+		{#if !$mobile}
+			<UnscheduledPanel tasks={unscheduled} bind:collapsed={railCollapsed} />
+		{/if}
 	</div>
 </div>
