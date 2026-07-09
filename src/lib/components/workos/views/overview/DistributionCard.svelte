@@ -20,7 +20,7 @@
 		return n === 0 ? 4 : Math.max(8, Math.round((n / maxDaily) * 34));
 	}
 	const pairColor = (p: PriorityPair): string =>
-		p.key === 'urgent' || p.key === 'high' ? `color:${PRIORITY_COLOR[p.key]}` : '';
+		p.key === 'none' ? '' : `color:${PRIORITY_COLOR[p.key]}`;
 	$: hasActivity = daily.some((d) => d.n > 0);
 </script>
 
@@ -40,12 +40,12 @@
 	<div class="flex h-[9px] rounded-full overflow-hidden mt-4 bg-gray-100 dark:bg-gray-800" role="img"
 		aria-label="Status mix: {mix.slices.map((s) => `${STATUS_LABEL[s.status]} ${s.n}`).join(', ')}">
 		{#each mix.slices as s (s.status)}
-			{#if s.n > 0}<div style="width:{s.pct}%;background:{STATUS_COLOR[s.status]}"></div>{/if}
+			{#if s.n > 0}<div class:hatch-canceled={s.status === 'canceled'} style="width:{s.pct}%;background-color:{STATUS_COLOR[s.status]}"></div>{/if}
 		{/each}
 	</div>
 	<div class="flex gap-x-2.5 gap-y-1 flex-wrap mt-2 text-[10.5px] text-gray-500 dark:text-gray-400">
 		{#each mix.slices as s (s.status)}
-			{#if s.n > 0}<span><span style="color:{STATUS_COLOR[s.status]}">●</span> {STATUS_LABEL[s.status]} {s.n}</span>{/if}
+			{#if s.n > 0}<span>{#if s.status === 'canceled'}<span class="hatch-canceled inline-block w-[7px] h-[7px] rounded-full align-middle" style="background-color:{STATUS_COLOR[s.status]}"></span>{:else}<span style="color:{STATUS_COLOR[s.status]}">●</span>{/if} {STATUS_LABEL[s.status]} {s.n}</span>{/if}
 		{/each}
 	</div>
 
@@ -63,3 +63,10 @@
 		</div>
 	{/if}
 </section>
+
+<style>
+	/* Disambiguates canceled from backlog where both share STATUS_COLOR's gray — reads as "void". */
+	.hatch-canceled {
+		background-image: repeating-linear-gradient(-45deg, transparent 0 3px, rgba(255, 255, 255, 0.55) 3px 5px);
+	}
+</style>
