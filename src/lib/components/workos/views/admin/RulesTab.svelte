@@ -1,23 +1,33 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import * as api from '../../lib/api';
 	import { token } from '../../lib/store';
 	import type { WorkosRules } from '../../lib/types';
 
 	let rules: WorkosRules = { team_creation: 'all_users', default_workspace_visibility: 'team' };
-	let toast = '';
+	let loading = true;
 
 	onMount(async () => {
-		rules = await api.getAdminSettings(token()).catch(() => rules);
+		loading = true;
+		try {
+			rules = await api.getAdminSettings(token());
+		} catch {
+			toast.error('Failed to load rules. Showing defaults.');
+		} finally {
+			loading = false;
+		}
 	});
 
 	async function save() {
 		rules = await api.updateAdminSettings(token(), rules);
-		toast = 'Saved';
-		setTimeout(() => (toast = ''), 2000);
+		toast.success('Saved');
 	}
 </script>
 
+{#if loading}
+	<div class="text-sm text-gray-400">Loading…</div>
+{:else}
 <div class="space-y-4 max-w-md">
 	<div>
 		<label class="text-sm font-medium" for="tc">Who can create teams</label>
@@ -65,6 +75,6 @@
 	</div>
 	<div class="flex items-center gap-3">
 		<button class="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground" onclick={save}>Save</button>
-		{#if toast}<span class="text-sm text-success">{toast}</span>{/if}
 	</div>
 </div>
+{/if}
