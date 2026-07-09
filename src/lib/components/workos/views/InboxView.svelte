@@ -10,7 +10,9 @@
 	<div class="flex items-center gap-2 px-4 h-12 border-b border-gray-200 dark:border-gray-800">
 		<span class="text-sm font-semibold">Inbox</span>
 		<div class="flex-1"></div>
-		<button class="text-sm text-primary hover:underline" onclick={markAllRead}>Mark all read</button>
+		{#if $notifications.length}
+			<button class="text-sm text-primary hover:underline" onclick={markAllRead}>Mark all read</button>
+		{/if}
 	</div>
 	{#if !$notifications.length}
 		<div class="p-8 text-center text-sm text-gray-400">You're all caught up.</div>
