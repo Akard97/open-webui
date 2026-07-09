@@ -4,7 +4,7 @@ import {
 	DAY_MS, tsToDay, dayToTs, todayDay,
 	classifyTask, timelineItems, unscheduledTasks,
 	computeWindow, MIN_WINDOW_DAYS,
-	ZOOM_DAY_WIDTH, parseZoom, dayToX, xToDay, todayLineX, barGeometry, isWeekend, isWeekStart, dayNumber, monthSpans,
+	ZOOM_DAY_WIDTH, parseZoom, dayToX, xToDay, todayLineX, barGeometry, isWeekend, isWeekStart, dayNumber, monthSpans, weekSpans,
 	applyMove, applyResize
 } from './timeline';
 
@@ -79,13 +79,13 @@ describe('timelineItems', () => {
 		const items = timelineItems([makeTask({ start_date: dayToTs(e), due_date: dayToTs(s) })]);
 		expect(items[0]).toMatchObject({ startDay: e, endDay: e });
 	});
-	it('sorts by startDay, then endDay, then title', () => {
+	it('sorts by creation date (oldest first), then title', () => {
 		const items = timelineItems([
-			makeTask({ id: 'late', title: 'B', start_date: dayToTs(s + 2), due_date: dayToTs(e) }),
-			makeTask({ id: 'longer', title: 'Z', start_date: dayToTs(s), due_date: dayToTs(e + 1) }),
-			makeTask({ id: 'first', title: 'A', start_date: dayToTs(s), due_date: dayToTs(e) })
+			makeTask({ id: 'newest', title: 'A', created_at: 300, start_date: dayToTs(s) }),
+			makeTask({ id: 'tie-z', title: 'Z', created_at: 100, start_date: dayToTs(s + 2), due_date: dayToTs(e) }),
+			makeTask({ id: 'tie-a', title: 'A', created_at: 100, due_date: dayToTs(e) })
 		]);
-		expect(items.map((i) => i.task.id)).toEqual(['first', 'longer', 'late']);
+		expect(items.map((i) => i.task.id)).toEqual(['tie-a', 'tie-z', 'newest']);
 	});
 });
 
@@ -120,11 +120,12 @@ describe('computeWindow', () => {
 });
 
 describe('zoom + scale', () => {
-	it('parseZoom accepts the three presets and defaults to month', () => {
+	it('parseZoom accepts the three column units and defaults to day', () => {
+		expect(parseZoom('day')).toBe('day');
 		expect(parseZoom('week')).toBe('week');
-		expect(parseZoom('quarter')).toBe('quarter');
-		expect(parseZoom(null)).toBe('month');
-		expect(parseZoom('bogus')).toBe('month');
+		expect(parseZoom('month')).toBe('month');
+		expect(parseZoom(null)).toBe('day');
+		expect(parseZoom('quarter')).toBe('day'); // legacy stored value
 	});
 	it('dayToX/xToDay round-trip at every preset width', () => {
 		const win = { startDay: 100, endDay: 199, days: 100 };
@@ -187,6 +188,18 @@ describe('header helpers', () => {
 			{ label: 'June 2026', startDay: start, days: 3 },
 			{ label: 'July 2026', startDay: start + 3, days: 7 }
 		]);
+	});
+	it('weekSpans chunks into Monday-start weeks with cross-month labels', () => {
+		const sat = Date.UTC(2026, 5, 27) / DAY_MS; // 2026-06-27 = Saturday
+		const win = { startDay: sat, endDay: sat + 15, days: 16 }; // Jun 27 – Jul 12
+		const spans = weekSpans(win);
+		expect(spans.map((s) => [s.startDay, s.days])).toEqual([
+			[sat, 2], // partial Sat–Sun edge
+			[sat + 2, 7], // Jun 29 – Jul 5
+			[sat + 9, 7] // Jul 6 – 12
+		]);
+		expect(spans[1].label).toBe('Jun 29 – Jul 5');
+		expect(spans[2].label).toBe('Jul 6 – 12');
 	});
 });
 

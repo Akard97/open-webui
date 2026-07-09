@@ -13,7 +13,7 @@
 	} from '../lib/store';
 	import {
 		timelineItems, computeWindow, todayDay, todayLineX, dayToX, isWeekend, dayToTs,
-		ZOOM_ORDER, ZOOM_DAY_WIDTH, unscheduledTasks, xToDay
+		ZOOM_ORDER, ZOOM_DAY_WIDTH, unscheduledTasks, xToDay, monthSpans
 	} from '../lib/timeline';
 	import { STATUS_COLOR } from '../lib/colors';
 
@@ -31,11 +31,13 @@
 	$: chartW = win.days * dayWidth;
 	$: tlx = todayLineX(today, win, dayWidth);
 	$: weekendDays = Array.from({ length: win.days }, (_, i) => win.startDay + i).filter(isWeekend);
-	// Vertical gridline period: per-day when readable, per-week at quarter zoom.
-	$: gridPeriod = dayWidth >= 16 ? dayWidth : dayWidth * 7;
-	// Weekly gridlines must land on Mondays: UTC day 0 (1970-01-01) is a Thursday,
-	// so a day index d is a Monday when d % 7 === 4. Shift the gradient accordingly.
-	$: gridOffset = dayWidth >= 16 ? 0 : ((4 - (win.startDay % 7) + 7) % 7) * dayWidth;
+	// Vertical gridlines follow the column unit: per-day at Day zoom, per-week at
+	// Week zoom (Monday-aligned: UTC day 0 (1970-01-01) is a Thursday, so a day
+	// index d is a Monday when d % 7 === 4). Month zoom draws per-month boundary
+	// lines instead (variable lengths — a repeating gradient can't express them).
+	$: gridPeriod = $timelineZoom === 'day' ? dayWidth : dayWidth * 7;
+	$: gridOffset = $timelineZoom === 'day' ? 0 : ((4 - (win.startDay % 7) + 7) % 7) * dayWidth;
+	$: monthStarts = $timelineZoom === 'month' ? monthSpans(win).slice(1).map((s) => s.startDay) : [];
 
 	let scroller: HTMLElement | null = null;
 	function scrollToToday() {
@@ -69,6 +71,37 @@
 	$: unscheduled = unscheduledTasks($filteredTasks);
 	let railCollapsed = false;
 	let showUnscheduled = false;
+	// Auto-collapse the side panel when it has nothing to offer; reopen when the
+	// first unscheduled task (re)appears. Manual toggling wins in between.
+	let hadUnscheduled = false;
+	$: if (!unscheduled.length) {
+		railCollapsed = true;
+		hadUnscheduled = false;
+	} else if (!hadUnscheduled) {
+		railCollapsed = false;
+		hadUnscheduled = true;
+	}
+
+	// Hand-cursor panning: drag empty canvas to scroll both axes (mouse only —
+	// touch uses native scrolling, and interactive elements keep their own drags).
+	let panning = false;
+	let px0 = 0, py0 = 0, psl = 0, pst = 0;
+	function panDown(e: PointerEvent) {
+		if ($mobile || e.pointerType !== 'mouse' || e.button !== 0 || !scroller) return;
+		if ((e.target as HTMLElement).closest('button, [role="button"], input, [draggable="true"]')) return;
+		panning = true;
+		px0 = e.clientX; py0 = e.clientY;
+		psl = scroller.scrollLeft; pst = scroller.scrollTop;
+		scroller.setPointerCapture(e.pointerId);
+	}
+	function panMove(e: PointerEvent) {
+		if (!panning || !scroller) return;
+		scroller.scrollLeft = psl - (e.clientX - px0);
+		scroller.scrollTop = pst - (e.clientY - py0);
+	}
+	function panUp() {
+		panning = false;
+	}
 
 	// HTML5 drop target state: the hovered chart day while a rail card is dragged.
 	let rowsEl: HTMLElement | null = null;
@@ -171,14 +204,23 @@
 	{/if}
 
 	<div class="flex-1 flex min-h-0 bg-white dark:bg-gray-950">
-		<!-- Chart: one scroller for both axes; header sticky top, rail cells sticky left -->
-		<div bind:this={scroller} class="flex-1 overflow-auto min-w-0">
+		<!-- Chart: one scroller for both axes; header sticky top, rail cells sticky left.
+		     Flex column so the rows canvas stretches to the full viewport height; drag
+		     empty canvas (hand cursor) to pan both axes. -->
+		<div
+			bind:this={scroller}
+			class="flex-1 overflow-auto min-w-0 flex flex-col {panning ? 'cursor-grabbing select-none' : 'cursor-grab'}"
+			onpointerdown={panDown}
+			onpointermove={panMove}
+			onpointerup={panUp}
+			onpointercancel={panUp}
+		>
 			<TimelineHeader {win} {dayWidth} zoom={$timelineZoom} {today} {railW} />
 
 			<div
 				bind:this={rowsEl}
 				role="list"
-				class="relative"
+				class="relative grow"
 				style="width: {railW + chartW}px;"
 				ondragover={dragOver}
 				ondragleave={() => (hoverDay = null)}
@@ -186,12 +228,18 @@
 			>
 				<!-- Background layer: weekends, gridlines, today line -->
 				<div class="absolute top-0 bottom-0 pointer-events-none" style="left: {railW}px; width: {chartW}px;">
-					{#each weekendDays as d (d)}
-						<div class="absolute top-0 bottom-0 bg-gray-50 dark:bg-gray-900/40" style="left: {dayToX(d, win, dayWidth)}px; width: {dayWidth}px; background-image: repeating-linear-gradient(-45deg, rgb(107 114 128 / 0.08), rgb(107 114 128 / 0.08) 4px, transparent 4px, transparent 8px);"></div>
-					{/each}
-					<div class="absolute inset-0" style="background: repeating-linear-gradient(to right, transparent, transparent {gridPeriod - 1}px, rgb(107 114 128 / 0.12) {gridPeriod - 1}px, rgb(107 114 128 / 0.12) {gridPeriod}px); background-position: {gridOffset}px 0;"></div>
+					{#if $timelineZoom !== 'month'}
+						{#each weekendDays as d (d)}
+							<div class="absolute top-0 bottom-0 bg-gray-50 dark:bg-gray-900/40" style="left: {dayToX(d, win, dayWidth)}px; width: {dayWidth}px; background-image: repeating-linear-gradient(-45deg, rgb(107 114 128 / 0.08), rgb(107 114 128 / 0.08) 4px, transparent 4px, transparent 8px);"></div>
+						{/each}
+						<div class="absolute inset-0" style="background: repeating-linear-gradient(to right, transparent, transparent {gridPeriod - 1}px, rgb(107 114 128 / 0.12) {gridPeriod - 1}px, rgb(107 114 128 / 0.12) {gridPeriod}px); background-position: {gridOffset}px 0;"></div>
+					{:else}
+						{#each monthStarts as d (d)}
+							<div class="absolute top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-800" style="left: {dayToX(d, win, dayWidth)}px;"></div>
+						{/each}
+					{/if}
 					<div class="absolute top-0 bottom-0 w-0.5 bg-primary z-10" style="left: {tlx}px;">
-						<span class="absolute top-0 -left-[17px] px-1 py-px rounded bg-primary text-primary-foreground text-[8px] font-bold tracking-wide">TODAY</span>
+						<span class="absolute top-0 left-1/2 -translate-x-1/2 whitespace-nowrap px-1 py-px rounded bg-primary text-primary-foreground text-[8px] font-bold tracking-wide">TODAY</span>
 					</div>
 				</div>
 

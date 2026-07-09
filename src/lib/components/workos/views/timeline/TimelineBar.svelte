@@ -176,8 +176,8 @@
 
 {#if geom.slipWidth > 0 && !mode}
 	<span
-		class="absolute top-1/2 -translate-y-1/2 h-6 rounded-r-md z-[9] flex items-center justify-end pr-1.5 text-[9px] font-bold text-white pointer-events-none"
-		style="left: {geom.left + geom.width}px; width: {geom.slipWidth}px; background: repeating-linear-gradient(-45deg, #dc2626, #dc2626 4px, #ef4444 4px, #ef4444 8px);"
+		class="absolute top-1/2 -translate-y-1/2 h-6 rounded-r-md z-[9] flex items-center justify-end pr-1.5 text-[9px] font-bold text-red-700 dark:text-red-300 pointer-events-none"
+		style="left: {geom.left + geom.width}px; width: {geom.slipWidth}px; background: repeating-linear-gradient(-45deg, rgb(220 38 38 / 0.35), rgb(220 38 38 / 0.35) 4px, rgb(239 68 68 / 0.15) 4px, rgb(239 68 68 / 0.15) 8px);"
 	>
 		{#if geom.slipWidth >= 40}⚠ {daysLate}d{/if}
 	</span>

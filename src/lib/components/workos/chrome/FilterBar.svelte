@@ -114,7 +114,8 @@
 <style>
 	.filter-chip { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.5rem; border: 1px solid rgb(229 231 235); font-size: 0.75rem; }
 	:global(.dark) .filter-chip { border-color: rgb(31 41 55); }
-	.filter-menu { position: absolute; z-index: 30; margin-top: 0.25rem; min-width: 11rem; border-radius: 0.5rem; border: 1px solid rgb(229 231 235); background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); padding: 0.25rem; }
+	/* z-50: must clear sticky in-view headers (e.g. the Timeline's z-30 chart header). */
+	.filter-menu { position: absolute; z-index: 50; margin-top: 0.25rem; min-width: 11rem; border-radius: 0.5rem; border: 1px solid rgb(229 231 235); background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); padding: 0.25rem; }
 	:global(.dark) .filter-menu { background: rgb(17 24 39); border-color: rgb(31 41 55); }
 	.filter-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8125rem; border-radius: 0.25rem; cursor: pointer; }
 	.filter-item:hover { background: rgb(243 244 246); }

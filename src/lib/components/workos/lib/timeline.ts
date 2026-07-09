@@ -35,7 +35,7 @@ export function classifyTask(t: Task): TimelineKind {
 }
 
 /** Chart rows: scheduled, non-canceled tasks as inclusive day ranges, sorted
- * by start, then end, then title. */
+ * by creation date (oldest first), then title. */
 export function timelineItems(tasks: Task[]): TimelineItem[] {
 	const items: TimelineItem[] = [];
 	for (const t of tasks) {
@@ -52,8 +52,7 @@ export function timelineItems(tasks: Task[]): TimelineItem[] {
 		}
 	}
 	return items.sort(
-		(a, b) =>
-			a.startDay - b.startDay || a.endDay - b.endDay || a.task.title.localeCompare(b.task.title)
+		(a, b) => a.task.created_at - b.task.created_at || a.task.title.localeCompare(b.task.title)
 	);
 }
 
@@ -85,12 +84,14 @@ export function computeWindow(items: TimelineItem[], today: number): TimelineWin
 }
 
 // ── Zoom ────────────────────────────────────────────────────────────────────
-export type ZoomKey = 'week' | 'month' | 'quarter';
-export const ZOOM_ORDER: ZoomKey[] = ['week', 'month', 'quarter'];
-export const ZOOM_DAY_WIDTH: Record<ZoomKey, number> = { week: 48, month: 24, quarter: 8 };
+// A preset is the COLUMN UNIT of the chart: Day = one column per day,
+// Week = one column per Monday-start week, Month = one column per month.
+export type ZoomKey = 'day' | 'week' | 'month';
+export const ZOOM_ORDER: ZoomKey[] = ['day', 'week', 'month'];
+export const ZOOM_DAY_WIDTH: Record<ZoomKey, number> = { day: 24, week: 12, month: 4 };
 
 export function parseZoom(raw: string | null): ZoomKey {
-	return raw === 'week' || raw === 'month' || raw === 'quarter' ? raw : 'month';
+	return raw === 'day' || raw === 'week' || raw === 'month' ? raw : 'day';
 }
 
 // ── Scale ───────────────────────────────────────────────────────────────────
@@ -163,6 +164,32 @@ export function monthSpans(win: TimelineWindow): MonthSpan[] {
 		const last = spans[spans.length - 1];
 		if (last && last.label === label) last.days += 1;
 		else spans.push({ label, startDay: d, days: 1 });
+	}
+	return spans;
+}
+
+export interface WeekSpan {
+	label: string;
+	startDay: number;
+	days: number;
+}
+/** Monday-start week chunks covering the window (edges may be partial weeks).
+ * Labels: "Jul 6 – 12", or "Jun 29 – Jul 5" when the week crosses a month. */
+export function weekSpans(win: TimelineWindow): WeekSpan[] {
+	const spans: WeekSpan[] = [];
+	for (let d = win.startDay; d <= win.endDay; d++) {
+		const last = spans[spans.length - 1];
+		if (!last || isWeekStart(d)) spans.push({ label: '', startDay: d, days: 1 });
+		else last.days += 1;
+	}
+	for (const s of spans) {
+		const end = s.startDay + s.days - 1;
+		const mon = (day: number) =>
+			utcDate(day).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+		s.label =
+			mon(s.startDay) === mon(end)
+				? `${mon(s.startDay)} ${dayNumber(s.startDay)} – ${dayNumber(end)}`
+				: `${mon(s.startDay)} ${dayNumber(s.startDay)} – ${mon(end)} ${dayNumber(end)}`;
 	}
 	return spans;
 }

@@ -83,7 +83,7 @@ if (browser) listColumns.subscribe((v) => localStorage.setItem(LIST_COLUMNS_KEY,
 // Timeline zoom preset, persisted per browser like the list columns.
 const TIMELINE_ZOOM_KEY = 'workos:timeline-zoom';
 export const timelineZoom: Writable<ZoomKey> = writable(
-	browser ? parseZoom(localStorage.getItem(TIMELINE_ZOOM_KEY)) : 'month'
+	browser ? parseZoom(localStorage.getItem(TIMELINE_ZOOM_KEY)) : 'day'
 );
 if (browser) timelineZoom.subscribe((v) => localStorage.setItem(TIMELINE_ZOOM_KEY, v));
 
