@@ -161,7 +161,7 @@
 						{STATUS_LABEL[status]}
 					</span>
 					<div class="flex-1"></div>
-					<button class="text-gray-400 hover:text-gray-600" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
+					<button class="text-gray-400 opacity-50 cursor-default" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
 					<button class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></button>
 				</div>
 

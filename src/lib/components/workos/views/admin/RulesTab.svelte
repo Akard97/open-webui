@@ -20,8 +20,12 @@
 	});
 
 	async function save() {
-		rules = await api.updateAdminSettings(token(), rules);
-		toast.success('Saved');
+		try {
+			rules = await api.updateAdminSettings(token(), rules);
+			toast.success('Saved');
+		} catch {
+			toast.error('Failed to save rules.');
+		}
 	}
 </script>
 

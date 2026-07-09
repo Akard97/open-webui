@@ -12,7 +12,7 @@
 	import * as HoverCard from '$lib/components/ui/hover-card';
 	import type { Task, TaskStatus, MyWorkSegment } from '../lib/types';
 	import { STATUS_LABEL } from '../lib/types';
-	import { STATUS_COLOR, PRIORITY_COLOR } from '../lib/colors';
+	import { STATUS_COLOR, PRIORITY_COLOR, PRIORITY_NONE } from '../lib/colors';
 	import { taskHealth, HEALTH_LABEL, type TaskHealth } from '../lib/progress';
 	import { bucketByDueDate } from '../lib/buckets';
 	import { computeStats } from '../lib/stats';
@@ -392,7 +392,7 @@
 								</div>
 								<div class="w-px self-stretch bg-gray-100 dark:bg-gray-800"></div>
 								<div class="flex-1 min-w-0 flex items-center gap-2">
-									<span class="flex-none" style="color:{d.task.priority ? PRIORITY_COLOR[d.task.priority] : '#cbd5e1'}"><Icon name="flag" size={14} /></span>
+									<span class="flex-none" style="color:{d.task.priority ? PRIORITY_COLOR[d.task.priority] : PRIORITY_NONE}"><Icon name="flag" size={14} /></span>
 									<span class="text-[13px] text-gray-600 dark:text-gray-300 truncate">{d.task.title}</span>
 								</div>
 							</button>

@@ -43,8 +43,8 @@
 	$: actual = actualProgress(task);
 	$: planned = plannedProgress(task.start_date, task.due_date, now);
 	$: barColor =
-		task.status === 'done' ? '#769a4a'
-		: task.status === 'canceled' ? '#9ca3af'
+		task.status === 'done' ? STATUS_COLOR.done
+		: task.status === 'canceled' ? STATUS_COLOR.canceled
 		: health ? HEALTH_HEX[health]
 		: STATUS_COLOR.in_progress;
 	$: labelChips = (task.labels ?? [])
