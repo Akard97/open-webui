@@ -2,14 +2,14 @@
 	import Icon from '../../ui/Icon.svelte';
 	import type { Task } from '../../lib/types';
 	import { STATUS_COLOR } from '../../lib/colors';
-	import { isOverdue } from '../../lib/calendar';
+	import { isOverdue } from '../../lib/format';
 	import { openTask, currentWorkstream } from '../../lib/store';
 	import * as HoverCard from '$lib/components/ui/hover-card';
 	import TaskHoverCard from '../TaskHoverCard.svelte';
 
 	export let task: Task;
 
-	$: overdue = isOverdue(task, Date.now());
+	$: overdue = isOverdue(task.due_date, task.status, Date.now());
 	$: done = task.status === 'done';
 	$: color = STATUS_COLOR[task.status];
 </script>

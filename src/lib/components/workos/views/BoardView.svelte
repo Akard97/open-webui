@@ -3,6 +3,7 @@
 	import { onDestroy, tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
 	import StatusDot from '../ui/StatusDot.svelte';
+	import StatusBadge from '../ui/StatusBadge.svelte';
 	import TaskCard from './TaskCard.svelte';
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
 	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask, boardFilter } from '../lib/store';
@@ -153,13 +154,7 @@
 		{#each STATUS_ORDER as status (status)}
 			<div class="w-72 max-md:w-[82vw] max-md:snap-center flex-none flex flex-col rounded-lg bg-gray-50/70 dark:bg-gray-900/40 p-2.5">
 				<div class="flex items-center gap-2 px-1 pb-2.5">
-					<span
-						class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-semibold"
-						style="background:{STATUS_COLOR[status]}24; color:{STATUS_COLOR[status]}"
-					>
-						<StatusDot shape={STATUS_SHAPE[status]} color={STATUS_COLOR[status]} size={15} />
-						{STATUS_LABEL[status]}
-					</span>
+					<StatusBadge {status} size="md" />
 					<div class="flex-1"></div>
 					<button class="text-gray-400 opacity-50 cursor-default" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
 					<button class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></button>

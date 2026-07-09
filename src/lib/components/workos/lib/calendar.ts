@@ -40,12 +40,6 @@ export function weekDays(cursor: Date): Date[] {
 	});
 }
 
-export function isOverdue(task: Task, now: number): boolean {
-	if (task.due_date == null) return false;
-	if (task.status === 'done' || task.status === 'canceled') return false;
-	return dayKey(task.due_date) < dayKey(now);
-}
-
 export interface AgendaDay {
 	day: number; // dayKey
 	date: Date;

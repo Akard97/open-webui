@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
 	import StatusDot from '../ui/StatusDot.svelte';
+	import StatusBadge from '../ui/StatusBadge.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import AssigneeField from './detail/AssigneeField.svelte';
 	import StatusCell from './cells/StatusCell.svelte';
@@ -10,15 +11,14 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { cn } from '$lib/components/ui/utils.js';
 	import { buttonVariants } from '$lib/components/ui/button';
-	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
+	import { STATUS_ORDER, type TaskStatus } from '../lib/types';
 	import { STATUS_COLOR, statusShape } from '../lib/colors';
 	import { LIST_COLUMNS, gridTemplate } from '../lib/columns';
 	import { canDeleteTask } from '../lib/roles';
 	import { user, mobile } from '$lib/stores';
 	import AssigneeAvatars from './AssigneeAvatars.svelte';
 	import Pills from '../ui/Pills.svelte';
-	import { isOverdue } from '../lib/calendar';
-	import { formatDateShort } from '../lib/format';
+	import { formatDateShort, isOverdue } from '../lib/format';
 	import { toast } from 'svelte-sonner';
 	import {
 		tasksByStatus, openTask, removeTask, addTask, directory, labels,
@@ -125,13 +125,7 @@
 						<button class="text-gray-400 hover:text-gray-600" onclick={() => toggle(status)} title={collapsed[status] ? 'Expand' : 'Collapse'}>
 							<Icon name={collapsed[status] ? 'chevron-right' : 'chevron-down'} size={16} />
 						</button>
-						<span
-							class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[13px] font-medium"
-							style="background:{STATUS_COLOR[status]}24; color:{STATUS_COLOR[status]}"
-						>
-							<StatusDot shape={statusShape(status)} color={STATUS_COLOR[status]} size={14} />
-							{STATUS_LABEL[status]}
-						</span>
+						<StatusBadge {status} size="md" />
 						<span class="text-xs text-gray-400">{byStatus[status].length}</span>
 					</div>
 
@@ -224,7 +218,7 @@
 										<span class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
 											<span class="flex-none">{task.key}</span>
 											{#if task.due_date != null}
-												<span class="flex-none {isOverdue(task, Date.now()) ? 'text-red-600 dark:text-red-400 font-medium' : ''}">{formatDateShort(task.due_date)}</span>
+												<span class="flex-none {isOverdue(task.due_date, task.status, Date.now()) ? 'text-red-600 dark:text-red-400 font-medium' : ''}">{formatDateShort(task.due_date)}</span>
 											{/if}
 											{#if task.priority}<Pills priority={task.priority} />{/if}
 										</span>

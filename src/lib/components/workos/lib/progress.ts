@@ -63,6 +63,15 @@ export const HEALTH_LABEL: Record<TaskHealth, string> = {
 	overdue: 'Overdue'
 };
 
+// Health → chip tint. Single source of truth (previously duplicated verbatim
+// across TaskCard/TaskHoverCard/MyWorkView).
+export const HEALTH_CHIP: Record<TaskHealth, string> = {
+	on_track: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+	at_risk: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+	behind: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+	overdue: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+};
+
 export function pointerToPercent(
 	clientX: number,
 	rect: { left: number; width: number }

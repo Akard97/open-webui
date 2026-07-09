@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
+	import LabelChip from '../ui/LabelChip.svelte';
+	import PriorityFlag from '../ui/PriorityFlag.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { cn } from '$lib/components/ui/utils.js';
 	import { buttonVariants } from '$lib/components/ui/button';
@@ -8,9 +10,8 @@
 	import { displayName, openTask, removeTask, roles, currentTeam } from '../lib/store';
 	import { user } from '$lib/stores';
 	import { canDeleteTask } from '../lib/roles';
-	import { formatDateRange } from '../lib/format';
-	import { actualProgress, plannedProgress, taskHealth, HEALTH_LABEL, type TaskHealth } from '../lib/progress';
-	import { PRIORITY_COLOR, PRIORITY_NONE } from '../lib/colors';
+	import { formatDateRange, isOverdue } from '../lib/format';
+	import { actualProgress, plannedProgress, taskHealth, HEALTH_LABEL, HEALTH_CHIP, type TaskHealth } from '../lib/progress';
 
 	export let task: Task;
 	export let labelById: Record<string, Label> = {};
@@ -18,30 +19,21 @@
 	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
 	$: canDelete = canDeleteTask(task, $user?.id ?? '', myRole);
 
-	const PRIORITY_META: Record<string, { color: string; label: string }> = {
-		urgent: { color: PRIORITY_COLOR.urgent, label: 'Urgent' },
-		high: { color: PRIORITY_COLOR.high, label: 'High' },
-		medium: { color: PRIORITY_COLOR.medium, label: 'Medium' },
-		low: { color: PRIORITY_COLOR.low, label: 'Low' }
-	};
-	// Health → chip tint + progress-bar fill, echoing the task-detail color scale.
-	const HEALTH_CHIP: Record<TaskHealth, string> = {
-		on_track: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-		at_risk: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-		behind: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-		overdue: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-	};
+	// Health → progress-bar fill, echoing the task-detail color scale.
 	const HEALTH_BAR: Record<TaskHealth, string> = {
 		on_track: 'bg-success',
 		at_risk: 'bg-amber-500',
 		behind: 'bg-orange-500',
 		overdue: 'bg-red-500'
 	};
-	$: prio = task.priority ? PRIORITY_META[task.priority] : { color: PRIORITY_NONE, label: '–' };
 	$: dateRange = formatDateRange(task.start_date, task.due_date);
+	$: overdue = isOverdue(task.due_date, task.status, Date.now());
 	$: actual = actualProgress(task);
 	$: planned = plannedProgress(task.start_date, task.due_date, Date.now());
 	$: health = taskHealth(task, Date.now());
+	$: cardLabels = (task.labels ?? []).map((lid) => labelById[lid]).filter((l): l is Label => l != null);
+	$: shownLabels = cardLabels.slice(0, 3);
+	$: labelOverflow = cardLabels.length - shownLabels.length;
 	$: barColor =
 		task.status === 'done' ? 'bg-success'
 		: task.status === 'canceled' ? 'bg-gray-400'
@@ -52,7 +44,7 @@
 <div
 	data-task-id={task.id}
 	data-sort-key={task.sort_key}
-	class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-4 cursor-pointer hover:shadow-md transition {task.status === 'backlog' ? 'opacity-60 hover:opacity-100' : ''}"
+	class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl p-4 cursor-pointer hover:shadow-md transition {task.status === 'backlog' ? 'opacity-60 hover:opacity-100' : ''}"
 	onclick={() => openTask(task.id)}
 	onkeydown={(e) => {
 		if (e.target !== e.currentTarget) return;
@@ -67,13 +59,12 @@
 	<!-- Labels header + menu -->
 	<div class="flex items-start gap-2 mb-2">
 		<div class="flex flex-wrap gap-1.5 flex-1 min-w-0">
-			{#each task.labels as lid (lid)}
-				{#if labelById[lid]}
-					<span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-gray-50 dark:bg-gray-900">
-						<span class="w-1.5 h-1.5 rounded-full" style="background:{labelById[lid].color}"></span>{labelById[lid].name}
-					</span>
-				{/if}
+			{#each shownLabels as l (l.id)}
+				<LabelChip name={l.name} color={l.color} />
 			{/each}
+			{#if labelOverflow > 0}
+				<LabelChip count={labelOverflow} />
+			{/if}
 		</div>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger
@@ -97,18 +88,15 @@
 	</div>
 
 	<!-- Title -->
-	<div class="text-[15px] font-semibold leading-snug mb-2.5">{task.title}</div>
+	<div class="text-sm font-semibold leading-snug mb-2.5">{task.title}</div>
 
 	<!-- Dates + priority -->
-	<div class="flex items-center gap-x-4 gap-y-1 flex-wrap mb-2.5 text-[13px] text-gray-600 dark:text-gray-300">
-		<span class="inline-flex items-center gap-1.5">
-			<span class="text-gray-400 flex-none"><Icon name="calendar" size={15} /></span>
+	<div class="flex items-center gap-x-4 gap-y-1 flex-wrap mb-2.5 text-[13px]">
+		<span class="inline-flex items-center gap-1.5 {overdue ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-600 dark:text-gray-300'}">
+			<span class="flex-none {overdue ? '' : 'text-gray-400'}"><Icon name="calendar" size={15} /></span>
 			{dateRange ?? '–'}
 		</span>
-		<span class="inline-flex items-center gap-1.5">
-			<span class="flex-none" style="color:{prio.color}"><Icon name="flag" size={15} /></span>
-			{prio.label}
-		</span>
+		<PriorityFlag priority={task.priority} />
 	</div>
 
 	<!-- Progress (in-progress tasks only) — read-only mirror of the task-detail bar:

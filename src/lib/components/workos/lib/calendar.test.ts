@@ -1,12 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dayKey, sameDay, isToday, monthGrid, weekDays, isOverdue, agendaDays } from './calendar';
-import type { Task } from './types';
-
-const mk = (over: Partial<Task>): Task => ({
-	id: 't', workstream_id: 'w', team_id: 'tm', number: 1, key: 'OSL-1', title: 't',
-	status: 'todo', assignee_ids: [], progress: 0, labels: [], sort_key: 1,
-	created_by_id: 'u', due_date: null, created_at: 0, updated_at: 0, ...over
-});
+import { dayKey, sameDay, isToday, monthGrid, weekDays, agendaDays } from './calendar';
 
 describe('dayKey / sameDay / isToday', () => {
 	it('strips the time component', () => {
@@ -49,22 +42,6 @@ describe('weekDays', () => {
 		expect(w[0].getDate()).toBe(28);
 		expect(w[6].getMonth()).toBe(6);
 		expect(w[6].getDate()).toBe(4);
-	});
-});
-
-describe('isOverdue', () => {
-	const now = new Date(2026, 5, 29, 9).getTime();
-	it('past-due open task is overdue', () => {
-		expect(isOverdue(mk({ due_date: new Date(2026, 5, 28).getTime() }), now)).toBe(true);
-	});
-	it('done / canceled are never overdue', () => {
-		expect(isOverdue(mk({ due_date: new Date(2026, 5, 28).getTime(), status: 'done' }), now)).toBe(false);
-		expect(isOverdue(mk({ due_date: new Date(2026, 5, 28).getTime(), status: 'canceled' }), now)).toBe(false);
-	});
-	it('today, future, and null are not overdue', () => {
-		expect(isOverdue(mk({ due_date: new Date(2026, 5, 29, 23).getTime() }), now)).toBe(false);
-		expect(isOverdue(mk({ due_date: new Date(2026, 5, 30).getTime() }), now)).toBe(false);
-		expect(isOverdue(mk({ due_date: null }), now)).toBe(false);
 	});
 });
 

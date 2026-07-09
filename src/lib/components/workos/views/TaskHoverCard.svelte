@@ -4,13 +4,12 @@
 	// see. Mirrors the board TaskCard's visual language (status/priority/health colors,
 	// planned-vs-actual progress) so the two surfaces read the same.
 	import Icon from '../ui/Icon.svelte';
-	import StatusDot from '../ui/StatusDot.svelte';
+	import StatusBadge from '../ui/StatusBadge.svelte';
 	import AssigneeAvatars from './AssigneeAvatars.svelte';
 	import type { Task } from '../lib/types';
-	import { STATUS_LABEL } from '../lib/types';
-	import { STATUS_COLOR, PRIORITY_COLOR, STATUS_SHAPE } from '../lib/colors';
+	import { STATUS_COLOR, PRIORITY_COLOR } from '../lib/colors';
 	import {
-		taskHealth, HEALTH_LABEL, actualProgress, plannedProgress, type TaskHealth
+		taskHealth, HEALTH_LABEL, HEALTH_CHIP, actualProgress, plannedProgress, type TaskHealth
 	} from '../lib/progress';
 	import { formatDateRange, isOverdue } from '../lib/format';
 	import { displayName, labels } from '../lib/store';
@@ -19,12 +18,6 @@
 	export let workstreamName = '';
 	export let now = Date.now();
 
-	const HEALTH_CHIP: Record<TaskHealth, string> = {
-		on_track: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-		at_risk: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-		behind: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-		overdue: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-	};
 	const HEALTH_HEX: Record<TaskHealth, string> = {
 		on_track: '#16a34a', at_risk: '#d97706', behind: '#ea580c', overdue: '#dc2626'
 	};
@@ -60,13 +53,7 @@
 	<div class="p-3.5">
 		<!-- Header: status · priority · key -->
 		<div class="flex items-center gap-2 mb-3">
-			<span
-				class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold"
-				style="background:{STATUS_COLOR[task.status]}24; color:{STATUS_COLOR[task.status]}"
-			>
-				<StatusDot shape={STATUS_SHAPE[task.status]} color={STATUS_COLOR[task.status]} size={11} />
-				{STATUS_LABEL[task.status]}
-			</span>
+			<StatusBadge status={task.status} size="sm" />
 			{#if task.priority}
 				<span class="inline-flex items-center gap-1 text-[12px] text-gray-600 dark:text-gray-300">
 					<span class="flex-none" style="color:{PRIORITY_COLOR[task.priority]}"><Icon name="flag" size={13} /></span>{cap(task.priority)}

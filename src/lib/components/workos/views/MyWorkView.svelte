@@ -14,7 +14,7 @@
 	import type { Task, TaskStatus, MyWorkSegment } from '../lib/types';
 	import { STATUS_LABEL } from '../lib/types';
 	import { STATUS_COLOR, PRIORITY_COLOR, PRIORITY_NONE } from '../lib/colors';
-	import { taskHealth, HEALTH_LABEL, type TaskHealth } from '../lib/progress';
+	import { taskHealth, HEALTH_LABEL, HEALTH_CHIP } from '../lib/progress';
 	import { bucketByDueDate } from '../lib/buckets';
 	import { computeStats } from '../lib/stats';
 	import { summarizeNotification } from '../lib/notifications';
@@ -29,15 +29,6 @@
 
 	const STATUS_SHAPE: Record<TaskStatus, 'dashed' | 'ring' | 'half' | 'check' | 'x'> = {
 		backlog: 'dashed', todo: 'ring', in_progress: 'half', in_review: 'half', done: 'check', canceled: 'x'
-	};
-
-	// Health → chip tint, mirrored from the board's TaskCard so My Work reads the
-	// same on-track / at-risk / behind / overdue scale.
-	const HEALTH_CHIP: Record<TaskHealth, string> = {
-		on_track: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-		at_risk: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-		behind: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-		overdue: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
 	};
 
 	const fmtDue = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
