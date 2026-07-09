@@ -21,13 +21,17 @@ Frontend-only: no backend, API, or migration changes. `Task.start_date` and
 
 1. **Purpose: schedule planning.** Interactive editing (drag move/resize) is
    first-class, not an afterthought.
-2. **Rows: flat, sorted by date.** One row per task ordered by effective start
-   (`start_date ?? due_date`), tie-break by due date, then title. No swimlane
+2. **Rows: flat, sorted by creation date** (oldest first, tie-break title;
+   changed from date-sorted in the 2026-07-09 smoke pass). No swimlane
    grouping.
 3. **Unscheduled tasks: right-side rail with drag-to-schedule**, mirroring the
    Calendar view's `UnscheduledRail` pattern.
-4. **Zoom: three presets — Week / Month / Quarter**, segmented control,
-   persisted per user in `localStorage`.
+4. **Zoom: three presets — Day / Week / Month — as COLUMN UNITS** (smoke-pass
+   revision: Day = one column per day at 24px, Week = Monday-start week
+   columns at 12px/day with "Jul 6 – 12" labels, Month = month columns at
+   4px/day with per-month boundary gridlines). Segmented control, persisted
+   per user in `localStorage` (`workos:timeline-zoom`, legacy values fall
+   back to `day`).
 5. **Mobile: view-only, simplified.** Chart renders and pans; editing happens
    via the detail drawer. No touch drag/resize.
 6. **Visual direction: Bold blocks (option B)** — solid status-color bars,
@@ -61,8 +65,8 @@ Frontend-only: no backend, API, or migration changes. `Task.start_date` and
      the month band dominant. Today's number is badged (teal pill).
    - **Rows** — left planning rail cell + bar lane per task:
      - **Rail cell** (~260px, two lines): status dot + semibold name (click →
-       `openTask`); second line `Jul 6 → Jul 15 · ⚑ High` (red + "Nd overdue"
-       when late).
+       `openTask`); second line = assignee avatars + priority flag (+ red
+       "Nd overdue" when late). (Smoke-pass revision — was the date range.)
      - **Bar lane**: day gridlines, hatched weekend columns, teal today line
        with a TODAY badge, and the task's bar/milestone.
    - **+ Add task** row at the bottom of the rail — inline title input.
@@ -81,8 +85,9 @@ Frontend-only: no backend, API, or migration changes. `Task.start_date` and
   details live in the rail and hover card.
 - **Overdue (slip tail)**: for non-done, non-canceled tasks with
   `due_date < today` (existing `isOverdue`), the bar keeps its status color to
-  the due date, then a hatched red tail (`repeating-linear-gradient`) extends
-  to the today line with a `⚠ Nd` label when it fits. Rail meta line turns red.
+  the due date, then a translucent hatched red tail
+  (`repeating-linear-gradient`, ~35%/15% alpha, red text) extends to the today
+  line with a `⚠ Nd` label when it fits. Rail shows a red "Nd overdue" note.
 - **Milestone** (due-only task): a status-colored diamond (rotated square) at
   the due date.
 - **Start-only task**: a 1-day bar at `start_date`; dragging its right handle
@@ -103,9 +108,10 @@ a bar spans `start_date` at 00:00 through `due_date` end-of-day inclusive.
   (Board/List parity).
 - **Window**: `[min task date − 7d, max task date + 14d]`, expanded to at least
   ~6 weeks and always containing today.
-- **Scale**: `dayWidth` per zoom — Week ≈ 48px, Month ≈ 24px (default),
-  Quarter ≈ 8px. Helpers: `dateToX`, `xToDate` (day-snapped), `barGeometry`
-  (left/width incl. slip-tail segment), `sortTimeline`.
+- **Scale**: `dayWidth` per zoom unit — Day = 24px (default), Week = 12px,
+  Month = 4px. Helpers: `dayToX`/`xToDay` (day-snapped), `barGeometry`
+  (left/width incl. slip-tail segment), `weekSpans`/`monthSpans` (header
+  columns), creation-date sort inside `timelineItems`.
 - **Edit helpers**: `applyMove(task, dayDelta)` and
   `applyResize(task, edge, dayDelta)` return new `{start_date, due_date}`
   pairs, clamped to a 1-day minimum. The component calls
@@ -129,6 +135,12 @@ the bar showing the pending range (`Jul 9 → Jul 14`).
   the new task appears on the chart immediately (status defaults to backlog).
 - **Cancel/scroll**: Esc cancels an in-flight drag; dragging near the viewport
   edge auto-scrolls the chart.
+- **Canvas panning** (smoke-pass addition): the rows canvas stretches to the
+  full viewport height; dragging empty canvas with the mouse pans both axes
+  (hand cursor), native wheel/scrollbar scrolling still works, and bars,
+  grips, rail buttons, inputs, and draggable cards keep their own
+  interactions (pan skips them). The unscheduled side panel auto-collapses
+  when empty and reopens when the first unscheduled task appears.
 - **Write gating**: follows the existing inline-edit precedent (List cells,
   Board drag, Calendar drag are not client-gated) — drags are attempted
   optimistically and the server enforces `require_task_writable`; on a 403 the
