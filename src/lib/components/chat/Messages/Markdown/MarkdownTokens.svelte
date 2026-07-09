@@ -10,7 +10,7 @@
 	import { copyToClipboard, unescapeHtml } from '$lib/utils';
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
-	import { settings } from '$lib/stores';
+	import { config, settings } from '$lib/stores';
 
 	import CodeBlock from '$lib/components/chat/Messages/CodeBlock.svelte';
 	import MarkdownInlineTokens from '$lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte';
@@ -25,6 +25,7 @@
 	import HtmlToken from './HTMLToken.svelte';
 	import Clipboard from '$lib/components/icons/Clipboard.svelte';
 	import ColonFenceBlock from './ColonFenceBlock.svelte';
+	import WidgetBlock from './Widgets/WidgetBlock.svelte';
 
 	export let id: string;
 	export let tokens: Token[];
@@ -153,7 +154,9 @@
 			/>
 		</svelte:element>
 	{:else if token.type === 'code'}
-		{#if token.raw.includes('```')}
+		{#if ['widget', 'widget-html'].includes(token?.lang ?? '') && ($config?.features?.enable_widgets ?? true)}
+			<WidgetBlock id={`${id}-${tokenIdx}`} {token} {done} />
+		{:else if token.raw.includes('```')}
 			<CodeBlock
 				id={`${id}-${tokenIdx}`}
 				collapsed={$settings?.collapseCodeBlocks ?? false}

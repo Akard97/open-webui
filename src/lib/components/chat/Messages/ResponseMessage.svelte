@@ -3,7 +3,7 @@
 	import dayjs from 'dayjs';
 
 	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { onMount, tick, getContext } from 'svelte';
+	import { onMount, tick, getContext, setContext } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType, t } from 'i18next';
 
@@ -160,6 +160,17 @@
 	export let readOnly = false;
 	export let editCodeBlock = true;
 	export let topPadding = false;
+
+	// Lets inline chat widgets (buttons/forms) submit a prompt as a visible
+	// user message; passed via context because MarkdownTokens renders
+	// recursively and prop drilling through svelte:self is fragile.
+	setContext('widgetActions', {
+		submit: (prompt: string) => {
+			if (prompt && !readOnly && message?.done) {
+				submitMessage(message?.id, prompt);
+			}
+		}
+	});
 
 	let citationsElement: HTMLDivElement;
 

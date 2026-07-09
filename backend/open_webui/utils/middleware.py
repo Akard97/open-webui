@@ -125,6 +125,7 @@ from open_webui.config import (
     DEFAULT_CODE_INTERPRETER_PROMPT,
     CODE_INTERPRETER_PYODIDE_PROMPT,
     CODE_INTERPRETER_BLOCKED_MODULES,
+    DEFAULT_WIDGETS_PROMPT,
 )
 from open_webui.env import (
     GLOBAL_LOG_LEVEL,
@@ -2548,6 +2549,24 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                         form_data['messages'],
                         append=True,
                     )
+
+    # Inline chat widgets: when the model has the "widgets" capability, teach
+    # it the ```widget fence vocabulary. Appended to the system message so the
+    # admin/user system prompt stays a stable cached prefix.
+    widgets_enabled = (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get(
+        'widgets', False
+    )
+    if widgets_enabled and request.app.state.config.ENABLE_WIDGETS:
+        widgets_prompt = (
+            request.app.state.config.WIDGETS_PROMPT_TEMPLATE
+            if request.app.state.config.WIDGETS_PROMPT_TEMPLATE != ''
+            else DEFAULT_WIDGETS_PROMPT
+        )
+        form_data['messages'] = add_or_update_system_message(
+            widgets_prompt,
+            form_data['messages'],
+            append=True,
+        )
 
     tool_ids = form_data.pop('tool_ids', None)
     terminal_id = form_data.pop('terminal_id', None)

@@ -2353,6 +2353,78 @@ CODE_INTERPRETER_PYODIDE_PROMPT = """
 
 
 ####################################
+# Inline Chat Widgets
+####################################
+
+ENABLE_WIDGETS = PersistentConfig(
+    'ENABLE_WIDGETS',
+    'widgets.enable',
+    os.environ.get('ENABLE_WIDGETS', 'True').lower() == 'true',
+)
+
+WIDGETS_PROMPT_TEMPLATE = PersistentConfig(
+    'WIDGETS_PROMPT_TEMPLATE',
+    'widgets.prompt_template',
+    os.environ.get('WIDGETS_PROMPT_TEMPLATE', ''),
+)
+
+DEFAULT_WIDGETS_PROMPT = """
+#### Inline Widgets
+
+You can render rich visual widgets directly inside your responses. A widget is a fenced code block with the language `widget` containing exactly one JSON object. The UI renders it as a live component in place of the code block. Widgets are the preferred way to present data in this chat.
+
+Hard rules:
+- The JSON must be strict: double-quoted keys and strings, no comments, no trailing commas.
+- Exactly one JSON object per `widget` fence. Always close the fence with ``` on its own line.
+- Never place a widget fence inside another code block, list item, blockquote, or table.
+- Surround widgets with normal prose — introduce them briefly and continue your answer after.
+- **Be proactive.** Decide on your own to use a widget whenever the content fits — never wait for the user to ask for a widget, chart, or table. If you are about to write a markdown table, a series of numbers, a comparison, or a step sequence, render the matching widget instead. Never draw ASCII/text-art charts — use a `chart` widget.
+- Choosing the widget: numeric comparisons or trends → `chart`; headline metrics → `kpi`; structured records → `table` (always prefer it over a markdown table); distinct options or entities → `cards`; sequences of events, stages, or plans → `timeline`; asking the user to pick between actions → `buttons`; collecting several inputs → `form`.
+- Purely conversational or textual answers need no widget — don't force one.
+- Write widget labels, titles and text in the chat's language.
+- `color` values (where accepted) must be one of: emerald, blue, violet, amber, rose, gray.
+
+Widget types:
+
+1. `chart` — data visualization. `chart` is one of: bar, line, area, pie, donut, scatter. `x` holds the axis labels (or slice labels for pie/donut); each series has a `name` and numeric `values` aligned with `x`. Optional: `stacked` (bar/area), `format` ("number", "percent", "currency").
+```widget
+{"type": "chart", "chart": "bar", "title": "Quarterly Revenue", "x": ["Q1", "Q2", "Q3", "Q4"], "series": [{"name": "2025", "values": [4.2, 5.1, 4.8, 6.3]}, {"name": "2024", "values": [3.1, 3.9, 4.0, 4.4]}]}
+```
+
+2. `kpi` — headline metrics (1–4 tiles). Optional per item: `delta`, `trend` ("up", "down", "flat"), `color`.
+```widget
+{"type": "kpi", "items": [{"label": "Revenue", "value": "SAR 1.2M", "delta": "+12%", "trend": "up", "color": "emerald"}, {"label": "Open tickets", "value": 34, "delta": "-8", "trend": "down", "color": "violet"}]}
+```
+
+3. `cards` — rich option/entity cards. `body` supports markdown. Optional per item: `subtitle`, `badge`, `color`, and `action` (a button; its `message` is sent to the chat as if the user typed it).
+```widget
+{"type": "cards", "columns": 2, "items": [{"title": "Option A", "subtitle": "Fastest", "body": "Delivers in **2 weeks**.", "badge": "Recommended", "color": "violet", "action": {"label": "Choose A", "message": "I choose Option A"}}]}
+```
+
+4. `table` — structured records. Column `key` must match the row keys. Optional per column: `badge` (render values as colored chips), `align` ("left", "center", "right").
+```widget
+{"type": "table", "title": "Vendors", "columns": [{"key": "name", "label": "Vendor"}, {"key": "status", "label": "Status", "badge": true}, {"key": "cost", "label": "Cost", "align": "right"}], "rows": [{"name": "Acme", "status": "Active", "cost": "SAR 40k"}]}
+```
+
+5. `timeline` — ordered events or plan steps. Optional per item: `date`, `description`, `status` ("done", "active", "pending").
+```widget
+{"type": "timeline", "items": [{"title": "Contract signed", "date": "2026-01-10", "status": "done"}, {"title": "Pilot rollout", "date": "2026-02-01", "status": "active"}]}
+```
+
+6. `buttons` — let the user pick an option with one click. Each `message` must read like something the user would naturally say; it is sent as their next chat message. Optional per item: `style` ("primary", "secondary").
+```widget
+{"type": "buttons", "label": "How should we proceed?", "items": [{"label": "Approve budget", "message": "Approve the budget as proposed"}, {"label": "Revise first", "message": "Let's revise the numbers first", "style": "secondary"}]}
+```
+
+7. `form` — collect several inputs at once. Field `type` is one of: text, number, select, textarea, date, checkbox. On submit, `{name}` placeholders in `template` are filled with the values and sent as the user's next message.
+```widget
+{"type": "form", "title": "Trip details", "submit": "Plan it", "fields": [{"name": "city", "label": "City", "type": "select", "options": ["Riyadh", "Jeddah"], "required": true}, {"name": "budget", "label": "Budget (SAR)", "type": "number"}], "template": "Plan a trip to {city} with a budget of {budget} SAR"}
+```
+
+For fully custom visuals (custom layouts, animations, mini-apps), emit a `widget-html` fence containing a complete self-contained HTML document instead of JSON. It renders inline in a sandboxed frame with no network access, so inline all CSS/JS and use no external resources. Optionally hint the frame height with `<!-- height: 400 -->` as the first line. Prefer the JSON widgets above whenever they fit; use `widget-html` only when none of them can express what you need."""
+
+
+####################################
 # Vector Database
 ####################################
 

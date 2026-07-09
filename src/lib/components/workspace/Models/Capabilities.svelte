@@ -56,6 +56,12 @@
 			description: $i18n.t(
 				'Automatically inject system tools in native function calling mode (e.g., timestamps, memory, chat history, notes, etc.)'
 			)
+		},
+		widgets: {
+			label: $i18n.t('Widgets'),
+			description: $i18n.t(
+				'Model can render rich inline widgets (charts, cards, tables, forms, buttons) in chat responses'
+			)
 		}
 	};
 
@@ -71,6 +77,7 @@
 		citations?: boolean;
 		status_updates?: boolean;
 		builtin_tools?: boolean;
+		widgets?: boolean;
 	} = {};
 
 	// Hide file_context when file_upload is disabled

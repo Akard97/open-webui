@@ -162,6 +162,8 @@ from open_webui.config import (
     CODE_INTERPRETER_JUPYTER_AUTH_TOKEN,
     CODE_INTERPRETER_JUPYTER_AUTH_PASSWORD,
     CODE_INTERPRETER_JUPYTER_TIMEOUT,
+    ENABLE_WIDGETS,
+    WIDGETS_PROMPT_TEMPLATE,
     ENABLE_MEMORIES,
     # Image
     AUTOMATIC1111_API_AUTH,
@@ -1259,6 +1261,9 @@ app.state.config.CODE_INTERPRETER_JUPYTER_AUTH = CODE_INTERPRETER_JUPYTER_AUTH
 app.state.config.CODE_INTERPRETER_JUPYTER_AUTH_TOKEN = CODE_INTERPRETER_JUPYTER_AUTH_TOKEN
 app.state.config.CODE_INTERPRETER_JUPYTER_AUTH_PASSWORD = CODE_INTERPRETER_JUPYTER_AUTH_PASSWORD
 app.state.config.CODE_INTERPRETER_JUPYTER_TIMEOUT = CODE_INTERPRETER_JUPYTER_TIMEOUT
+
+app.state.config.ENABLE_WIDGETS = ENABLE_WIDGETS
+app.state.config.WIDGETS_PROMPT_TEMPLATE = WIDGETS_PROMPT_TEMPLATE
 
 ########################################
 #
@@ -2399,6 +2404,7 @@ async def get_app_config(request: Request):
                     'enable_web_search': app.state.config.ENABLE_WEB_SEARCH,
                     'enable_code_execution': app.state.config.ENABLE_CODE_EXECUTION,
                     'enable_code_interpreter': app.state.config.ENABLE_CODE_INTERPRETER,
+                    'enable_widgets': app.state.config.ENABLE_WIDGETS,
                     'enable_image_generation': app.state.config.ENABLE_IMAGE_GENERATION,
                     'enable_autocomplete_generation': app.state.config.ENABLE_AUTOCOMPLETE_GENERATION,
                     'enable_community_sharing': app.state.config.ENABLE_COMMUNITY_SHARING,
