@@ -20,21 +20,11 @@
 	} from '../lib/types';
 	import { formatDateLong } from '../lib/format';
 	import { selectedTask, closeTask, editTask, labels, comments, activity, createLabel } from '../lib/store';
+	import { STATUS_COLOR, statusShape } from '../lib/colors';
 
 	$: t = $selectedTask;
 	$: sortedComments = [...$comments].sort((a, b) => a.created_at - b.created_at);
 	$: sortedActivity = [...$activity].sort((a, b) => a.created_at - b.created_at);
-
-	const STATUS_COLOR: Record<string, string> = {
-		backlog: '#9ca3af', todo: '#6b7280', in_progress: '#00a5ba',
-		in_review: '#d97706', done: '#769a4a', canceled: '#9ca3af'
-	};
-	function statusShape(s: TaskStatus): 'check' | 'half' | 'x' | 'ring' {
-		if (s === 'done') return 'check';
-		if (s === 'in_progress') return 'half';
-		if (s === 'canceled') return 'x';
-		return 'ring';
-	}
 
 	let showDetails = false;
 	let editingTitle = false;

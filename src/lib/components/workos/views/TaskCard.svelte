@@ -10,6 +10,7 @@
 	import { canDeleteTask } from '../lib/roles';
 	import { formatDateRange } from '../lib/format';
 	import { actualProgress, plannedProgress, taskHealth, HEALTH_LABEL, type TaskHealth } from '../lib/progress';
+	import { PRIORITY_COLOR, PRIORITY_NONE } from '../lib/colors';
 
 	export let task: Task;
 	export let labelById: Record<string, Label> = {};
@@ -18,10 +19,10 @@
 	$: canDelete = canDeleteTask(task, $user?.id ?? '', myRole);
 
 	const PRIORITY_META: Record<string, { color: string; label: string }> = {
-		urgent: { color: '#dc2626', label: 'Urgent' },
-		high: { color: '#ea580c', label: 'High' },
-		medium: { color: '#ca8a04', label: 'Medium' },
-		low: { color: '#6b7280', label: 'Low' }
+		urgent: { color: PRIORITY_COLOR.urgent, label: 'Urgent' },
+		high: { color: PRIORITY_COLOR.high, label: 'High' },
+		medium: { color: PRIORITY_COLOR.medium, label: 'Medium' },
+		low: { color: PRIORITY_COLOR.low, label: 'Low' }
 	};
 	// Health → chip tint + progress-bar fill, echoing the task-detail color scale.
 	const HEALTH_CHIP: Record<TaskHealth, string> = {
@@ -36,7 +37,7 @@
 		behind: 'bg-orange-500',
 		overdue: 'bg-red-500'
 	};
-	$: prio = task.priority ? PRIORITY_META[task.priority] : { color: '#cbd5e1', label: '–' };
+	$: prio = task.priority ? PRIORITY_META[task.priority] : { color: PRIORITY_NONE, label: '–' };
 	$: dateRange = formatDateRange(task.start_date, task.due_date);
 	$: actual = actualProgress(task);
 	$: planned = plannedProgress(task.start_date, task.due_date, Date.now());

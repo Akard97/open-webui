@@ -6,9 +6,9 @@
 	import Icon from '../ui/Icon.svelte';
 	import StatusDot from '../ui/StatusDot.svelte';
 	import AssigneeAvatars from './AssigneeAvatars.svelte';
-	import type { Task, TaskStatus } from '../lib/types';
+	import type { Task } from '../lib/types';
 	import { STATUS_LABEL } from '../lib/types';
-	import { STATUS_COLOR, PRIORITY_COLOR } from '../lib/colors';
+	import { STATUS_COLOR, PRIORITY_COLOR, STATUS_SHAPE } from '../lib/colors';
 	import {
 		taskHealth, HEALTH_LABEL, actualProgress, plannedProgress, type TaskHealth
 	} from '../lib/progress';
@@ -19,9 +19,6 @@
 	export let workstreamName = '';
 	export let now = Date.now();
 
-	const STATUS_SHAPE: Record<TaskStatus, 'dashed' | 'ring' | 'half' | 'check' | 'x'> = {
-		backlog: 'dashed', todo: 'ring', in_progress: 'half', in_review: 'half', done: 'check', canceled: 'x'
-	};
 	const HEALTH_CHIP: Record<TaskHealth, string> = {
 		on_track: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
 		at_risk: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',

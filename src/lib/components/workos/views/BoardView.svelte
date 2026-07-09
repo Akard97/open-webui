@@ -6,19 +6,9 @@
 	import TaskCard from './TaskCard.svelte';
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
 	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask, boardFilter } from '../lib/store';
+	import { STATUS_COLOR, STATUS_SHAPE } from '../lib/colors';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import { toast } from 'svelte-sonner';
-
-	// Status accent + glyph — hollow ring (not started) → half pie (working) →
-	// filled check/x (resolved), echoing the board mock.
-	const STATUS_META: Record<TaskStatus, { color: string; shape: 'dashed' | 'ring' | 'half' | 'check' | 'x' }> = {
-		backlog: { color: '#9ca3af', shape: 'dashed' },
-		todo: { color: '#6b7280', shape: 'ring' },
-		in_progress: { color: '#00a5ba', shape: 'half' }, /* Osool 3125 C */
-		in_review: { color: '#d97706', shape: 'half' }, /* amber — pending review */
-		done: { color: '#769a4a', shape: 'check' }, /* Osool 576 C */
-		canceled: { color: '#9ca3af', shape: 'x' }
-	};
 
 	let columnEls: Record<string, HTMLElement> = {};
 	let sortables: Sortable[] = [];
@@ -165,9 +155,9 @@
 				<div class="flex items-center gap-2 px-1 pb-2.5">
 					<span
 						class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-semibold"
-						style="background:{STATUS_META[status].color}24; color:{STATUS_META[status].color}"
+						style="background:{STATUS_COLOR[status]}24; color:{STATUS_COLOR[status]}"
 					>
-						<StatusDot shape={STATUS_META[status].shape} color={STATUS_META[status].color} size={15} />
+						<StatusDot shape={STATUS_SHAPE[status]} color={STATUS_COLOR[status]} size={15} />
 						{STATUS_LABEL[status]}
 					</span>
 					<div class="flex-1"></div>
@@ -186,7 +176,7 @@
 						<!-- Empty column: a quiet, column-specific hint (no border) -->
 						<div class="flex flex-col items-center justify-center gap-2 py-6 text-center select-none">
 							<span class="opacity-50">
-								<StatusDot shape={STATUS_META[status].shape} color={STATUS_META[status].color} size={22} />
+								<StatusDot shape={STATUS_SHAPE[status]} color={STATUS_COLOR[status]} size={22} />
 							</span>
 							<span class="text-xs text-gray-400 dark:text-gray-500">No tasks in {STATUS_LABEL[status]}</span>
 						</div>
