@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { statusShape, tint, PRIORITY_NONE } from './colors';
+import { statusShape, tint, PRIORITY_NONE, STATUS_LABEL, PRIORITY_LABEL } from './colors';
+import type { TaskStatus, TaskPriority } from './types';
 
 describe('statusShape', () => {
 	it('maps each status to its board glyph shape', () => {
@@ -25,5 +26,31 @@ describe('tint', () => {
 describe('PRIORITY_NONE', () => {
 	it('is the fallback gray for "no priority"', () => {
 		expect(PRIORITY_NONE).toBe('#9ca3af');
+	});
+});
+
+describe('STATUS_LABEL', () => {
+	it('covers every status with the exact display string', () => {
+		const expected: Record<TaskStatus, string> = {
+			backlog: 'Backlog',
+			todo: 'Todo',
+			in_progress: 'In Progress',
+			in_review: 'In Review',
+			done: 'Done',
+			canceled: 'Canceled'
+		};
+		expect(STATUS_LABEL).toEqual(expected);
+	});
+});
+
+describe('PRIORITY_LABEL', () => {
+	it('covers every priority with the exact display string', () => {
+		const expected: Record<TaskPriority, string> = {
+			urgent: 'Urgent',
+			high: 'High',
+			medium: 'Medium',
+			low: 'Low'
+		};
+		expect(PRIORITY_LABEL).toEqual(expected);
 	});
 });
