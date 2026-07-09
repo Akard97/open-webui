@@ -6,14 +6,9 @@
 	import type { TimelineItem } from '../../lib/timeline';
 
 	export let item: TimelineItem;
-	export let today: number;
 	export let compact = false; // mobile: single line, no meta row
 
 	$: t = item.task;
-	$: daysLate =
-		t.status !== 'done' && t.status !== 'canceled' && item.endDay < today
-			? today - item.endDay
-			: 0;
 </script>
 
 <div class="h-full min-w-0 px-3 flex flex-col justify-center gap-0.5">
@@ -35,9 +30,6 @@
 				<span class="flex-none inline-flex items-center gap-0.5" style="color:{PRIORITY_COLOR[t.priority]}">
 					<Icon name="flag" size={11} /> {t.priority[0].toUpperCase() + t.priority.slice(1)}
 				</span>
-			{/if}
-			{#if daysLate}
-				<span class="flex-none text-red-600 dark:text-red-400 font-medium">· {daysLate}d overdue</span>
 			{/if}
 		</span>
 	{/if}

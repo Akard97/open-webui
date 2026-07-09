@@ -13,7 +13,7 @@
 	} from '../lib/store';
 	import {
 		timelineItems, computeWindow, todayDay, todayLineX, dayToX, isWeekend, dayToTs,
-		ZOOM_ORDER, ZOOM_DAY_WIDTH, unscheduledTasks, xToDay, monthSpans
+		ZOOM_ORDER, ZOOM_DAY_WIDTH, MIN_WINDOW_DAYS, unscheduledTasks, xToDay, monthSpans
 	} from '../lib/timeline';
 	import { STATUS_COLOR } from '../lib/colors';
 
@@ -26,8 +26,12 @@
 	let now = Date.now();
 	$: today = todayDay(now);
 	$: items = timelineItems($filteredTasks);
-	$: win = computeWindow(items, today);
 	$: dayWidth = ZOOM_DAY_WIDTH[$timelineZoom];
+	// The window always covers at least the viewport (plus headroom), so coarse
+	// zooms never leave blank space after the last data-driven month.
+	let scrollerW = 0;
+	$: viewportDays = scrollerW ? Math.ceil((scrollerW - railW) / dayWidth) + 21 : 0;
+	$: win = computeWindow(items, today, Math.max(MIN_WINDOW_DAYS, viewportDays));
 	$: chartW = win.days * dayWidth;
 	$: tlx = todayLineX(today, win, dayWidth);
 	$: weekendDays = Array.from({ length: win.days }, (_, i) => win.startDay + i).filter(isWeekend);
@@ -209,6 +213,7 @@
 		     empty canvas (hand cursor) to pan both axes. -->
 		<div
 			bind:this={scroller}
+			bind:clientWidth={scrollerW}
 			class="flex-1 overflow-auto min-w-0 flex flex-col {panning ? 'cursor-grabbing select-none' : 'cursor-grab'}"
 			onpointerdown={panDown}
 			onpointermove={panMove}
@@ -220,7 +225,7 @@
 			<div
 				bind:this={rowsEl}
 				role="list"
-				class="relative grow"
+				class="relative grow flex flex-col"
 				style="width: {railW + chartW}px;"
 				ondragover={dragOver}
 				ondragleave={() => (hoverDay = null)}
@@ -252,9 +257,9 @@
 				<!-- Rows -->
 				{#if items.length}
 					{#each items as item (item.task.id)}
-						<div class="flex border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-900/30" style="height: {rowH}px;">
+						<div class="flex-none flex border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-900/30" style="height: {rowH}px;">
 							<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-900" style="width: {railW}px;">
-								<TimelineRail {item} {today} compact={$mobile} />
+								<TimelineRail {item} compact={$mobile} />
 							</div>
 							<div class="relative flex-none" style="width: {chartW}px;">
 								<TimelineBar {item} {win} {dayWidth} {today} {scroller} disabled={$mobile} />
@@ -262,16 +267,28 @@
 						</div>
 					{/each}
 				{:else}
-					<div class="flex flex-col items-center justify-center gap-2 py-16 text-center" style="width: {railW + chartW}px;">
-						<span class="sticky left-0 flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500" style="max-width: 100vw;">
-							<Icon name="chart-gantt" size={28} />
-							<span class="text-sm">Nothing scheduled yet — add dates to tasks or create one with “Add new”.</span>
-						</span>
+					<!-- Empty state: centered in the visible viewport (sticky), above the grid -->
+					<div class="flex-1 sticky left-0 z-10 flex items-center justify-center py-16" style="width: {scrollerW || 600}px;">
+						<div class="flex flex-col items-center gap-2.5 text-center px-6">
+							<span class="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-500 flex items-center justify-center">
+								<Icon name="chart-gantt" size={24} />
+							</span>
+							{#if unscheduled.length}
+								<span class="text-sm text-gray-500 dark:text-gray-400">Nothing scheduled yet</span>
+								<span class="text-xs text-gray-400 dark:text-gray-500">Drag a task in from the Unscheduled panel, or give a task dates.</span>
+							{:else}
+								<span class="text-sm text-gray-500 dark:text-gray-400">No tasks on the timeline</span>
+								<span class="text-xs text-gray-400 dark:text-gray-500">Plan your work by creating a task — it lands on today.</span>
+								<button class="mt-1 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => { addingRow = true; rowTitle = ''; }}>
+									<Icon name="plus" size={15} /> Add task
+								</button>
+							{/if}
+						</div>
 					</div>
 				{/if}
 
 				<!-- Add-task row -->
-				<div class="flex" style="height: {rowH}px;">
+				<div class="flex-none flex" style="height: {rowH}px;">
 					<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 flex items-center px-3" style="width: {railW}px;">
 						{#if addingRow}
 							<!-- svelte-ignore a11y_autofocus -->
@@ -289,6 +306,13 @@
 						{/if}
 					</div>
 				</div>
+
+				{#if items.length}
+					<!-- Rail filler: the title column runs to the bottom of the canvas -->
+					<div class="flex-1 flex min-h-0">
+						<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-900" style="width: {railW}px;"></div>
+					</div>
+				{/if}
 			</div>
 		</div>
 

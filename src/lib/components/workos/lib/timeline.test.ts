@@ -117,6 +117,12 @@ describe('computeWindow', () => {
 		expect(w.endDay).toBeGreaterThanOrEqual(today);
 		expect(w.days).toBeGreaterThanOrEqual(MIN_WINDOW_DAYS);
 	});
+	it('extends into the future to honor a viewport-derived minimum', () => {
+		const w = computeWindow([], today, 200);
+		expect(w.days).toBe(200);
+		expect(w.startDay).toBe(today - 7); // past padding unchanged
+		expect(w.endDay).toBe(today - 7 + 199); // growth goes forward
+	});
 });
 
 describe('zoom + scale', () => {

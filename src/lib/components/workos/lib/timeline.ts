@@ -69,8 +69,14 @@ export interface TimelineWindow {
 
 export const MIN_WINDOW_DAYS = 42;
 
-/** [min − 7d, max + 14d], always containing today, at least MIN_WINDOW_DAYS wide. */
-export function computeWindow(items: TimelineItem[], today: number): TimelineWindow {
+/** [min − 7d, max + 14d], always containing today, at least minDays wide
+ * (callers pass a viewport-derived minimum so the chart always fills the
+ * screen; short windows extend into the future). */
+export function computeWindow(
+	items: TimelineItem[],
+	today: number,
+	minDays: number = MIN_WINDOW_DAYS
+): TimelineWindow {
 	let lo = today;
 	let hi = today;
 	for (const it of items) {
@@ -79,7 +85,7 @@ export function computeWindow(items: TimelineItem[], today: number): TimelineWin
 	}
 	lo -= 7;
 	hi += 14;
-	if (hi - lo + 1 < MIN_WINDOW_DAYS) hi = lo + MIN_WINDOW_DAYS - 1;
+	if (hi - lo + 1 < minDays) hi = lo + minDays - 1;
 	return { startDay: lo, endDay: hi, days: hi - lo + 1 };
 }
 
