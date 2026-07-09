@@ -3,6 +3,7 @@
 	// Port of the topbar block from the design's app.jsx.
 
 	import Icon from '../ui/Icon.svelte';
+	import { WEBUI_NAME } from '$lib/stores';
 	import { view, stage, goNewReview, canUseChecker, activeReview } from '../lib/store';
 	import { POLICY_META } from '../lib/seed';
 
@@ -19,7 +20,7 @@
 		<span class="sb-brand-dot" style="width:24px; height:24px">
 			<Icon name="grid" size={13} stroke={2.4} />
 		</span>
-		<span class="crumb">Osool AI</span>
+		<span class="crumb">{$WEBUI_NAME}</span>
 		<Icon name="chevR" size={12} />
 		<span class="name">
 			{#if $view === 'library'}
