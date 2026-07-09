@@ -7,7 +7,8 @@
 	import workosLogoDark from '../assets/workos-logo-dark.png';
 	import workosLogoLight from '../assets/workos-logo-light.png';
 	import StatusDot from '../ui/StatusDot.svelte';
-	import Avatar from './commandcenter/Avatar.svelte';
+	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar';
+	import { avatarColor } from '../lib/avatar';
 	import TaskHoverCard from './TaskHoverCard.svelte';
 	import * as HoverCard from '$lib/components/ui/hover-card';
 	import type { Task, TaskStatus, MyWorkSegment } from '../lib/types';
@@ -41,6 +42,13 @@
 
 	const fmtDue = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+	// Activity/mentions rails only have a free-text actor name (not a directory
+	// id), so they render a one-off Avatar+AvatarFallback instead of going through
+	// AssigneeAvatars (which is id-keyed). Same clean/initials rule as the deleted
+	// per-user avatar component so colors and initials don't shuffle.
+	const cleanName = (name: string) => (name || '?').trim();
+	const initialsOf = (name: string) =>
+		cleanName(name).split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 	function ago(ms: number): string {
 		const s = Math.max(0, Math.floor((now - ms) / 1000));
 		if (s < 60) return `${s}s`;
@@ -408,7 +416,12 @@
 					{:else}
 						{#each activity as a (a.n.id)}
 							<button type="button" onclick={() => openNotification(a.n)} class="w-full text-left flex items-start gap-2.5 py-1.5">
-								<Avatar name={a.who} size={22} />
+								<Avatar style="width:24px;height:24px" title={cleanName(a.who)}>
+									<AvatarFallback
+										class="text-white font-semibold"
+										style="background:{avatarColor(cleanName(a.who))};font-size:10px"
+									>{initialsOf(a.who)}</AvatarFallback>
+								</Avatar>
 								<div class="flex-1 min-w-0 text-[13px] text-gray-600 dark:text-gray-300 leading-snug">
 									<b class="font-medium text-gray-900 dark:text-gray-100">{a.first}</b> {a.action}{#if a.target} <span class="text-xs font-medium text-primary tabular-nums">{a.target}</span>{/if}{#if a.detail} {a.detail}{/if}
 								</div>
@@ -429,7 +442,12 @@
 					{:else}
 						{#each mentions as m (m.id)}
 							<button type="button" onclick={() => openNotification(m)} class="w-full text-left flex items-start gap-2.5 py-[7px]">
-								<Avatar name={m.data?.actor_name ?? '?'} size={22} />
+								<Avatar style="width:24px;height:24px" title={cleanName(m.data?.actor_name ?? '?')}>
+									<AvatarFallback
+										class="text-white font-semibold"
+										style="background:{avatarColor(cleanName(m.data?.actor_name ?? '?'))};font-size:10px"
+									>{initialsOf(m.data?.actor_name ?? '?')}</AvatarFallback>
+								</Avatar>
 								<div class="flex-1 min-w-0">
 									<div class="text-[13px] text-gray-600 dark:text-gray-300 leading-snug">{m.data?.snippet ?? summarizeNotification(m)}</div>
 									<div class="text-[11px] text-gray-400 tabular-nums mt-0.5">{m.data?.task_key ?? ''} · {ago(m.created_at)}</div>

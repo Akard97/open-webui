@@ -2,7 +2,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Icon from '../../ui/Icon.svelte';
 	import AssigneeAvatars from '../AssigneeAvatars.svelte';
-	import { directory, displayName, initials, editTask } from '../../lib/store';
+	import { directory, displayName, editTask } from '../../lib/store';
 	import { toggleAssignee } from '../../lib/assignees';
 	import type { Task } from '../../lib/types';
 
@@ -15,8 +15,6 @@
 		assigned.length === 0 ? '' :
 		assigned.length === 1 ? displayName(assigned[0]) :
 		`${displayName(assigned[0])} +${assigned.length - 1}`;
-
-	const fallback = 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300';
 
 	function toggle(id: string) {
 		editTask(task.id, { assignee_ids: toggleAssignee(assigned, id) });
@@ -44,7 +42,7 @@
 				onCheckedChange={() => toggle(m.id)}
 			>
 				<span class="inline-flex items-center gap-2">
-					<span class="size-5 rounded-full {fallback} text-[10px] font-semibold inline-flex items-center justify-center flex-none">{initials(m.id)}</span>
+					<AssigneeAvatars ids={[m.id]} max={1} size={20} />
 					{m.name}
 				</span>
 			</DropdownMenu.CheckboxItem>

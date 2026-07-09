@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { displayName, initials } from '../../lib/store';
+	import { displayName } from '../../lib/store';
+	import AssigneeAvatars from '../AssigneeAvatars.svelte';
 	import type { TeamRow, MemberHealth } from '../../lib/overview';
 
 	export let rows: TeamRow[];
@@ -12,13 +13,6 @@
 	const HEALTH_RULE =
 		'Needs support: 2+ tasks overdue or behind · Watch: 1 overdue/behind or 2+ at risk · On track: otherwise';
 	const GRID = 'grid-template-columns:minmax(150px,1.4fr) repeat(4,minmax(58px,.7fr)) minmax(110px,1.1fr) minmax(104px,.9fr)';
-	// Deterministic avatar tint per user id (same trick as elsewhere: hash → palette).
-	const AVATAR = ['#007a8a', '#769a4a', '#d97706', '#7c3aed', '#db2777', '#0ea5e9'];
-	function avatarColor(id: string): string {
-		let h = 0;
-		for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-		return AVATAR[h % AVATAR.length];
-	}
 </script>
 
 <section class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 min-w-0">
@@ -39,8 +33,7 @@
 			<div class="grid items-center gap-x-3 py-2 border-t border-gray-100 dark:border-gray-800 text-[12px]" style={GRID}>
 				{#if r.userId}
 					<span class="flex items-center gap-2 min-w-0">
-						<span class="w-6 h-6 rounded-full text-white text-[10px] inline-flex items-center justify-center flex-none"
-							style="background:{avatarColor(r.userId)}">{initials(r.userId)}</span>
+						<AssigneeAvatars ids={[r.userId]} max={1} size={24} />
 						<span class="truncate">{displayName(r.userId)}</span>
 					</span>
 				{:else}

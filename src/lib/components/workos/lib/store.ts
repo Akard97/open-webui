@@ -15,6 +15,7 @@ import {
 import { applyFilters, emptyFilter } from './filters';
 import { defaultColumnPrefs, parseColumnPrefs, type ColumnPrefs } from './columns';
 import { parseZoom, type ZoomKey } from './timeline';
+import { LABEL_PALETTE } from './avatar';
 
 export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview' | 'timeline';
 
@@ -189,9 +190,6 @@ export async function selectTeam(id: string): Promise<void> {
 	tasks.set([]);
 	labels.set(await api.listLabels(token(), id).catch(() => []));
 }
-
-// Rotating palette so freshly created tags don't all share one color.
-const LABEL_PALETTE = ['#00a5ba', '#769a4a', '#d97706', '#dc2626', '#7c3aed', '#0ea5e9', '#db2777', '#ca8a04'];
 
 export async function createLabel(name: string): Promise<Label | null> {
 	const team = get(currentTeam);
