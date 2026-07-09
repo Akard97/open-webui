@@ -20,3 +20,11 @@ export const STATUS_SHAPE: Record<TaskStatus, StatusShape> = {
 export function statusShape(s: TaskStatus): StatusShape {
 	return STATUS_SHAPE[s];
 }
+
+/** Fallback color for "no priority" — kills the #cbd5e1/#9ca3af/gray-300 drift. */
+export const PRIORITY_NONE = '#9ca3af';
+
+/** One tint recipe for all status/priority chip backgrounds (replaces bespoke `{hex}24` / `{hex}1f` alpha suffixes). */
+export function tint(color: string, pct = 14): string {
+	return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+}
