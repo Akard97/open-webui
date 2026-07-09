@@ -3,7 +3,8 @@
 	import { page } from '$app/stores';
 
 	import { WEBUI_NAME, config, showArchivedChats, user } from '$lib/stores';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import osoolLogo from '$lib/assets/osool-logo.png';
 
 	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
@@ -39,7 +40,7 @@
 	>
 		<span class="w-10 shrink-0 flex items-center justify-center">
 			<img
-				src="{WEBUI_BASE_URL}/static/favicon.png"
+				src={osoolLogo}
 				alt={$WEBUI_NAME}
 				class="size-6 rounded object-contain"
 				draggable="false"
