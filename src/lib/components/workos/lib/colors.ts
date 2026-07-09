@@ -29,11 +29,8 @@ export function tint(color: string, pct = 14): string {
 	return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 }
 
-export const STATUS_LABEL: Record<TaskStatus, string> = {
-	backlog: 'Backlog', todo: 'Todo', in_progress: 'In Progress',
-	in_review: 'In Review', done: 'Done', canceled: 'Canceled'
-};
-
+// NOTE: STATUS_LABEL deliberately lives in lib/types.ts (the canonical map,
+// ~9 consumers) — do not re-add a copy here.
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
 	urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low'
 };

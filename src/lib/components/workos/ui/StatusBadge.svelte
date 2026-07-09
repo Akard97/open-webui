@@ -2,8 +2,8 @@
 	// Canonical status pill: soft tinted background + StatusDot glyph + label.
 	// Non-interactive display element (no hover/focus states) — read-only rendering.
 	import StatusDot from './StatusDot.svelte';
-	import type { TaskStatus } from '../lib/types';
-	import { STATUS_COLOR, STATUS_LABEL, statusShape, tint } from '../lib/colors';
+	import { STATUS_LABEL, type TaskStatus } from '../lib/types';
+	import { STATUS_COLOR, statusShape, tint } from '../lib/colors';
 
 	export let status: TaskStatus;
 	export let size: 'md' | 'sm' = 'md';
