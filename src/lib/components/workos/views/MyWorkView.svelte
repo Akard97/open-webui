@@ -6,14 +6,14 @@
 	// backend's /static dir, which gets wiped when the backend image is rebuilt.
 	import workosLogoDark from '../assets/workos-logo-dark.png';
 	import workosLogoLight from '../assets/workos-logo-light.png';
-	import StatusDot from '../ui/StatusDot.svelte';
+	import StatusBadge from '../ui/StatusBadge.svelte';
+	import PriorityFlag from '../ui/PriorityFlag.svelte';
 	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar';
 	import { avatarColor } from '../lib/avatar';
 	import TaskHoverCard from './TaskHoverCard.svelte';
 	import * as HoverCard from '$lib/components/ui/hover-card';
-	import type { Task, TaskStatus, MyWorkSegment } from '../lib/types';
-	import { STATUS_LABEL } from '../lib/types';
-	import { STATUS_COLOR, PRIORITY_COLOR, PRIORITY_NONE } from '../lib/colors';
+	import type { Task, MyWorkSegment } from '../lib/types';
+	import { PRIORITY_COLOR } from '../lib/colors';
 	import { taskHealth, HEALTH_LABEL, HEALTH_CHIP } from '../lib/progress';
 	import { bucketByDueDate } from '../lib/buckets';
 	import { computeStats } from '../lib/stats';
@@ -26,10 +26,6 @@
 	const now = Date.now();
 	const startToday = new Date(now).setHours(0, 0, 0, 0);
 	const endToday = startToday + 86_399_999;
-
-	const STATUS_SHAPE: Record<TaskStatus, 'dashed' | 'ring' | 'half' | 'check' | 'x'> = {
-		backlog: 'dashed', todo: 'ring', in_progress: 'half', in_review: 'half', done: 'check', canceled: 'x'
-	};
 
 	const fmtDue = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -309,21 +305,9 @@
 											class="group grid items-center gap-3 w-full text-left px-2 py-2 rounded-lg border-t border-gray-100 dark:border-gray-800/60 first:border-t-0 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
 											style={GRID}
 										>
-											<span
-												class="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md text-[11px] font-semibold"
-												style="background:{STATUS_COLOR[t.status]}24; color:{STATUS_COLOR[t.status]}"
-											>
-												<StatusDot shape={STATUS_SHAPE[t.status]} color={STATUS_COLOR[t.status]} size={11} />
-												{STATUS_LABEL[t.status]}
-											</span>
+											<StatusBadge status={t.status} size="sm" />
 											<span class="min-w-0 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</span>
-											{#if t.priority}
-												<span class="inline-flex items-center gap-1.5 text-[13px] text-gray-600 dark:text-gray-300">
-													<span class="flex-none" style="color:{PRIORITY_COLOR[t.priority]}"><Icon name="flag" size={14} /></span>{cap(t.priority)}
-												</span>
-											{:else}
-												<span class="text-gray-300 dark:text-gray-600">—</span>
-											{/if}
+											<PriorityFlag priority={t.priority} showLabel={false} />
 											<span class="inline-flex items-center gap-1.5 min-w-0 text-[13px] text-gray-500 dark:text-gray-400">
 												<span class="w-1.5 h-1.5 rounded-full bg-brand-500 flex-none"></span><span class="truncate">{wsName(t)}</span>
 											</span>
@@ -391,7 +375,7 @@
 								</div>
 								<div class="w-px self-stretch bg-gray-100 dark:bg-gray-800"></div>
 								<div class="flex-1 min-w-0 flex items-center gap-2">
-									<span class="flex-none" style="color:{d.task.priority ? PRIORITY_COLOR[d.task.priority] : PRIORITY_NONE}"><Icon name="flag" size={14} /></span>
+									<PriorityFlag priority={d.task.priority} showLabel={false} />
 									<span class="text-[13px] text-gray-600 dark:text-gray-300 truncate">{d.task.title}</span>
 								</div>
 							</button>

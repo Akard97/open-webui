@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from '../../ui/Icon.svelte';
-	import { STATUS_COLOR, PRIORITY_COLOR } from '../../lib/colors';
+	import PriorityFlag from '../../ui/PriorityFlag.svelte';
+	import { STATUS_COLOR } from '../../lib/colors';
 	import { openTask } from '../../lib/store';
 	import type { Task } from '../../lib/types';
 
@@ -49,8 +50,8 @@
 					<span class="text-[12px] font-medium truncate text-gray-800 dark:text-gray-100">{t.title}</span>
 				</span>
 				{#if t.priority}
-					<span class="mt-0.5 pl-[26px] flex items-center gap-1 text-[10px]" style="color:{PRIORITY_COLOR[t.priority]}">
-						<Icon name="flag" size={10} /> {t.priority[0].toUpperCase() + t.priority.slice(1)}
+					<span class="mt-0.5 pl-[26px] flex items-center">
+						<PriorityFlag priority={t.priority} />
 					</span>
 				{/if}
 			</div>

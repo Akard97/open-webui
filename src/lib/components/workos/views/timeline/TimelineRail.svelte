@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Icon from '../../ui/Icon.svelte';
+	import PriorityFlag from '../../ui/PriorityFlag.svelte';
 	import AssigneeAvatars from '../AssigneeAvatars.svelte';
-	import { STATUS_COLOR, PRIORITY_COLOR } from '../../lib/colors';
+	import { STATUS_COLOR } from '../../lib/colors';
 	import { openTask } from '../../lib/store';
 	import type { TimelineItem } from '../../lib/timeline';
 
@@ -27,8 +27,8 @@
 				<span class="text-gray-300 dark:text-gray-600">Unassigned</span>
 			{/if}
 			{#if t.priority}
-				<span class="flex-none inline-flex items-center gap-0.5" style="color:{PRIORITY_COLOR[t.priority]}">
-					<Icon name="flag" size={11} /> {t.priority[0].toUpperCase() + t.priority.slice(1)}
+				<span class="flex-none">
+					<PriorityFlag priority={t.priority} />
 				</span>
 			{/if}
 		</span>
