@@ -19,6 +19,7 @@
 	import Pills from '../ui/Pills.svelte';
 	import { isOverdue } from '../lib/calendar';
 	import { formatDateShort } from '../lib/format';
+	import { toast } from 'svelte-sonner';
 	import {
 		tasksByStatus, openTask, removeTask, addTask, directory, labels,
 		boardFilter, listColumns, currentWorkstream, currentTeam, roles
@@ -48,7 +49,16 @@
 		if (!t || !ws) return;
 		newTitle = '';
 		adding = null;
-		await addTask(ws.id, { title: t, status });
+		try {
+			await addTask(ws.id, { title: t, status });
+		} catch {
+			toast.error('Failed to create task');
+			// Give the title back — unless the user already started another entry.
+			if (adding === null && !newTitle) {
+				adding = status;
+				newTitle = t;
+			}
+		}
 	}
 
 	// Toolbar "Add new" — creates a task in the default (backlog) status, like the
@@ -59,7 +69,15 @@
 		if (!t || !ws) return;
 		newGlobalTitle = '';
 		creatingNew = false;
-		await addTask(ws.id, { title: t });
+		try {
+			await addTask(ws.id, { title: t });
+		} catch {
+			toast.error('Failed to create task');
+			if (!creatingNew && !newGlobalTitle) {
+				creatingNew = true;
+				newGlobalTitle = t;
+			}
+		}
 	}
 </script>
 

@@ -7,6 +7,7 @@
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
 	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask, boardFilter } from '../lib/store';
 	import FilterBar from '../chrome/FilterBar.svelte';
+	import { toast } from 'svelte-sonner';
 
 	// Status accent + glyph — hollow ring (not started) → half pie (working) →
 	// filled check/x (resolved), echoing the board mock.
@@ -108,7 +109,17 @@
 		if (!t || !ws) return;
 		newTitle = '';
 		adding = null;
-		await addTask(ws.id, { title: t, status });
+		try {
+			await addTask(ws.id, { title: t, status });
+		} catch {
+			toast.error('Failed to create task');
+			// Give the title back — unless the user already started another entry.
+			if (adding === null && !newTitle) {
+				adding = status;
+				newTitle = t;
+			}
+			return;
+		}
 		await initSortables(); // attach the new card to the sortable list
 	}
 
@@ -118,7 +129,16 @@
 		if (!t || !ws) return;
 		topTitle = '';
 		creatingTop = false;
-		await addTask(ws.id, { title: t });
+		try {
+			await addTask(ws.id, { title: t });
+		} catch {
+			toast.error('Failed to create task');
+			if (!creatingTop && !topTitle) {
+				creatingTop = true;
+				topTitle = t;
+			}
+			return;
+		}
 		await initSortables();
 	}
 </script>

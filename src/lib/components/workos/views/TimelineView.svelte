@@ -69,7 +69,16 @@
 		newTitle = '';
 		creatingNew = false;
 		const ts = dayToTs(todayDay(Date.now()));
-		await addTask(ws.id, { title, start_date: ts, due_date: ts });
+		try {
+			await addTask(ws.id, { title, start_date: ts, due_date: ts });
+		} catch {
+			toast.error('Failed to create task');
+			// Give the title back — unless the user already started another entry.
+			if (!creatingNew && !newTitle) {
+				creatingNew = true;
+				newTitle = title;
+			}
+		}
 	}
 
 	$: unscheduled = unscheduledTasks($filteredTasks);
@@ -145,7 +154,15 @@
 		rowTitle = '';
 		addingRow = false;
 		const ts = dayToTs(todayDay(Date.now()));
-		await addTask(ws.id, { title, start_date: ts, due_date: ts });
+		try {
+			await addTask(ws.id, { title, start_date: ts, due_date: ts });
+		} catch {
+			toast.error('Failed to create task');
+			if (!addingRow && !rowTitle) {
+				addingRow = true;
+				rowTitle = title;
+			}
+		}
 	}
 </script>
 
@@ -188,6 +205,8 @@
 		<div class="flex-none px-3 pt-3 bg-white dark:bg-gray-950">
 			<button
 				class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 text-sm font-medium"
+				aria-expanded={showUnscheduled}
+				aria-controls="timeline-unscheduled-list"
 				onclick={() => (showUnscheduled = !showUnscheduled)}
 			>
 				Unscheduled <span class="text-xs text-gray-400">{unscheduled.length}</span>
@@ -195,7 +214,7 @@
 				<Icon name={showUnscheduled ? 'chevron-up' : 'chevron-down'} size={14} />
 			</button>
 			{#if showUnscheduled}
-				<div class="mt-2 rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
+				<div id="timeline-unscheduled-list" class="mt-2 rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
 					{#each unscheduled as t (t.id)}
 						<button class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left" onclick={() => openTask(t.id)}>
 							<span class="flex-none w-2 h-2 rounded-full" style="background:{STATUS_COLOR[t.status]}"></span>
@@ -229,6 +248,7 @@
 				style="width: {railW + chartW}px;"
 				ondragover={dragOver}
 				ondragleave={() => (hoverDay = null)}
+				ondragend={() => (hoverDay = null)}
 				ondrop={drop}
 			>
 				<!-- Background layer: weekends, gridlines, today line -->
@@ -257,7 +277,7 @@
 				<!-- Rows -->
 				{#if items.length}
 					{#each items as item (item.task.id)}
-						<div class="flex-none flex border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-900/30" style="height: {rowH}px;">
+						<div role="listitem" class="flex-none flex border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-900/30" style="height: {rowH}px;">
 							<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-900" style="width: {railW}px;">
 								<TimelineRail {item} compact={$mobile} />
 							</div>

@@ -31,8 +31,8 @@
 	let mode: Mode | null = null;
 	let x0 = 0;
 	let sl0 = 0;
-	let dx = 0;
-	let canceled = false;
+	let dx = 0; // scroll-compensated — drives the day delta
+	let pointerDx = 0; // raw pointer travel — drives the click-vs-drag test
 
 	$: delta = mode ? Math.round(dx / dayWidth) : 0;
 	// Preview range under the current drag (clamped like applyResize will clamp).
@@ -53,27 +53,36 @@
 		x0 = e.clientX;
 		sl0 = scroller?.scrollLeft ?? 0;
 		dx = 0;
-		canceled = false;
+		pointerDx = 0;
 		(e.currentTarget as Element).setPointerCapture(e.pointerId);
 	}
 	function move(e: PointerEvent) {
-		if (!mode || canceled) return;
-		dx = e.clientX - x0 + ((scroller?.scrollLeft ?? 0) - sl0);
-		// Edge auto-pan: keep dragging usable past the viewport.
-		if (scroller) {
+		if (!mode) return;
+		pointerDx = e.clientX - x0;
+		dx = pointerDx + ((scroller?.scrollLeft ?? 0) - sl0);
+		// Edge auto-pan: keep dragging usable past the viewport. Gated on raw
+		// pointer travel so a stationary click inside the 40px strips can't pan
+		// (auto-pan feeds the scroll-compensated dx and would turn the click
+		// into a 1–2 day move at coarse zooms).
+		if (scroller && Math.abs(pointerDx) > 4) {
 			const r = scroller.getBoundingClientRect();
 			if (e.clientX > r.right - 40) scroller.scrollLeft += 16;
 			else if (e.clientX < r.left + 40) scroller.scrollLeft -= 16;
 		}
 	}
+	function cancel() {
+		mode = null;
+		dx = 0;
+		pointerDx = 0;
+	}
 	async function up() {
 		if (!mode) return;
 		const m = mode;
-		const moved = Math.abs(dx) > 4;
+		const moved = Math.abs(pointerDx) > 4;
 		const d = delta;
 		mode = null;
 		dx = 0;
-		if (canceled) return;
+		pointerDx = 0;
 		if (!moved) {
 			openTask(t.id);
 			return;
@@ -87,11 +96,7 @@
 		}
 	}
 	function key(e: KeyboardEvent) {
-		if (e.key === 'Escape' && mode) {
-			canceled = true;
-			mode = null;
-			dx = 0;
-		}
+		if (e.key === 'Escape' && mode) cancel();
 	}
 
 	const GRIP =
@@ -115,12 +120,13 @@
 					onpointerdown={(e) => down(e, 'move')}
 					onpointermove={move}
 					onpointerup={up}
+					onpointercancel={cancel}
 					onclick={() => { if (disabled) openTask(t.id); }}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openTask(t.id); }}
 				>
 					<span class="block w-4 h-4 rotate-45 rounded-[3px]" style="background:{color}; box-shadow: 0 1px 4px {color}66;"></span>
 					{#if !disabled}
-						<span class="{GRIP} -left-2.5" onpointerdown={(e) => down(e, 'start')}></span>
+						<span aria-hidden="true" class="{GRIP} -left-2.5" onpointerdown={(e) => down(e, 'start')}></span>
 					{/if}
 					{#if mode}
 						<span class="absolute -top-7 left-0 px-2 py-0.5 rounded-md bg-gray-900 text-white text-[10px] font-medium whitespace-nowrap z-30">
@@ -142,6 +148,7 @@
 					onpointerdown={(e) => down(e, 'move')}
 					onpointermove={move}
 					onpointerup={up}
+					onpointercancel={cancel}
 					onclick={() => { if (disabled) openTask(t.id); }}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openTask(t.id); }}
 				>
@@ -152,8 +159,8 @@
 						</span>
 					{/if}
 					{#if !disabled}
-						<span class="{GRIP} -left-[3px]" onpointerdown={(e) => down(e, 'start')}></span>
-						<span class="{GRIP} -right-[3px]" onpointerdown={(e) => down(e, 'end')}></span>
+						<span aria-hidden="true" class="{GRIP} -left-[3px]" onpointerdown={(e) => down(e, 'start')}></span>
+						<span aria-hidden="true" class="{GRIP} -right-[3px]" onpointerdown={(e) => down(e, 'end')}></span>
 					{/if}
 					{#if mode}
 						<span class="absolute -top-7 left-0 px-2 py-0.5 rounded-md bg-gray-900 text-white text-[10px] font-medium whitespace-nowrap z-30">

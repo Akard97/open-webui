@@ -28,7 +28,7 @@
 			<span class="text-[10px] font-bold tracking-wider text-gray-500 dark:text-gray-400">UNSCHEDULED</span>
 			<span class="text-[10px] px-1.5 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500">{tasks.length}</span>
 			<span class="flex-1"></span>
-			<button class="text-gray-400 hover:text-gray-600" title="Collapse" onclick={() => (collapsed = true)}>
+			<button class="text-gray-400 hover:text-gray-600" title="Collapse" aria-label="Collapse unscheduled panel" onclick={() => (collapsed = true)}>
 				<Icon name="chevron-right" size={14} />
 			</button>
 		</div>
@@ -41,7 +41,7 @@
 				ondragstart={(e) => dragStart(e, t)}
 				class="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-2.5 py-2 cursor-grab shadow-sm"
 				onclick={() => openTask(t.id)}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openTask(t.id); }}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTask(t.id); } }}
 			>
 				<span class="flex items-center gap-1.5 min-w-0">
 					<span class="flex-none text-gray-300 dark:text-gray-600"><Icon name="grip-vertical" size={12} /></span>

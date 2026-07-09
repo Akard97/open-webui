@@ -157,6 +157,8 @@
 			{#if unscheduled.length}
 				<button
 					class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 text-sm font-medium mb-3"
+					aria-expanded={showUnscheduled}
+					aria-controls="calendar-unscheduled-list"
 					onclick={() => (showUnscheduled = !showUnscheduled)}
 				>
 					Unscheduled <span class="text-xs text-gray-400">{unscheduled.length}</span>
@@ -164,7 +166,7 @@
 					<Icon name={showUnscheduled ? 'chevron-up' : 'chevron-down'} size={14} />
 				</button>
 				{#if showUnscheduled}
-					<div class="mb-3 rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
+					<div id="calendar-unscheduled-list" class="mb-3 rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-900">
 						{#each unscheduled as t (t.id)}
 							<button class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left" onclick={() => openTask(t.id)}>
 								<StatusDot shape={statusShape(t.status)} color={STATUS_COLOR[t.status]} size={14} />
