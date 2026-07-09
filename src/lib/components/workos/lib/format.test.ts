@@ -16,20 +16,29 @@ describe('formatDueDate', () => {
 });
 
 describe('isOverdue', () => {
-	const now = new Date(2026, 5, 23, 12, 0).getTime();
+	// Due dates are stored as UTC midnight of the picked date (DueDateCell parses
+	// 'YYYY-MM-DD'); overdue flips when that day fully ends in the viewer's local
+	// time — the same dueDayEndLocal boundary taskHealth uses.
+	const dueJun23 = Date.UTC(2026, 5, 23);
 	it('false when no due date', () => {
+		const now = new Date(2026, 5, 23, 12, 0).getTime();
 		expect(isOverdue(null, 'todo', now)).toBe(false);
 		expect(isOverdue(undefined, 'todo', now)).toBe(false);
 	});
-	it('true when past due and not finished', () => {
-		expect(isOverdue(now - 1000, 'in_progress', now)).toBe(true);
+	it('false throughout the due day, including its last millisecond', () => {
+		expect(isOverdue(dueJun23, 'in_progress', new Date(2026, 5, 23, 12, 0).getTime())).toBe(false);
+		expect(isOverdue(dueJun23, 'in_progress', new Date(2026, 5, 23, 23, 59, 59, 999).getTime())).toBe(false);
+	});
+	it('true once the due day has fully ended locally', () => {
+		expect(isOverdue(dueJun23, 'in_progress', new Date(2026, 5, 24, 0, 0, 0, 0).getTime())).toBe(true);
 	});
 	it('false when due in the future', () => {
-		expect(isOverdue(now + 1000, 'todo', now)).toBe(false);
+		expect(isOverdue(dueJun23, 'todo', new Date(2026, 5, 22, 12, 0).getTime())).toBe(false);
 	});
 	it('false when done or canceled even if past due', () => {
-		expect(isOverdue(now - 1000, 'done', now)).toBe(false);
-		expect(isOverdue(now - 1000, 'canceled', now)).toBe(false);
+		const later = new Date(2026, 5, 30, 12, 0).getTime();
+		expect(isOverdue(dueJun23, 'done', later)).toBe(false);
+		expect(isOverdue(dueJun23, 'canceled', later)).toBe(false);
 	});
 });
 

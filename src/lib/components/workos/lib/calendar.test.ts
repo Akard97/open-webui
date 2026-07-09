@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { dayKey, sameDay, isToday, monthGrid, weekDays, agendaDays } from './calendar';
+import type { Task } from './types';
 
 describe('dayKey / sameDay / isToday', () => {
 	it('strips the time component', () => {
