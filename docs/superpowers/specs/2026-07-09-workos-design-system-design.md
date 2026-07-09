@@ -105,9 +105,9 @@ Build in `src/lib/components/workos/ui/`, migrate view by view. Each lands with 
 
 | Primitive | Replaces | Notes |
 |---|---|---|
-| `StatusBadge` | 3 pill anatomies (Board/List/Hover) | `size: sm\|md`; StatusDot inside; tint via `tint()` |
+| `StatusBadge` | 3 pill anatomies (Board/List/Hover) | `size: sm\|md`; StatusDot inside; tint via `tint()`. **Shape decided 2026-07-10: soft rectangle (md `rounded-lg`, sm `rounded-md`) — NOT pill** |
 | `PriorityFlag` | 4 renderings + lowercase enum in Pills | shared `PRIORITY_LABEL` map; delete dead `commandcenter/PriorityIcon.svelte` |
-| `ProgressBar` | 3 anatomies; ProgressCell ignoring health | health-aware fill from `--wos-health-*` |
+| ~~`ProgressBar`~~ | ~~3 anatomies~~ | **DROPPED 2026-07-10 — user decision: keep the current three bar anatomies (card/hover/cell) as-is; do not consolidate or restyle them** |
 | `Avatar` (one) | `AssigneeAvatars` + `commandcenter/Avatar` + hand-rolled spans | extend shadcn `ui/avatar` with color-hash fallback from `store.ts LABEL_PALETTE`; `ring-background` not `ring-white` |
 | `LabelChip` | 4 variants | `rounded-full`, caption type step |
 | `SectionHeader` | drawer-panel drift, uppercase outlier | 13px medium + optional icon |
@@ -141,4 +141,4 @@ rg 'sky-500' src/lib/components/workos                          # → no hits
 rg -o 'rounded(-\[3px\])?(\s|")' src/lib/components/workos      # bare/3px → 0
 ```
 
-Per user preference (workos-design-taste): show mockups before coding any visual change — especially the KpiBand retirement (D4) and StatusBadge/ProgressBar consolidation.
+Per user preference (workos-design-taste): show mockups before coding any visual change — especially the KpiBand retirement (D4) and the StatusBadge consolidation (soft-rectangle shape per the 2026-07-10 decision). ProgressBar consolidation is dropped (see §4) and needs no mockups.
