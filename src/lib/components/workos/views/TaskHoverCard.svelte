@@ -5,9 +5,10 @@
 	// planned-vs-actual progress) so the two surfaces read the same.
 	import Icon from '../ui/Icon.svelte';
 	import StatusBadge from '../ui/StatusBadge.svelte';
+	import PriorityFlag from '../ui/PriorityFlag.svelte';
 	import AssigneeAvatars from './AssigneeAvatars.svelte';
 	import type { Task } from '../lib/types';
-	import { STATUS_COLOR, PRIORITY_COLOR } from '../lib/colors';
+	import { STATUS_COLOR } from '../lib/colors';
 	import {
 		taskHealth, HEALTH_LABEL, HEALTH_CHIP, actualProgress, plannedProgress, type TaskHealth
 	} from '../lib/progress';
@@ -21,7 +22,6 @@
 	const HEALTH_HEX: Record<TaskHealth, string> = {
 		on_track: '#16a34a', at_risk: '#d97706', behind: '#ea580c', overdue: '#dc2626'
 	};
-	const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 	function ago(ms: number): string {
 		const s = Math.max(0, Math.floor((now - ms) / 1000));
 		if (s < 60) return `${s}s`;
@@ -55,9 +55,7 @@
 		<div class="flex items-center gap-2 mb-3">
 			<StatusBadge status={task.status} size="sm" />
 			{#if task.priority}
-				<span class="inline-flex items-center gap-1 text-[12px] text-gray-600 dark:text-gray-300">
-					<span class="flex-none" style="color:{PRIORITY_COLOR[task.priority]}"><Icon name="flag" size={13} /></span>{cap(task.priority)}
-				</span>
+				<PriorityFlag priority={task.priority} />
 			{/if}
 			<span class="flex-1"></span>
 			<span class="text-[11px] font-medium tabular-nums text-gray-400 dark:text-gray-500">{task.key}</span>

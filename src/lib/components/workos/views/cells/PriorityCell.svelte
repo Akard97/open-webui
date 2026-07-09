@@ -12,7 +12,7 @@
 		title="Set priority"
 		class="inline-flex items-center gap-1.5 rounded-md px-1 -mx-1 py-0.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
 	>
-		<PriorityFlag priority={task.priority} showLabel={false} />
+		<PriorityFlag priority={task.priority} />
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Content align="start">
 		<DropdownMenu.Item onSelect={() => editTask(task.id, { priority: null })}>

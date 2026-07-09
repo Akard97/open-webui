@@ -307,7 +307,7 @@
 										>
 											<StatusBadge status={t.status} size="sm" />
 											<span class="min-w-0 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</span>
-											<PriorityFlag priority={t.priority} showLabel={false} />
+											<PriorityFlag priority={t.priority} />
 											<span class="inline-flex items-center gap-1.5 min-w-0 text-[13px] text-gray-500 dark:text-gray-400">
 												<span class="w-1.5 h-1.5 rounded-full bg-brand-500 flex-none"></span><span class="truncate">{wsName(t)}</span>
 											</span>
