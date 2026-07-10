@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button';
 	import { openTask } from '../../lib/store';
 	import type { AttentionItem, AttentionClass } from '../../lib/overview';
 
@@ -42,9 +43,9 @@
 			{/each}
 		</div>
 		{#if items.length > 6}
-			<button type="button" class="mt-2 text-[12px] text-primary font-medium hover:opacity-80" onclick={() => (expanded = !expanded)}>
+			<Button variant="ghost" size="xs" class="mt-2 text-primary" onclick={() => (expanded = !expanded)}>
 				{expanded ? 'Show fewer' : `Show all ${items.length}`}
-			</button>
+			</Button>
 		{/if}
 	{/if}
 </section>

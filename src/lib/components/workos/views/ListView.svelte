@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
+	import { Input } from '$lib/components/ui/input';
 	import StatusDot from '../ui/StatusDot.svelte';
 	import StatusBadge from '../ui/StatusBadge.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
@@ -10,7 +11,7 @@
 	import ProgressCell from './cells/ProgressCell.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { cn } from '$lib/components/ui/utils.js';
-	import { buttonVariants } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { STATUS_ORDER, type TaskStatus } from '../lib/types';
 	import { STATUS_COLOR, statusShape } from '../lib/colors';
 	import { LIST_COLUMNS, gridTemplate } from '../lib/columns';
@@ -100,18 +101,17 @@
 		</DropdownMenu.Root>
 
 		{#if creatingNew}
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
+			<Input
+				class="h-8 w-48"
 				placeholder="Task title…"
 				bind:value={newGlobalTitle}
 				onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creatingNew = false; newGlobalTitle = ''; } }}
 				autofocus
 			/>
 		{:else}
-			<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => { creatingNew = true; newGlobalTitle = ''; }}>
+			<Button size="sm" onclick={() => { creatingNew = true; newGlobalTitle = ''; }}>
 				<Icon name="plus" size={15} /> Add new
-			</button>
+			</Button>
 		{/if}
 	</FilterBar>
 
@@ -233,18 +233,17 @@
 						<!-- Add task — left pad = row px-3 (0.75rem) + 26px name offset (see header above) -->
 						<div class="border-t border-gray-100 dark:border-gray-900 px-3 py-2 md:pl-[calc(0.75rem+26px)]">
 							{#if adding === status}
-								<!-- svelte-ignore a11y_autofocus -->
-								<input
-									class="text-sm px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-64"
+								<Input
+									class="h-7 w-64"
 									placeholder="Task title…"
 									bind:value={newTitle}
 									onkeydown={(e) => { if (e.key === 'Enter') submitAdd(status); if (e.key === 'Escape') { adding = null; newTitle = ''; } }}
 									autofocus
 								/>
 							{:else}
-								<button class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:opacity-80" onclick={() => { adding = status; newTitle = ''; }}>
+								<Button variant="ghost" size="sm" class="text-primary" onclick={() => { adding = status; newTitle = ''; }}>
 									<Icon name="plus" size={15} /> Add task
-								</button>
+								</Button>
 							{/if}
 						</div>
 					{/if}

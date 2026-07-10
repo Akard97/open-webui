@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import TimelineHeader from './timeline/TimelineHeader.svelte';
 	import TimelineRail from './timeline/TimelineRail.svelte';
@@ -179,15 +181,14 @@
 				>{z}</button>
 			{/each}
 		</div>
-		<button
-			type="button"
-			class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+		<Button
+			variant="outline"
+			size="sm"
 			onclick={() => { now = Date.now(); scrollToToday(); }}
-		>Today</button>
+		>Today</Button>
 		{#if creatingNew}
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-48"
+			<Input
+				class="h-8 w-48"
 				placeholder="Task title…"
 				aria-label="Task title"
 				bind:value={newTitle}
@@ -195,9 +196,9 @@
 				autofocus
 			/>
 		{:else}
-			<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => { creatingNew = true; newTitle = ''; }}>
+			<Button size="sm" onclick={() => { creatingNew = true; newTitle = ''; }}>
 				<Icon name="plus" size={15} /> Add new
-			</button>
+			</Button>
 		{/if}
 	</FilterBar>
 

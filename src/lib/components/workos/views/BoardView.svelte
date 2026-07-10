@@ -2,6 +2,8 @@
 	import Sortable from 'sortablejs';
 	import { onDestroy, tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import StatusDot from '../ui/StatusDot.svelte';
 	import StatusBadge from '../ui/StatusBadge.svelte';
 	import TaskCard from './TaskCard.svelte';
@@ -140,11 +142,11 @@
 		<div class="flex-1"><FilterBar filter={boardFilter} /></div>
 		<div class="flex items-center px-4 py-2 md:py-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
 			{#if creatingTop}
-				<input class="text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-56" placeholder="Task title…" bind:value={topTitle} onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }} autofocus />
+				<Input class="h-8 w-56" placeholder="Task title…" bind:value={topTitle} onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }} autofocus />
 			{:else}
-				<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => (creatingTop = true)}>
+				<Button size="sm" onclick={() => (creatingTop = true)}>
 					<Icon name="plus" size={15} /> Add New
-				</button>
+				</Button>
 			{/if}
 		</div>
 	</div>
@@ -157,7 +159,7 @@
 					<StatusBadge {status} size="md" />
 					<div class="flex-1"></div>
 					<button class="text-gray-400 opacity-50 cursor-default" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
-					<button class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></button>
+					<Button variant="ghost" size="icon-sm" class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></Button>
 				</div>
 
 				<div bind:this={columnEls[status]} data-status={status} class="flex flex-col gap-2.5 min-h-[24px]">
@@ -179,8 +181,8 @@
 				</div>
 
 				{#if adding === status}
-					<input
-						class="mt-2.5 text-sm px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950"
+					<Input
+						class="mt-2.5 h-8 bg-white dark:bg-gray-950"
 						placeholder="Task title…"
 						bind:value={newTitle}
 						onkeydown={(e) => { if (e.key === 'Enter') submitAdd(status); if (e.key === 'Escape') { adding = null; newTitle = ''; } }}

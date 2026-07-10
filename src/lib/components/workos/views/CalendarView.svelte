@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import DayCell from './calendar/DayCell.svelte';
 	import UnscheduledRail from './calendar/UnscheduledRail.svelte';
@@ -139,11 +140,11 @@
 	<!-- Toolbar -->
 	<div class="flex-none flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
 		<div class="flex items-center gap-1">
-			<button type="button" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition" title="Previous" aria-label="Previous period" onclick={() => step(-1)}><Icon name="chevron-left" size={16} /></button>
-			<button type="button" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition" title="Next" aria-label="Next period" onclick={() => step(1)}><Icon name="chevron-right" size={16} /></button>
+			<Button variant="ghost" size="icon-sm" title="Previous" aria-label="Previous period" onclick={() => step(-1)}><Icon name="chevron-left" size={16} /></Button>
+			<Button variant="ghost" size="icon-sm" title="Next" aria-label="Next period" onclick={() => step(1)}><Icon name="chevron-right" size={16} /></Button>
 		</div>
 		<div class="text-base font-semibold tracking-tight">{label}</div>
-		<button type="button" class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900 transition" onclick={today}>Today</button>
+		<Button variant="outline" size="sm" onclick={today}>Today</Button>
 		<div class="flex-1"></div>
 		<div class="hidden md:inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-900 p-0.5 text-sm">
 			<button type="button" aria-pressed={mode === 'month'} class="px-3.5 py-1 rounded-full transition {mode === 'month' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}" onclick={() => (mode = 'month')}>Month</button>
