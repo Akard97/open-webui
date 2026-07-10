@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { currentWorkstream, currentTeam, workspaces, view, tasks, initials } from '../lib/store';
 
 	$: ws = $currentWorkstream;
@@ -29,7 +30,7 @@
 			{parentWorkspace ? `${parentWorkspace.name} · ` : ''}{ws?.name ?? $currentTeam?.name ?? 'WorkOS'}
 		</span>
 		{#if ws}
-			<button class="text-gray-400 opacity-50 cursor-default" title="Rename" aria-disabled="true" tabindex="-1"><Icon name="pencil" size={15} /></button>
+			<Button variant="ghost" size="sm" class="text-gray-400" title="Rename" aria-disabled="true" disabled><Icon name="pencil" size={15} /></Button>
 		{/if}
 
 		<div class="flex-1"></div>
@@ -41,8 +42,8 @@
 					<span class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
 				{/each}
 			</div>
-			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 opacity-50 cursor-default" aria-disabled="true" tabindex="-1"><Icon name="share-2" size={14} /> Share</button>
-			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 inline-flex items-center gap-1.5 opacity-50 cursor-default" aria-disabled="true" tabindex="-1"><Icon name="zap" size={14} /> Automation</button>
+			<Button variant="ghost" size="sm" aria-disabled="true" disabled><Icon name="share-2" size={14} /> Share</Button>
+			<Button variant="ghost" size="sm" aria-disabled="true" disabled><Icon name="zap" size={14} /> Automation</Button>
 			</div>
 		{/if}
 	</div>

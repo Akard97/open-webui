@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
 
 	export let open = false;
 	export let name = '';
@@ -19,14 +20,8 @@
 			settings.
 		</Dialog.Description>
 		<div class="flex justify-end gap-2 mt-2">
-			<button class="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-850 transition" onclick={onCancel}>Cancel</button>
-			<button
-				class="text-sm font-medium px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50"
-				disabled={busy}
-				onclick={onConfirm}
-			>
-				Restrict workspace
-			</button>
+			<Button variant="outline" size="sm" onclick={onCancel}>Cancel</Button>
+			<Button variant="destructive" size="sm" disabled={busy} onclick={onConfirm}>Restrict workspace</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

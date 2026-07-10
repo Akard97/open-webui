@@ -4,9 +4,19 @@
 	import * as api from '../../lib/api';
 	import { token } from '../../lib/store';
 	import type { WorkosRules } from '../../lib/types';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Select from '$lib/components/ui/select';
 
 	let rules: WorkosRules = { team_creation: 'all_users', default_workspace_visibility: 'team' };
 	let loading = true;
+
+	const TEAM_CREATION_LABEL: Record<string, string> = {
+		all_users: 'All WorkOS users',
+		admins_only: 'Admins only'
+	};
+	const VISIBILITY_LABEL: Record<string, string> = { team: 'Team', restricted: 'Restricted' };
 
 	onMount(async () => {
 		loading = true;
@@ -35,17 +45,23 @@
 <div class="space-y-4 max-w-md">
 	<div>
 		<label class="text-sm font-medium" for="tc">Who can create teams</label>
-		<select id="tc" class="mt-1 w-full text-sm border border-gray-200 dark:border-gray-700 rounded px-2 py-1.5 bg-transparent" bind:value={rules.team_creation}>
-			<option value="all_users">All WorkOS users</option>
-			<option value="admins_only">Admins only</option>
-		</select>
+		<Select.Root type="single" bind:value={rules.team_creation}>
+			<Select.Trigger id="tc" class="mt-1 w-full">{TEAM_CREATION_LABEL[rules.team_creation]}</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="all_users" label="All WorkOS users" />
+				<Select.Item value="admins_only" label="Admins only" />
+			</Select.Content>
+		</Select.Root>
 	</div>
 	<div>
 		<label class="text-sm font-medium" for="vis">Default workspace visibility</label>
-		<select id="vis" class="mt-1 w-full text-sm border border-gray-200 dark:border-gray-700 rounded px-2 py-1.5 bg-transparent" bind:value={rules.default_workspace_visibility}>
-			<option value="team">Team</option>
-			<option value="restricted">Restricted</option>
-		</select>
+		<Select.Root type="single" bind:value={rules.default_workspace_visibility}>
+			<Select.Trigger id="vis" class="mt-1 w-full">{VISIBILITY_LABEL[rules.default_workspace_visibility]}</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="team" label="Team" />
+				<Select.Item value="restricted" label="Restricted" />
+			</Select.Content>
+		</Select.Root>
 	</div>
 	<div class="pt-2 border-t border-gray-200 dark:border-gray-800">
 		<div class="text-sm font-medium mb-1">Fixed sets (Phase 1)</div>
@@ -56,12 +72,12 @@
 		<div class="text-sm font-medium mb-2">Notifications</div>
 		{#each ['assigned', 'mentioned', 'commented', 'status_changed'] as cat (cat)}
 			<label class="flex items-center gap-2 h-8 text-sm">
-				<input
-					type="checkbox"
+				<Checkbox
 					checked={rules.notifications?.[cat] !== false}
-					onchange={(e) => {
-						rules.notifications = { ...(rules.notifications ?? {}), [cat]: (e.target as HTMLInputElement).checked };
+					onCheckedChange={(v) => {
+						rules.notifications = { ...(rules.notifications ?? {}), [cat]: !!v };
 					}}
+					class="size-4"
 				/>
 				<span class="capitalize">{cat.replace('_', ' ')}</span>
 			</label>
@@ -69,16 +85,16 @@
 	</div>
 	<div>
 		<div class="text-sm font-medium mb-1">Max attachment size (MB)</div>
-		<input
+		<Input
 			type="number"
 			min="0"
-			class="text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded px-2 py-1 w-24"
+			class="w-24"
 			value={rules.max_attachment_mb ?? 25}
 			onchange={(e) => { rules.max_attachment_mb = parseInt((e.target as HTMLInputElement).value, 10) || 0; }}
 		/>
 	</div>
 	<div class="flex items-center gap-3">
-		<button class="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground" onclick={save}>Save</button>
+		<Button size="sm" onclick={save}>Save</Button>
 	</div>
 </div>
 {/if}

@@ -3,6 +3,7 @@
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Select from '$lib/components/ui/select';
+	import { Button } from '$lib/components/ui/button';
 	import Icon from '../../ui/Icon.svelte';
 	import RestrictConfirmDialog from './RestrictConfirmDialog.svelte';
 	import * as api from '../../lib/api';
@@ -326,8 +327,8 @@
 			workstreams and tasks. This cannot be undone.
 		</Dialog.Description>
 		<div class="flex justify-end gap-2 mt-2">
-			<button class="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850 transition" onclick={() => (confirmDelete = false)}>Cancel</button>
-			<button class="text-sm font-medium px-3.5 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" disabled={busy} onclick={() => void deleteWorkspace()}>Delete workspace</button>
+			<Button variant="outline" size="sm" onclick={() => (confirmDelete = false)}>Cancel</Button>
+			<Button variant="destructive" size="sm" disabled={busy} onclick={() => void deleteWorkspace()}>Delete workspace</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

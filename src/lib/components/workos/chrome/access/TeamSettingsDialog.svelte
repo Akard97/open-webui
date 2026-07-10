@@ -5,6 +5,7 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Select from '$lib/components/ui/select';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { Button } from '$lib/components/ui/button';
 	import Icon from '../../ui/Icon.svelte';
 	import * as api from '../../lib/api';
 	import {
@@ -322,8 +323,8 @@
 			workspaces, workstreams and tasks. This cannot be undone.
 		</Dialog.Description>
 		<div class="flex justify-end gap-2 mt-2">
-			<button class="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-850 transition" onclick={() => (confirmDelete = false)}>Cancel</button>
-			<button class="text-sm font-medium px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" disabled={busy} onclick={() => void deleteTeam()}>Delete team</button>
+			<Button variant="outline" size="sm" onclick={() => (confirmDelete = false)}>Cancel</Button>
+			<Button variant="destructive" size="sm" disabled={busy} onclick={() => void deleteTeam()}>Delete team</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

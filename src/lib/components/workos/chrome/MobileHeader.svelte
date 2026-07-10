@@ -1,5 +1,6 @@
 <script lang="ts">
 	import SidebarIcon from '$lib/components/icons/Sidebar.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { view, currentWorkstream, workspaces, unreadCount, mobileNavOpen } from '../lib/store';
 
 	// Global views carry a fixed label; workstream views show the breadcrumb title.
@@ -15,8 +16,10 @@
 <div
 	class="flex-none h-11 flex items-center gap-1 px-2 border-b border-gray-100 dark:border-gray-850 bg-white dark:bg-gray-950"
 >
-	<button
-		class="relative flex items-center justify-center size-9 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition"
+	<Button
+		variant="ghost"
+		size="icon-lg"
+		class="relative"
 		title="Open WorkOS navigation"
 		aria-label="Open WorkOS navigation"
 		onclick={() => mobileNavOpen.set(true)}
@@ -25,6 +28,6 @@
 		{#if $unreadCount > 0}
 			<span class="absolute top-1 right-1 size-1.5 rounded-full bg-sky-500"></span>
 		{/if}
-	</button>
+	</Button>
 	<div class="flex-1 min-w-0 text-sm font-medium truncate px-1">{title}</div>
 </div>

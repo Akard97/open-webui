@@ -3,6 +3,7 @@
 	import TeamsTab from './TeamsTab.svelte';
 	import RulesTab from './RulesTab.svelte';
 	import { view } from '../../lib/store';
+	import { Button } from '$lib/components/ui/button';
 
 	type Tab = 'teams' | 'rules' | 'access';
 	let tab: Tab = 'teams';
@@ -19,7 +20,7 @@
 			<div class="text-[11px] uppercase tracking-wide text-gray-400">WorkOS · Admin</div>
 			<h1 class="text-xl font-semibold mt-1">Administration</h1>
 		</div>
-		<button class="text-sm text-gray-500" onclick={() => view.set('board')}>← Back to board</button>
+		<Button variant="ghost" size="sm" class="text-gray-500" onclick={() => view.set('board')}>← Back to board</Button>
 	</div>
 	<nav class="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-5">
 		{#each TABS as t (t.id)}
