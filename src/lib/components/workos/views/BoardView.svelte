@@ -159,7 +159,7 @@
 					<StatusBadge {status} size="md" />
 					<div class="flex-1"></div>
 					<button class="text-gray-400 opacity-50 cursor-default" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
-					<Button variant="ghost" size="icon-sm" class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></Button>
+					<Button variant="ghost" size="icon-xs" class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></Button>
 				</div>
 
 				<div bind:this={columnEls[status]} data-status={status} class="flex flex-col gap-2.5 min-h-[24px]">
