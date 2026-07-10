@@ -118,7 +118,7 @@ git commit -m "refactor(workos): FilterBar facets on shadcn DropdownMenu.Checkbo
 
 ```svelte
 <Dialog.Root open={req != null} onOpenChange={(o) => { if (!o) close(); }}>
-	<Dialog.Content class="max-w-md">
+	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>{title}</Dialog.Title>
 		</Dialog.Header>
@@ -159,7 +159,7 @@ git commit -m "refactor(workos): create-flow modals on shadcn Dialog"
 - [ ] **Step 1: Replace the hand-rolled menu.** Lines 68–91 (`{#if teamMenuOpen}` absolute panel) + `teamMenuOpen` state (11) + `onWindowClick` (16–18, 37) + Escape keydown handler → one `DropdownMenu.Root`. The existing trigger button (line 45, `onclick` toggle) becomes the `DropdownMenu.Trigger` via `{#snippet child({ props })}` spread onto the SAME button markup (keep its current bespoke classes — it's a sidebar affordance, not a standard control; do NOT convert it to shadcn Button). Menu content:
 
 ```svelte
-<DropdownMenu.Content align="start" class="w-[--bits-dropdown-menu-anchor-width]">
+<DropdownMenu.Content align="start">
 	<DropdownMenu.Group>
 		{#each teams as t}
 			<DropdownMenu.Item onSelect={() => selectTeam(t.id)}>
