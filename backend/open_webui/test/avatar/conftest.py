@@ -12,11 +12,11 @@ from sqlalchemy import text  # noqa: E402
 from open_webui.internal.db import Base, async_engine, engine  # noqa: E402
 import open_webui.models.avatar  # noqa: E402,F401  (register tables on Base)
 
-# The policy router transitively imports open_webui.config, whose module-level
-# `CONFIG_DATA = get_config()` runs a SELECT against the `config` table at IMPORT
-# time. Migrations are disabled for tests, so that table does not exist yet on the
-# fresh SQLite DB. Pre-create it here (at conftest import, before any test module
-# imports the router) so that load-time query succeeds.
+# Modules imported by this avatar suite transitively pull in open_webui.config,
+# whose module-level `CONFIG_DATA = get_config()` runs a SELECT against the
+# `config` table at IMPORT time. Migrations are disabled for tests, so that table
+# does not exist yet on the fresh SQLite DB. Pre-create it here (at conftest
+# import, before any test module imports) so that load-time query succeeds.
 with engine.begin() as _conn:
     _conn.execute(
         text(
