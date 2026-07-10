@@ -34,6 +34,9 @@ from a reference photo with a professional corporate look.
 
 1. `UserProfileImage.svelte` (Account tab) gains a fourth hover action, **AI Avatar**,
    next to Remove / Initials / Gravatar. Hidden entirely when the feature flag is off.
+   Because `UserProfileImage` is shared with the admin Edit User modal, the action is
+   additionally gated by a `showAIAvatar` prop that only `Account.svelte` sets — the
+   feature is deliberately absent from the admin surface.
 2. Clicking opens a new dialog (`AIAvatarDialog.svelte` under
    `src/lib/components/chat/Settings/Account/`):
    - Photo source: upload (drag/drop or click), or "use current photo" when
@@ -127,7 +130,10 @@ Feature exposure: add `enable_avatar_generation` to the `features` dict returned
 
 ## Security & privacy
 
-- Reference photo processed in memory only; not logged, not persisted.
+- Reference photo processed in memory only by application code; not logged, not persisted.
+  (Framework caveat: Starlette's multipart parser may spool uploads larger than ~1 MB to a
+  temporary file before router code runs — an OS-managed temp file deleted at request end,
+  outside this feature's control.)
 - Org API key stays server-side; the browser never talks to OpenAI.
 - Photos leave the server to OpenAI's API (not used for training by default per
   OpenAI API terms) — org accepts this by enabling the flag (default OFF).
