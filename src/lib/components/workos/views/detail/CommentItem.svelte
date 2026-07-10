@@ -36,7 +36,7 @@
 		<textarea class="w-full text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded p-2 min-h-16" bind:value={draft}></textarea>
 		<div class="flex gap-2 mt-1">
 			<Button size="sm" onclick={save}>Save</Button>
-			<Button variant="ghost" size="sm" onclick={() => (editing = false)}>Cancel</Button>
+			<Button variant="outline" size="sm" onclick={() => (editing = false)}>Cancel</Button>
 		</div>
 	{:else}
 		<div class="text-sm prose prose-sm dark:prose-invert max-w-none">

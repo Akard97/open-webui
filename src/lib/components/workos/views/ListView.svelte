@@ -86,7 +86,7 @@
 	<!-- Filters + Columns picker + Add new, all on one row (Columns/Add after the search). -->
 	<FilterBar filter={boardFilter}>
 		<DropdownMenu.Root>
-			<DropdownMenu.Trigger class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-sm hover:bg-gray-100 dark:hover:bg-gray-900">
+			<DropdownMenu.Trigger class={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
 				<Icon name="sliders" size={14} /> Columns <Icon name="chevron-down" size={13} />
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content align="end">

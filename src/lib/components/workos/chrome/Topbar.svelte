@@ -30,7 +30,7 @@
 			{parentWorkspace ? `${parentWorkspace.name} · ` : ''}{ws?.name ?? $currentTeam?.name ?? 'WorkOS'}
 		</span>
 		{#if ws}
-			<Button variant="ghost" size="sm" class="text-gray-400" title="Rename" aria-disabled="true" disabled><Icon name="pencil" size={15} /></Button>
+			<Button variant="ghost" size="sm" class="text-gray-400" title="Rename" disabled><Icon name="pencil" size={15} /></Button>
 		{/if}
 
 		<div class="flex-1"></div>
@@ -42,8 +42,8 @@
 					<span class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
 				{/each}
 			</div>
-			<Button variant="ghost" size="sm" aria-disabled="true" disabled><Icon name="share-2" size={14} /> Share</Button>
-			<Button variant="ghost" size="sm" aria-disabled="true" disabled><Icon name="zap" size={14} /> Automation</Button>
+			<Button variant="ghost" size="sm" disabled><Icon name="share-2" size={14} /> Share</Button>
+			<Button variant="ghost" size="sm" disabled><Icon name="zap" size={14} /> Automation</Button>
 			</div>
 		{/if}
 	</div>
