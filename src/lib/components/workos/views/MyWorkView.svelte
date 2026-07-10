@@ -14,7 +14,8 @@
 	import * as HoverCard from '$lib/components/ui/hover-card';
 	import type { Task, MyWorkSegment } from '../lib/types';
 	import { PRIORITY_COLOR } from '../lib/colors';
-	import { taskHealth, HEALTH_LABEL, HEALTH_CHIP } from '../lib/progress';
+	import { taskHealth, HEALTH_LABEL, HEALTH_CHIP, dueDayEndLocal } from '../lib/progress';
+	import { isOverdue } from '../lib/format';
 	import { bucketByDueDate } from '../lib/buckets';
 	import { computeStats } from '../lib/stats';
 	import { summarizeNotification } from '../lib/notifications';
@@ -159,8 +160,8 @@
 	const wsName = (t: Task) => $workstreams.find((w) => w.id === t.workstream_id)?.name ?? '';
 	function dueClass(t: Task): string {
 		if (t.due_date == null) return 'text-gray-400';
-		if (t.due_date < startToday) return 'text-red-500';
-		if (t.due_date <= endToday) return 'text-primary';
+		if (isOverdue(t.due_date, t.status, now)) return 'text-red-500';
+		if (dueDayEndLocal(t.due_date) <= endToday) return 'text-primary';
 		return 'text-gray-400';
 	}
 
