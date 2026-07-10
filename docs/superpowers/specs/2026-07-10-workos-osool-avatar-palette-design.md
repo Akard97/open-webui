@@ -19,7 +19,7 @@ The avatar palette reuses the categorical Osool colors already established for d
 
 The existing stable string hash continues to assign a palette entry from a user ID or normalized actor name. A user's avatar therefore keeps the same color across WorkOS surfaces and renders.
 
-Initials use either white or Osool ink text, whichever has the stronger WCAG contrast against the assigned background. Every palette pair must meet WCAG AA's 4.5:1 contrast requirement for normal text.
+Initials use white or Osool ink text when either meets WCAG AA contrast. A black fallback is allowed for a mid-tone background where neither brand foreground reaches the threshold. The candidate with the strongest contrast is selected, and every palette pair must meet WCAG AA's 4.5:1 requirement for normal text.
 
 ## Architecture
 
