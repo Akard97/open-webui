@@ -63,9 +63,10 @@
 </script>
 
 <Dialog.Root open={req != null} onOpenChange={(o) => { if (!o) close(); }}>
-	<Dialog.Content class="sm:max-w-md">
+	<Dialog.Content class="sm:max-w-md rounded-2xl">
 		<Dialog.Header>
 			<Dialog.Title>{req ? TITLES[req.kind] : ''}</Dialog.Title>
+			<Dialog.Description class="sr-only">{req ? `Enter a name to create a new ${req.kind}.` : ''}</Dialog.Description>
 		</Dialog.Header>
 
 		{#if err}<div class="text-sm text-red-600">{err}</div>{/if}
