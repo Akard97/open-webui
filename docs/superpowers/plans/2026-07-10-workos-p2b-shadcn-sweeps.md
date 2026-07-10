@@ -211,7 +211,7 @@ git commit -m "refactor(workos): TeamSwitcher team list on shadcn DropdownMenu"
 Run: `npx vitest run src/lib/components/workos/lib` → 194 passed. `npm run check` → nothing new for the 4 files.
 
 ```bash
-git add src/lib/components/workos/views/detail/CommentComposer.svelte src/lib/components/workos/views/detail/CommentItem.svelte src/lib/components/workos/views/detail/SubtasksPanel.svelte src/lib/components/workos/views/detail/DueDateCell.svelte
+git add src/lib/components/workos/views/detail/CommentComposer.svelte src/lib/components/workos/views/detail/CommentItem.svelte src/lib/components/workos/views/detail/SubtasksPanel.svelte
 git commit -m "refactor(workos): detail drawer controls on shadcn Button/Checkbox"
 ```
 
@@ -274,11 +274,17 @@ git commit -m "refactor(workos): admin, chrome and dialog footers on shadcn cont
 - Greps: `rg "filter-menu|teamMenuOpen" src/lib/components/workos` → 0; `rg "onWindowClick" src/lib/components/workos` → 0.
 - Focus-visible dividend: every swapped control now carries shadcn's built-in `focus-visible` ring — first real dent in the spec §3.3 focus contract.
 
-## Browser smoke additions (user's manual pass)
+## Browser smoke additions (user's manual pass — CONSOLIDATED post-wave, includes review findings)
 
-- FilterBar: facet menus now shadcn (keyboard nav + Escape work; menus close on outside click as before); trigger chips now `rounded-lg` outline buttons; search field shadcn-styled.
-- Create team/workspace/workstream: dialog now rounded-2xl shadcn shell, Escape closes, focus trapped; Cancel/Create are shadcn buttons.
-- TeamSwitcher: team list opens as shadcn menu (arrow keys work); right-click "Team settings…" still works.
-- Buttons everywhere swept: heights normalize to h-7/h-8, radius to rounded-lg, focus rings appear on keyboard focus. Month/Week + zoom pills, Topbar/Admin underline tabs, sidebar/tree/nav rows: UNCHANGED (any change = bug).
-- Subtask checkboxes: shadcn square w/ check animation (was native checkbox).
+- FilterBar: facet menus now shadcn (keyboard nav + Escape work; close on outside click as before); trigger chips now `rounded-lg` outline buttons (~2px shorter, 0.8rem text); search field shadcn-styled.
+- Create team/workspace/workstream: rounded-2xl shadcn Dialog, Escape closes, focus trapped; NEW tinted/bordered Dialog.Footer band behind Cancel/Create; check Name field still autofocuses (focus-trap may grab first); check console for a missing-Dialog.Description a11y warning.
+- TeamSwitcher: team list = shadcn menu (arrow keys work); right-click "Team settings…" still works; menu width matches trigger.
+- **DESTRUCTIVE BUTTONS — DECISION PENDING:** Delete team / Delete workspace / Restrict are now nova soft red-tint pills (`bg-destructive/10 text-destructive`), NOT the old solid red `bg-red-600 text-white`. Same treatment on comment-delete (hover-reveal red pill, was gray-then-red icon). Confirm taste or request solid-red variant amendment.
+- Buttons everywhere swept: heights normalize to h-7/h-8, radius rounded-lg, focus rings on keyboard focus. Month/Week + zoom pills, Topbar/Admin underline tabs, sidebar/tree/nav rows, StatusCell/PriorityCell/DueDateCell triggers: UNCHANGED (any change = bug).
+- Topbar disabled trio (Rename/Share/Automation): Share/Automation lose their at-rest border pill (ghost variant) — check they don't read invisible; tooltips no longer show (pointer-events-none on disabled).
+- Board columns: per-column add-task plus glyph now 12px inside a 24px button, next to the untouched 16px "More" stub — check optics.
+- ListView: "Add task" per-status link gains ghost-button chrome (was bare text link); "Columns" trigger restyled to match facet buttons (dregs).
+- Calendar/Timeline: "Today" ~2px shorter; toolbars otherwise governed by untouched pills.
+- Subtask checkboxes: shadcn square w/ check animation (was native); "Add subtask" gains ghost chrome (was bare text link).
 - RulesTab: shadcn selects/checkboxes/number input.
+- Mobile (<768px): all shadcn Inputs render 16px text (was 14px) — intentional shadcn default, prevents iOS focus-zoom.
