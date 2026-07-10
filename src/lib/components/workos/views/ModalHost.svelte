@@ -63,7 +63,7 @@
 </script>
 
 <Dialog.Root open={req != null} onOpenChange={(o) => { if (!o) close(); }}>
-	<Dialog.Content class="max-w-md">
+	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>{req ? TITLES[req.kind] : ''}</Dialog.Title>
 		</Dialog.Header>
