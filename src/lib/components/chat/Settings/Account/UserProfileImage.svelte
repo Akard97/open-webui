@@ -15,6 +15,7 @@
 	export let user = null;
 
 	export let imageClassName = 'size-14 md:size-18';
+	export let showAIAvatar = false;
 
 	let profileImageInputElement;
 	let showAIAvatarDialog = false;
@@ -151,7 +152,7 @@
 			}}>{$i18n.t('Gravatar')}</button
 		>
 
-		{#if $config?.features?.enable_avatar_generation}
+		{#if showAIAvatar && $config?.features?.enable_avatar_generation}
 			<button
 				class=" text-xs text-center text-gray-800 dark:text-gray-400 rounded-lg py-0.5 opacity-0 group-hover:opacity-100 transition-all"
 				type="button"
@@ -163,11 +164,13 @@
 	</div>
 </div>
 
-<AIAvatarDialog
-	bind:show={showAIAvatarDialog}
-	currentImage={profileImageUrl}
-	{user}
-	on:apply={(e) => {
-		profileImageUrl = e.detail;
-	}}
-/>
+{#if showAIAvatar}
+	<AIAvatarDialog
+		bind:show={showAIAvatarDialog}
+		currentImage={profileImageUrl}
+		{user}
+		on:apply={(e) => {
+			profileImageUrl = e.detail;
+		}}
+	/>
+{/if}

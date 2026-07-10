@@ -138,7 +138,7 @@
 			<!-- <div class=" text-sm font-medium">{$i18n.t('Account')}</div> -->
 
 			<div class="flex space-x-5 my-4">
-				<UserProfileImage bind:profileImageUrl user={$user} />
+				<UserProfileImage bind:profileImageUrl user={$user} showAIAvatar={true} />
 
 				<div class="flex flex-1 flex-col">
 					<div class=" flex-1">

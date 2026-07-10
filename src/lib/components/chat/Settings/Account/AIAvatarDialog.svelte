@@ -51,6 +51,7 @@
 		if (!file) {
 			return;
 		}
+		photoInputElement.value = '';
 		if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
 			toast.error($i18n.t('Unsupported image type. Use PNG, JPEG or WebP.'));
 			return;
