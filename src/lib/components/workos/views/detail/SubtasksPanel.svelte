@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Icon from '../../ui/Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { subtasks, addSubtask, editSubtask, removeSubtask } from '../../lib/store';
 
 	export let taskId: string;
@@ -18,19 +20,18 @@
 <div class="pt-4 space-y-2">
 	{#each $subtasks as subtask (subtask.id)}
 		<div class="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2">
-			<input
-				type="checkbox"
+			<Checkbox
 				checked={subtask.completed}
-				onchange={(e) => editSubtask(subtask.id, { completed: (e.target as HTMLInputElement).checked })}
-				class="h-4 w-4"
+				onCheckedChange={(v) => editSubtask(subtask.id, { completed: !!v })}
+				class="size-4"
 				aria-label="Toggle subtask completion"
 			/>
 			<span class="flex-1 min-w-0 text-sm {subtask.completed ? 'line-through text-gray-400' : ''}">
 				{subtask.title}
 			</span>
-			<button class="text-gray-400 hover:text-red-500" title="Delete subtask" onclick={() => removeSubtask(subtask.id)}>
+			<Button variant="ghost" size="icon-xs" class="text-gray-400 hover:text-red-500" title="Delete subtask" onclick={() => removeSubtask(subtask.id)}>
 				<Icon name="trash" size={14} />
-			</button>
+			</Button>
 		</div>
 	{/each}
 
@@ -50,12 +51,9 @@
 			autofocus
 		/>
 	{:else}
-		<button
-			class="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-			onclick={() => (creating = true)}
-		>
+		<Button variant="ghost" size="sm" class="text-primary" onclick={() => (creating = true)}>
 			<Icon name="plus" size={14} /> Add subtask
-		</button>
+		</Button>
 	{/if}
 
 	{#if !$subtasks.length && !creating}

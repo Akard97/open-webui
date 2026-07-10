@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '../../ui/Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { directory, postComment, uploadFiles } from '../../lib/store';
 	import { mentionToken } from '../../lib/mentions';
 
@@ -37,11 +38,11 @@
 		bind:value={body}
 	></textarea>
 	<div class="flex items-center gap-2 mt-1 relative">
-		<button class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-500" title="Mention" onclick={() => (showMentions = !showMentions)}><Icon name="users" size={15} /></button>
-		<button class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-500" title="Attach file" onclick={() => fileInput.click()}><Icon name="plus" size={15} /></button>
+		<Button variant="ghost" size="icon-sm" class="text-gray-500" title="Mention" onclick={() => (showMentions = !showMentions)}><Icon name="users" size={15} /></Button>
+		<Button variant="ghost" size="icon-sm" class="text-gray-500" title="Attach file" onclick={() => fileInput.click()}><Icon name="plus" size={15} /></Button>
 		<input type="file" multiple class="hidden" bind:this={fileInput} onchange={onFiles} />
 		<div class="flex-1"></div>
-		<button class="text-sm px-3 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50" disabled={!body.trim()} onclick={send}>Comment</button>
+		<Button size="sm" disabled={!body.trim()} onclick={send}>Comment</Button>
 		{#if showMentions}
 			<div class="absolute bottom-9 left-0 z-10 w-56 max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1">
 				{#each members as m (m.id)}

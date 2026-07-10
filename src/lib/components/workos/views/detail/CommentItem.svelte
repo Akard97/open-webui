@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from '../../ui/Icon.svelte';
 	import Markdown from '$lib/components/chat/Messages/Markdown.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { user } from '$lib/stores';
 	import { displayName, editComment, deleteCommentAction, roles, currentTeam } from '../../lib/store';
 	import { renderMentions } from '../../lib/mentions';
@@ -25,17 +26,17 @@
 		{#if comment.edited_at}<span class="text-[11px] text-gray-400">(edited)</span>{/if}
 		<div class="flex-1"></div>
 		{#if mine}
-			<button class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600" title="Edit" onclick={startEdit}><Icon name="pencil" size={13} /></button>
+			<Button variant="ghost" size="icon-xs" class="opacity-0 group-hover:opacity-100 text-gray-400" title="Edit" onclick={startEdit}><Icon name="pencil" size={13} /></Button>
 		{/if}
 		{#if canDeleteComment(comment, $user?.id ?? '', myRole)}
-			<button class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500" title="Delete" onclick={() => deleteCommentAction(comment.id)}><Icon name="trash" size={13} /></button>
+			<Button variant="destructive" size="icon-xs" class="opacity-0 group-hover:opacity-100" title="Delete" onclick={() => deleteCommentAction(comment.id)}><Icon name="trash" size={13} /></Button>
 		{/if}
 	</div>
 	{#if editing}
 		<textarea class="w-full text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded p-2 min-h-16" bind:value={draft}></textarea>
 		<div class="flex gap-2 mt-1">
-			<button class="text-sm px-3 py-1 rounded bg-primary text-primary-foreground" onclick={save}>Save</button>
-			<button class="text-sm px-3 py-1 rounded border border-gray-300 dark:border-gray-700" onclick={() => (editing = false)}>Cancel</button>
+			<Button size="sm" onclick={save}>Save</Button>
+			<Button variant="ghost" size="sm" onclick={() => (editing = false)}>Cancel</Button>
 		</div>
 	{:else}
 		<div class="text-sm prose prose-sm dark:prose-invert max-w-none">
