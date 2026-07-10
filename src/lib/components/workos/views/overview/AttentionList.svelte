@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { openTask } from '../../lib/store';
 	import type { AttentionItem, AttentionClass } from '../../lib/overview';
+	import EmptyState from '../../ui/EmptyState.svelte';
 
 	export let items: AttentionItem[];
 
@@ -25,7 +26,7 @@
 	<h3 class="text-[13.5px] font-medium">Needs attention</h3>
 	<p class="text-[11px] text-gray-400 mt-0.5">Overdue and slipping tasks, most urgent first.</p>
 	{#if !items.length}
-		<div class="py-6 text-center text-sm text-gray-400">Nothing needs attention.</div>
+		<div class="mt-2"><EmptyState variant="quiet" title="Nothing needs attention" /></div>
 	{:else}
 		<div class="mt-2.5 flex flex-col gap-0.5">
 			{#each shown as i (i.task.id)}

@@ -3,6 +3,7 @@
 	import { user } from '$lib/stores';
 	import Icon from '../ui/Icon.svelte';
 	import KpiNumeral from '../ui/KpiNumeral.svelte';
+	import EmptyState from '../ui/EmptyState.svelte';
 	// Bundle the logo as a hashed build asset instead of loading it from the
 	// backend's /static dir, which gets wiped when the backend image is rebuilt.
 	import workosLogoDark from '../assets/workos-logo-dark.png';
@@ -279,7 +280,7 @@
 				</div>
 				<div class="px-2 pt-1 pb-2 overflow-x-auto">
 					{#if !filtered.length}
-						<div class="py-14 text-center text-sm text-gray-400">Nothing on your plate here.</div>
+						<div class="py-4"><EmptyState icon="list" title="Nothing on your plate here." /></div>
 					{:else}
 						<!-- Column header -->
 						<div class="grid items-center gap-3 px-2 pb-2 text-[11px] font-medium text-gray-400 dark:text-gray-500" style={GRID}>
@@ -354,7 +355,7 @@
 							{/each}
 						</div>
 					{:else}
-						<div class="text-xs text-gray-400">No open tasks.</div>
+						<EmptyState variant="quiet" title="No open tasks" />
 					{/if}
 				</div>
 
@@ -362,7 +363,7 @@
 				<div class="px-[18px] py-4 {CARD}">
 					<div class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 mb-[11px]">Upcoming</div>
 					{#if !upcoming.length}
-						<div class="text-xs text-gray-400 py-1">Nothing scheduled.</div>
+						<EmptyState variant="quiet" title="Nothing scheduled" />
 					{:else}
 						{#each upcoming as d (d.task.id)}
 							<button type="button" onclick={() => openTask(d.task.id)} class="w-full text-left flex gap-3 py-2 items-center">
@@ -384,7 +385,7 @@
 				<div class="px-[18px] py-4 {CARD}">
 					<div class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 mb-2.5">Activity</div>
 					{#if !activity.length}
-						<div class="text-xs text-gray-400 py-1">No recent activity.</div>
+						<EmptyState variant="quiet" title="No recent activity" />
 					{:else}
 						{#each activity as a (a.n.id)}
 							<button type="button" onclick={() => openNotification(a.n)} class="w-full text-left flex items-start gap-2.5 py-1.5">
@@ -410,7 +411,7 @@
 						{#if unreadMentions}<span class="text-[11px] tabular-nums text-white bg-red-500 rounded-full px-1.5 py-0.5">{unreadMentions}</span>{/if}
 					</div>
 					{#if !mentions.length}
-						<div class="text-xs text-gray-400 py-1">No mentions.</div>
+						<EmptyState variant="quiet" title="No mentions" />
 					{:else}
 						{#each mentions as m (m.id)}
 							<button type="button" onclick={() => openNotification(m)} class="w-full text-left flex items-start gap-2.5 py-[7px]">

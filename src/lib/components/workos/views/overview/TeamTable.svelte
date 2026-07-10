@@ -2,6 +2,7 @@
 	import { displayName } from '../../lib/store';
 	import AssigneeAvatars from '../AssigneeAvatars.svelte';
 	import type { TeamRow, MemberHealth } from '../../lib/overview';
+	import EmptyState from '../../ui/EmptyState.svelte';
 
 	export let rows: TeamRow[];
 
@@ -21,7 +22,7 @@
 		Assignments and workload across this workstream. A task counts for each of its assignees.
 	</p>
 	{#if !rows.length}
-		<div class="py-6 text-center text-sm text-gray-400">No open tasks assigned yet.</div>
+		<div class="mt-2"><EmptyState variant="quiet" title="No open tasks assigned yet" /></div>
 	{:else}
 		<div class="grid items-center gap-x-3 gap-y-1 mt-3 text-[10.5px] text-gray-400" style={GRID}>
 			<span>Member</span><span class="text-right">Open</span><span class="text-right">In progress</span>

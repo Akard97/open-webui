@@ -4,6 +4,7 @@
 	import { activityLabel } from '../../lib/activity';
 	import { agoLabel } from '../../lib/overview';
 	import type { WsActivityItem } from '../../lib/store';
+	import EmptyState from '../../ui/EmptyState.svelte';
 
 	export let items: WsActivityItem[];
 	export let loaded = false;
@@ -23,7 +24,7 @@
 			{#each Array(4) as _, i (i)}<div class="h-5 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></div>{/each}
 		</div>
 	{:else if !shown.length}
-		<div class="py-6 text-center text-sm text-gray-400">No activity yet.</div>
+		<div class="mt-2"><EmptyState variant="quiet" title="No activity yet" /></div>
 	{:else}
 		<div class="mt-2.5 flex flex-col gap-2">
 			{#each shown as a (a.id)}

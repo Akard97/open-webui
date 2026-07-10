@@ -14,6 +14,7 @@
 	import TeamTable from './overview/TeamTable.svelte';
 	import AttentionList from './overview/AttentionList.svelte';
 	import PulseCard from './overview/PulseCard.svelte';
+	import EmptyState from '../ui/EmptyState.svelte';
 
 	// Live clock so overdue/day buckets roll over without a reload (spec §2).
 	let now = Date.now();
@@ -43,9 +44,8 @@
 <div class="h-full overflow-auto bg-gray-50 dark:bg-gray-900">
 	<div class="max-w-[1240px] mx-auto p-4 flex flex-col gap-3">
 		{#if !mix.total}
-			<div class="h-64 flex flex-col items-center justify-center gap-2 text-center">
-				<div class="text-lg font-medium">No tasks here yet</div>
-				<div class="text-sm text-gray-500">Add tasks on the board and this overview fills itself in.</div>
+			<div class="h-64 flex items-center justify-center">
+				<EmptyState icon="layers" title="No tasks here yet" sub="Add tasks on the board and this overview fills itself in." />
 			</div>
 		{:else}
 			<KpiBand
