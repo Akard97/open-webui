@@ -53,7 +53,7 @@
 						</button>
 					{/snippet}
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="start" class="w-[--bits-dropdown-menu-anchor-width]">
+				<DropdownMenu.Content align="start">
 					<DropdownMenu.Group>
 						{#each $teams as t (t.id)}
 							<DropdownMenu.Item onSelect={() => selectTeam(t.id)}>
