@@ -3,6 +3,7 @@
 	import { BarChart } from 'layerchart';
 	import { scaleBand } from 'd3-scale';
 	import type { WeekBin, CompletionTime } from '../../lib/overview';
+	import DeltaBadge from '../../ui/DeltaBadge.svelte';
 
 	export let bins: WeekBin[];
 	export let completion: CompletionTime;
@@ -58,9 +59,7 @@
 			avg completion time
 			<b class="font-medium text-gray-900 dark:text-gray-100">{completion.avgDays != null ? `${completion.avgDays}d` : '—'}</b>
 			{#if delta}
-				<span class={delta.faster ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-					{delta.faster ? '▾' : '▴'}{delta.text}
-				</span>
+				<DeltaBadge up={!delta.faster} positive={delta.faster} text={delta.text} />
 			{/if}
 		</span>
 	</div>

@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { user } from '$lib/stores';
 	import Icon from '../ui/Icon.svelte';
+	import KpiNumeral from '../ui/KpiNumeral.svelte';
 	// Bundle the logo as a hashed build asset instead of loading it from the
 	// backend's /static dir, which gets wiped when the backend image is rebuilt.
 	import workosLogoDark from '../assets/workos-logo-dark.png';
@@ -195,16 +196,11 @@
 			{#each stats4 as s (s.label)}
 				<div class="px-5 py-[13px] {CARD}">
 					<span class="block {s.iconColor}"><Icon name={s.icon} size={20} /></span>
-					<div class="mt-3 flex items-baseline gap-1.5">
-						<span class="text-[34px] font-bold tracking-tight leading-none tabular-nums text-gray-900 dark:text-gray-100">{s.value}</span>
-						{#if s.delta != null && s.delta > 0}
-							<span class="inline-flex items-center gap-px text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
-								<Icon name="arrow-up" size={12} />{s.delta}
-							</span>
-						{/if}
+					<div class="mt-3">
+						<KpiNumeral value={s.value} delta={s.delta != null && s.delta > 0 ? { up: true, text: String(s.delta) } : null} />
 					</div>
 					<div class="mt-2.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200">{s.label}</div>
-					<div class="mt-1 text-[12px] font-mono text-gray-400 dark:text-gray-500">{s.sub}</div>
+					<div class="mt-1 text-[12px] text-gray-400 dark:text-gray-500">{s.sub}</div>
 				</div>
 			{/each}
 		</div>
