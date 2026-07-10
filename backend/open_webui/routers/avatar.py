@@ -99,7 +99,15 @@ async def generate_avatar(
             detail=f'Daily avatar limit reached ({limit}/day). Resets at midnight UTC.',
         )
 
-    source, mime = _downscale(data)
+    try:
+        source, mime = _downscale(data)
+    except Exception:
+        # Content-Type is client-supplied; garbage bytes labeled as an image
+        # must be a clean upload-validation 400, not an unhandled PIL error.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid or corrupted image file.',
+        )
 
     form = aiohttp.FormData()
     form.add_field('model', 'gpt-image-2')
@@ -117,7 +125,10 @@ async def generate_avatar(
         headers={'Authorization': f'Bearer {key}'},
         ssl=AIOHTTP_CLIENT_SESSION_SSL,
     ) as r:
-        body = await r.json(content_type=None)
+        try:
+            body = await r.json(content_type=None)
+        except Exception:
+            body = None
         if r.status >= 400:
             msg = None
             if isinstance(body, dict):
@@ -128,7 +139,19 @@ async def generate_avatar(
                 detail=msg or 'Avatar generation failed.',
             )
 
-    b64 = body['data'][0]['b64_json']
+    try:
+        b64 = body['data'][0]['b64_json']
+        if not isinstance(b64, str) or not b64:
+            raise KeyError('b64_json')
+    except (KeyError, IndexError, TypeError):
+        # 200 from OpenAI but not the shape we asked for (or a non-JSON body).
+        # Bail out with 502 BEFORE consuming quota.
+        log.warning('avatar generation returned an unexpected response shape')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Avatar generation returned an unexpected response.',
+        )
+
     new_count = await AvatarGenerations.increment(user.id, today)
     return {
         'image': f'data:image/webp;base64,{b64}',

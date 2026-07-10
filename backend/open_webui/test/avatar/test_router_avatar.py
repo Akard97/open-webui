@@ -1,10 +1,12 @@
 import base64
+import io
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
+from PIL import Image
 
 import open_webui.routers.avatar as avatar_router
 from open_webui.models.avatar import AvatarGenerations
@@ -179,3 +181,65 @@ async def test_generate_key_falls_back_to_images_key(monkeypatch):
     assert r.status_code == 200
     _, kwargs = session.calls[0]
     assert kwargs['headers']['Authorization'] == 'Bearer sk-img'
+
+
+@pytest.mark.asyncio
+async def test_generate_rejects_undecodable_image_bytes(monkeypatch):
+    # Content-Type says PNG but the bytes are garbage — must be a clean 400,
+    # not an unhandled PIL.UnidentifiedImageError (raw 500).
+    session = _patch_openai(monkeypatch)
+    async with _client() as c:
+        r = await c.post(
+            '/api/v1/avatar/generate',
+            files={'photo': ('p.png', b'not really a png', 'image/png')},
+        )
+    assert r.status_code == 400
+    assert r.json()['detail'] == 'Invalid or corrupted image file.'
+    assert session.calls == []
+    assert await AvatarGenerations.get_count('u1', avatar_router._utc_date()) == 0
+
+
+@pytest.mark.asyncio
+async def test_generate_rejects_oversized_upload(monkeypatch):
+    session = _patch_openai(monkeypatch)
+    big = PNG_BYTES + b'0' * (10 * 1024 * 1024)
+    async with _client() as c:
+        r = await c.post(
+            '/api/v1/avatar/generate',
+            files={'photo': ('p.png', big, 'image/png')},
+        )
+    assert r.status_code == 400
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_generate_unexpected_success_payload_returns_502(monkeypatch):
+    # 200 from OpenAI but no data[0].b64_json — must map to 502, never a raw
+    # KeyError/IndexError 500, and must not consume quota.
+    _patch_openai(monkeypatch, response=_FakeResponse(status=200, payload={'data': []}))
+    async with _client() as c:
+        r = await c.post('/api/v1/avatar/generate', files=_files())
+    assert r.status_code == 502
+    assert r.json()['detail'] == 'Avatar generation returned an unexpected response.'
+    assert await AvatarGenerations.get_count('u1', avatar_router._utc_date()) == 0
+
+
+def test_downscale_caps_longest_edge_and_preserves_aspect():
+    buf = io.BytesIO()
+    Image.new('RGB', (2048, 1536), 'teal').save(buf, format='PNG')
+    out, mime = avatar_router._downscale(buf.getvalue())
+    assert mime == 'image/jpeg'
+    img = Image.open(io.BytesIO(out))
+    assert img.format == 'JPEG'
+    assert max(img.size) <= 1024
+    w, h = img.size
+    assert abs(w / h - 2048 / 1536) < 0.01
+
+
+def test_downscale_leaves_small_image_unscaled():
+    buf = io.BytesIO()
+    Image.new('RGB', (200, 200), 'teal').save(buf, format='PNG')
+    out, mime = avatar_router._downscale(buf.getvalue())
+    assert mime == 'image/jpeg'
+    img = Image.open(io.BytesIO(out))
+    assert img.size == (200, 200)
