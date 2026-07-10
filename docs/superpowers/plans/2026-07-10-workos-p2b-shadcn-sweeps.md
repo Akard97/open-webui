@@ -204,7 +204,7 @@ git commit -m "refactor(workos): TeamSwitcher team list on shadcn DropdownMenu"
 - Consumes: `$lib/components/ui/button|checkbox` (Task-independent; DetailHeader in the same folder already imports Button — read it for local conventions).
 - Produces: no API changes; all component props/events unchanged.
 
-- [ ] **Step 1: Buttons.** Apply the variant table: submit "Comment" = default; mention/attach = ghost icon-sm; edit/delete on comments = ghost icon-xs or ghost sm matching current hit target (delete comment = `variant="ghost"` with its current red text class kept as layout? NO — destructive text means `variant="destructive"`); save = default sm; cancel = ghost sm; subtask delete = ghost icon-xs; add subtask = ghost sm; DueDateCell trigger = ghost sm. Preserve all handlers/aria/title attributes.
+- [ ] **Step 1: Buttons.** Apply the variant table: submit "Comment" = default; mention/attach = ghost icon-sm; edit/delete on comments = ghost icon-xs or ghost sm matching current hit target (delete comment = `variant="ghost"` with its current red text class kept as layout? NO — destructive text means `variant="destructive"`); save = default sm; cancel = ghost sm; subtask delete = ghost icon-xs; add subtask = ghost sm. (DueDateCell trigger: amended — stays hand-rolled, see Files list.) Preserve all handlers/aria/title attributes.
 - [ ] **Step 2: SubtasksPanel checkbox.** `<input type="checkbox" checked={…} onchange={…}>` → `<Checkbox checked={…} onCheckedChange={…} class="size-4" aria-label={…as current…}/>`. Toggle handler body unchanged. If the row's click target wraps the checkbox, keep the wrapping semantics (no double-toggle — verify the handler doesn't fire twice).
 - [ ] **Step 3: Verify + commit.**
 
