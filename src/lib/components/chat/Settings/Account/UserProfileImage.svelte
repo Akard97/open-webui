@@ -8,6 +8,8 @@
 	import { canvasPixelTest, generateInitialsImage } from '$lib/utils';
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { config } from '$lib/stores';
+	import AIAvatarDialog from './AIAvatarDialog.svelte';
 
 	export let profileImageUrl;
 	export let user = null;
@@ -15,6 +17,7 @@
 	export let imageClassName = 'size-14 md:size-18';
 
 	let profileImageInputElement;
+	let showAIAvatarDialog = false;
 </script>
 
 <input
@@ -147,5 +150,24 @@
 				profileImageUrl = url;
 			}}>{$i18n.t('Gravatar')}</button
 		>
+
+		{#if $config?.features?.enable_avatar_generation}
+			<button
+				class=" text-xs text-center text-gray-800 dark:text-gray-400 rounded-lg py-0.5 opacity-0 group-hover:opacity-100 transition-all"
+				type="button"
+				on:click={() => {
+					showAIAvatarDialog = true;
+				}}>{$i18n.t('AI Avatar')}</button
+			>
+		{/if}
 	</div>
 </div>
+
+<AIAvatarDialog
+	bind:show={showAIAvatarDialog}
+	currentImage={profileImageUrl}
+	{user}
+	on:apply={(e) => {
+		profileImageUrl = e.detail;
+	}}
+/>
