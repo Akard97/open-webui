@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Icon from '../../ui/Icon.svelte';
-	import { Button } from '$lib/components/ui/button';
 	import { editTask } from '../../lib/store';
 	import { formatDateShort } from '../../lib/format';
 	import type { Task } from '../../lib/types';
@@ -29,10 +28,8 @@
 		autofocus
 	/>
 {:else}
-	<Button
-		variant="ghost"
-		size="sm"
-		class={value ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}
+	<button
+		class="inline-flex items-center gap-1.5 rounded-md px-1 -mx-1 py-0.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 {value ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}"
 		onclick={() => (editing = true)}
 	>
 		{#if value}
@@ -40,5 +37,5 @@
 		{:else}
 			<Icon name="calendar" size={14} /> Add date
 		{/if}
-	</Button>
+	</button>
 {/if}
