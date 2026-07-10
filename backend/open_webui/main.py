@@ -85,6 +85,7 @@ from open_webui.routers import (
     pipelines,
     tasks,
     auths,
+    avatar,
     channels,
     chats,
     notes,
@@ -199,6 +200,12 @@ from open_webui.config import (
     IMAGES_EDIT_COMFYUI_API_KEY,
     IMAGES_EDIT_COMFYUI_WORKFLOW,
     IMAGES_EDIT_COMFYUI_WORKFLOW_NODES,
+    # Avatar
+    AVATAR_GENERATION_ENABLED,
+    AVATAR_OPENAI_API_BASE_URL,
+    AVATAR_OPENAI_API_KEY,
+    AVATAR_DAILY_LIMIT,
+    AVATAR_STYLE_PROMPT,
     # Audio
     AUDIO_STT_ENGINE,
     AUDIO_STT_MODEL,
@@ -1285,6 +1292,12 @@ app.state.config.IMAGES_OPENAI_API_VERSION = IMAGES_OPENAI_API_VERSION
 app.state.config.IMAGES_OPENAI_API_KEY = IMAGES_OPENAI_API_KEY
 app.state.config.IMAGES_OPENAI_API_PARAMS = IMAGES_OPENAI_API_PARAMS
 
+app.state.config.AVATAR_GENERATION_ENABLED = AVATAR_GENERATION_ENABLED
+app.state.config.AVATAR_OPENAI_API_BASE_URL = AVATAR_OPENAI_API_BASE_URL
+app.state.config.AVATAR_OPENAI_API_KEY = AVATAR_OPENAI_API_KEY
+app.state.config.AVATAR_DAILY_LIMIT = AVATAR_DAILY_LIMIT
+app.state.config.AVATAR_STYLE_PROMPT = AVATAR_STYLE_PROMPT
+
 app.state.config.IMAGES_GEMINI_API_BASE_URL = IMAGES_GEMINI_API_BASE_URL
 app.state.config.IMAGES_GEMINI_API_KEY = IMAGES_GEMINI_API_KEY
 app.state.config.IMAGES_GEMINI_ENDPOINT_METHOD = IMAGES_GEMINI_ENDPOINT_METHOD
@@ -1461,6 +1474,7 @@ app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
 app.include_router(policy_review.router, prefix='/api/v1/policy', tags=['policy'])
 app.include_router(workos.router, prefix='/api/v1/workos', tags=['workos'])
+app.include_router(avatar.router, prefix='/api/v1/avatar', tags=['avatar'])
 
 
 app.include_router(models.router, prefix='/api/v1/models', tags=['models'])
@@ -2385,6 +2399,7 @@ async def get_app_config(request: Request):
             'enable_signup_password_confirmation': ENABLE_SIGNUP_PASSWORD_CONFIRMATION,
             'enable_ldap': app.state.config.ENABLE_LDAP,
             'enable_api_keys': app.state.config.ENABLE_API_KEYS,
+            'enable_avatar_generation': app.state.config.AVATAR_GENERATION_ENABLED,
             'enable_signup': app.state.config.ENABLE_SIGNUP,
             'enable_login_form': app.state.config.ENABLE_LOGIN_FORM,
             'enable_password_change_form': app.state.config.ENABLE_PASSWORD_CHANGE_FORM,
