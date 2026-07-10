@@ -4046,6 +4046,48 @@ IMAGES_EDIT_COMFYUI_WORKFLOW_NODES = PersistentConfig(
 )
 
 ####################################
+# AI Avatar Generation (Osool)
+####################################
+
+AVATAR_GENERATION_ENABLED = PersistentConfig(
+    'AVATAR_GENERATION_ENABLED',
+    'avatar.enable',
+    os.environ.get('AVATAR_GENERATION_ENABLED', 'false').lower() == 'true',
+)
+
+AVATAR_OPENAI_API_BASE_URL = PersistentConfig(
+    'AVATAR_OPENAI_API_BASE_URL',
+    'avatar.openai.api_base_url',
+    os.getenv('AVATAR_OPENAI_API_BASE_URL', 'https://api.openai.com/v1'),
+)
+
+AVATAR_OPENAI_API_KEY = PersistentConfig(
+    'AVATAR_OPENAI_API_KEY',
+    'avatar.openai.api_key',
+    os.getenv('AVATAR_OPENAI_API_KEY', ''),
+)
+
+AVATAR_DAILY_LIMIT = PersistentConfig(
+    'AVATAR_DAILY_LIMIT',
+    'avatar.daily_limit',
+    int(os.getenv('AVATAR_DAILY_LIMIT', '10')),
+)
+
+DEFAULT_AVATAR_STYLE_PROMPT = (
+    'Professional corporate avatar portrait of this person: clean modern flat vector '
+    'illustration, simplified stylized features that resemble but do not exactly '
+    'replicate them, head-and-shoulders composition, confident friendly expression, '
+    'business attire, plain soft muted-teal background, subtle teal accents. '
+    'No text, no logos, no photorealism.'
+)
+
+AVATAR_STYLE_PROMPT = PersistentConfig(
+    'AVATAR_STYLE_PROMPT',
+    'avatar.style_prompt',
+    os.getenv('AVATAR_STYLE_PROMPT', DEFAULT_AVATAR_STYLE_PROMPT),
+)
+
+####################################
 # Audio
 ####################################
 
