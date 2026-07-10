@@ -198,7 +198,7 @@ git commit -m "refactor(workos): TeamSwitcher team list on shadcn DropdownMenu"
 - Modify: `src/lib/components/workos/views/detail/CommentComposer.svelte` (buttons: mention 40, attach 41, comment/submit 44; file input 42 stays; textarea stays)
 - Modify: `src/lib/components/workos/views/detail/CommentItem.svelte` (buttons: edit 28, delete 31, save 37, cancel 38; edit textarea stays)
 - Modify: `src/lib/components/workos/views/detail/SubtasksPanel.svelte` (checkbox 21–27 → `Checkbox`; delete 31, add 54 → Buttons)
-- Modify: `src/lib/components/workos/views/detail/DueDateCell.svelte` (trigger button 31 → Button ghost; the `type=date` input 20–30 STAYS raw — native date input inside a menu, shadcn Input adds nothing)
+- ~~Modify: DueDateCell trigger → Button ghost~~ **AMENDED during execution (2026-07-10): DueDateCell lives at `views/cells/DueDateCell.svelte` and its trigger STAYS hand-rolled** — the cell-trigger family (StatusCell/PriorityCell/DueDateCell) shares byte-identical ~24px trigger anatomy in the same ListView grid row; converting one produced an out-of-contract row-height/alignment jump (Task 4 review). The `type=date` input also stays raw.
 
 **Interfaces:**
 - Consumes: `$lib/components/ui/button|checkbox` (Task-independent; DetailHeader in the same folder already imports Button — read it for local conventions).
