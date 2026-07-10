@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { notifications, loadNotifications, markAllRead, openNotification } from '../lib/store';
 	import { summarizeNotification } from '../lib/notifications';
+	import EmptyState from '../ui/EmptyState.svelte';
 
 	onMount(loadNotifications);
 </script>
@@ -15,7 +16,7 @@
 		{/if}
 	</div>
 	{#if !$notifications.length}
-		<div class="p-8 text-center text-sm text-gray-400">You're all caught up.</div>
+		<EmptyState icon="inbox" title="You're all caught up" sub="Mentions and assignments will show up here." />
 	{:else}
 		<div class="divide-y divide-gray-100 dark:divide-gray-900">
 			{#each $notifications as n (n.id)}

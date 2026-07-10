@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
+	import EmptyState from '../ui/EmptyState.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import FilterBar from '../chrome/FilterBar.svelte';
@@ -290,21 +291,17 @@
 				{:else}
 					<!-- Empty state: centered in the visible viewport (sticky), above the grid -->
 					<div class="flex-1 sticky left-0 z-10 flex items-center justify-center py-16" style="width: {scrollerW || 600}px;">
-						<div class="flex flex-col items-center gap-2.5 text-center px-6">
-							<span class="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-500 flex items-center justify-center">
-								<Icon name="chart-gantt" size={24} />
-							</span>
-							{#if unscheduled.length}
-								<span class="text-sm text-gray-500 dark:text-gray-400">Nothing scheduled yet</span>
-								<span class="text-xs text-gray-400 dark:text-gray-500">Drag a task in from the Unscheduled panel, or give a task dates.</span>
-							{:else}
-								<span class="text-sm text-gray-500 dark:text-gray-400">No tasks on the timeline</span>
-								<span class="text-xs text-gray-400 dark:text-gray-500">Plan your work by creating a task — it lands on today.</span>
-								<button class="mt-1 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium" onclick={() => { addingRow = true; rowTitle = ''; }}>
-									<Icon name="plus" size={15} /> Add task
-								</button>
-							{/if}
-						</div>
+						{#if unscheduled.length}
+							<EmptyState icon="chart-gantt" title="Nothing scheduled yet" sub="Drag a task in from the Unscheduled panel, or give a task dates." />
+						{:else}
+							<EmptyState
+								icon="chart-gantt"
+								title="No tasks on the timeline"
+								sub="Plan your work by creating a task — it lands on today."
+								ctaLabel="Add task"
+								onCta={() => { addingRow = true; rowTitle = ''; }}
+							/>
+						{/if}
 					</div>
 				{/if}
 

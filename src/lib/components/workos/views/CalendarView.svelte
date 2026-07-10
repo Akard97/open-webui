@@ -5,6 +5,7 @@
 	import DayCell from './calendar/DayCell.svelte';
 	import UnscheduledRail from './calendar/UnscheduledRail.svelte';
 	import StatusDot from '../ui/StatusDot.svelte';
+	import EmptyState from '../ui/EmptyState.svelte';
 	import { monthGrid, weekDays, isToday, dayKey, agendaDays } from '../lib/calendar';
 	import { boardFilter, filteredTasks, editTask, tasks as tasksStore, openTask } from '../lib/store';
 	import { STATUS_COLOR, statusShape } from '../lib/colors';
@@ -197,7 +198,7 @@
 				</div>
 			{/each}
 			{#if !agenda.length}
-				<div class="py-10 text-center text-sm text-gray-400">No scheduled tasks this month</div>
+				<EmptyState icon="calendar" title="No scheduled tasks this month" sub="Tasks with due dates land here automatically." />
 			{/if}
 		</div>
 	{:else}
