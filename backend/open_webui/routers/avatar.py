@@ -83,12 +83,17 @@ async def generate_avatar(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Unsupported image type. Use PNG, JPEG or WebP.',
         )
-    data = await photo.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Image is too large (max 10 MB).',
-        )
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await photo.read(1024 * 1024):
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Image is too large (max 10 MB).',
+            )
+        chunks.append(chunk)
+    data = b''.join(chunks)
 
     limit = int(request.app.state.config.AVATAR_DAILY_LIMIT)
     today = _utc_date()

@@ -2,6 +2,7 @@ import base64
 import io
 from types import SimpleNamespace
 
+import aiohttp
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -87,6 +88,15 @@ def _files():
     return {'photo': ('p.png', PNG_BYTES, 'image/png')}
 
 
+def _form_field(form: aiohttp.FormData, name: str):
+    # aiohttp.FormData._fields entries are (type_options, headers, value);
+    # the field name lives in type_options['name'].
+    for type_options, _headers, value in form._fields:
+        if type_options.get('name') == name:
+            return value
+    raise KeyError(name)
+
+
 @pytest.mark.asyncio
 async def test_generate_disabled_returns_403(monkeypatch):
     session = _patch_openai(monkeypatch)
@@ -123,9 +133,14 @@ async def test_generate_happy_path(monkeypatch):
     assert body['image'].startswith('data:image/webp;base64,')
     assert body['remaining'] == 9
     assert await AvatarGenerations.get_count('u1', avatar_router._utc_date()) == 1
-    # locked style prompt + model reach the API call
+    # locked style prompt + model + cost-bound params reach the API call
     url, kwargs = session.calls[0]
     assert url.endswith('/images/edits')
+    form = kwargs['data']
+    assert _form_field(form, 'model') == 'gpt-image-2'
+    assert _form_field(form, 'quality') == 'medium'
+    assert _form_field(form, 'output_format') == 'webp'
+    assert _form_field(form, 'prompt') == 'style prompt'
 
 
 @pytest.mark.asyncio
