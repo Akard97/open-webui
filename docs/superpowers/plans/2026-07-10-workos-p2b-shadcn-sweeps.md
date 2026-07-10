@@ -288,3 +288,11 @@ git commit -m "refactor(workos): admin, chrome and dialog footers on shadcn cont
 - Subtask checkboxes: shadcn square w/ check animation (was native); "Add subtask" gains ghost chrome (was bare text link).
 - RulesTab: shadcn selects/checkboxes/number input.
 - Mobile (<768px): all shadcn Inputs render 16px text (was 14px) — intentional shadcn default, prevents iOS focus-zoom.
+
+## P2c smoke additions (dashboard primitives wave, 2026-07-10 — b07c7d629..1535ee18d, review "Yes")
+
+- **Overview KPI band (D4 — the big one):** dark ink panel is GONE, now a standard white/gray-900 card in both themes. Numerals 22→28px bold. Dots re-mapped: due-this-week peach→amber `#f59e0b`, overdue salmon→red (`#dc2626` light / `#f87171` dark), completed mint→green `#769a4a`, new-tasks periwinkle→neutral gray-500 (user decision). 4w/6w/12w toggle now a primary-filled pill segment (matches Calendar Month/Week). At xl width: 5 columns with hairline dividers, single row; below xl: wrapping grid, no dividers — check both.
+- **DeltaBadge everywhere:** completed-tile "vs N", My Work done-delta, Momentum completion-time delta are all the same tinted green/red pill with a 10px arrow. Momentum: green badge points DOWN when completion got faster — intended semantics, not a bug. Check the pill doesn't distend Momentum's 11px caption line.
+- **My Work stat tiles:** numerals 34→28px (weight stays 700); sub-labels lose font-mono. Judge whether the command-center still feels bold enough — escape hatch (size="lg") was declined, re-raise if it reads weak.
+- **Empty states unified:** Calendar agenda + Inbox gain icon tiles (+ new sub-copy: Inbox "You're all caught up" + "Mentions and assignments will show up here."). Overview view-empty gains layers icon, title drops to 14px. My Work rails + Overview cards (Pulse/Attention/Team) now left-aligned quiet "— No mentions" lines (were centered sentences). Timeline: same anatomy but icon tile bg lightens one step in dark (gray-800), CTA is now a shadcn Button, and vertical padding grew (outer py-16 + inner py-10) — if too airy, fix is outer py-16→py-6, never shrink EmptyState's py-10.
+- **Unchanged by contract:** Board column empty states, DistributionCard 16px counts, Momentum chart bar colors, all progress bars.

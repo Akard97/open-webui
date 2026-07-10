@@ -605,7 +605,7 @@ git commit -m "refactor(workos): Calendar, Inbox and Timeline adopt EmptyState"
 ```
 rg '#101623|#1b2434|#232f45|#7e8aa0|#9aa6ba|#aab5c8|#2a3651|#123c2c|#3c1a1a|#8fa3ff|#f0b47a|#f27d72|#5DCAA5' src/lib/components/workos   # → 0
 rg 'text-\[22px\]|text-\[34px\]' src/lib/components/workos                                                                                # → 0
-rg 'wos-display' src/lib/components/workos --files-with-matches                                                                           # → KpiNumeral.svelte only
+rg 'wos-display' src/lib/components/workos --files-with-matches                                                                           # → KpiNumeral.svelte + styles.css (the class definition) only
 npx vitest run src/lib/components/workos                                                                                                  # → 194 passed
 npm run check                                                                                                                             # → no new workos errors
 ```
