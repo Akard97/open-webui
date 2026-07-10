@@ -280,7 +280,7 @@
 				</div>
 				<div class="px-2 pt-1 pb-2 overflow-x-auto">
 					{#if !filtered.length}
-						<div class="py-4"><EmptyState icon="list" title="Nothing on your plate here." /></div>
+						<div class="py-4"><EmptyState icon="list" title="Nothing on your plate here" /></div>
 					{:else}
 						<!-- Column header -->
 						<div class="grid items-center gap-3 px-2 pb-2 text-[11px] font-medium text-gray-400 dark:text-gray-500" style={GRID}>

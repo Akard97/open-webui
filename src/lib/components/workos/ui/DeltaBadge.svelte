@@ -17,5 +17,5 @@
 	style="color:{color}; background:{tint(color)}"
 >
 	<Icon name={up ? 'arrow-up' : 'arrow-down'} size={10} strokeWidth={3} />
-	{text}
+	<span class="sr-only">{up ? 'up' : 'down'} </span>{text}
 </span>
