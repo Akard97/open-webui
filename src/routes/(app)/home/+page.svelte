@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, onDestroy, getContext } from 'svelte';
-	import { toast } from 'svelte-sonner';
 
 	import { user } from '$lib/stores';
 
@@ -40,10 +39,6 @@
 	}[wishForHour(h)];
 
 	$: firstName = ($user?.name ?? '').trim().split(/\s+/)[0] ?? '';
-
-	const notifyMe = () => {
-		toast.success($i18n.t("We'll let you know when it's ready."));
-	};
 
 	let pageEl: HTMLElement;
 	let io: IntersectionObserver | undefined;
@@ -396,9 +391,6 @@
 									<div class="soon-foot">
 										<span class="buildbar"><i style="width:40%"></i></span>
 										<span class="bt">{$i18n.t('In design')}</span>
-										<button type="button" class="notify" on:click={notifyMe}
-											><svg class="icon"><use href="#i-bell" /></svg> {$i18n.t('Notify me')}</button
-										>
 									</div>
 								</div>
 
@@ -431,9 +423,6 @@
 									<div class="soon-foot">
 										<span class="buildbar"><i style="width:70%"></i></span>
 										<span class="bt">{$i18n.t('In development')}</span>
-										<button type="button" class="notify" on:click={notifyMe}
-											><svg class="icon"><use href="#i-bell" /></svg> {$i18n.t('Notify me')}</button
-										>
 									</div>
 								</div>
 							</div>
@@ -957,7 +946,7 @@
 		display: grid;
 		grid-template-columns: 1.08fr 1.08fr 0.84fr;
 		gap: 3.5rem;
-		align-items: stretch;
+		align-items: start;
 	}
 	.tool-col {
 		min-width: 0;
@@ -1477,12 +1466,6 @@
 			color-mix(in srgb, var(--sun-500) 55%, var(--card)) 0.3rem 0.6rem
 		);
 	}
-	.sooncard.warm .notify {
-		color: var(--sun-ink);
-	}
-	.sooncard.warm .notify:hover {
-		background: var(--sun-tint);
-	}
 
 	/* ghost UI — shimmering skeleton preview of the future tool */
 	.ghost {
@@ -1591,31 +1574,6 @@
 		font-weight: 500;
 		color: var(--faint);
 	}
-	.notify {
-		margin-inline-start: auto;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.32rem;
-		font-size: 0.64rem;
-		font-weight: 600;
-		color: var(--accent);
-		text-decoration: none;
-		padding: 0.28rem 0.6rem;
-		border-radius: 999px;
-		transition: 0.15s;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		font: inherit;
-	}
-	.notify .icon {
-		width: 0.72rem;
-		height: 0.72rem;
-	}
-	.notify:hover {
-		background: var(--tint);
-	}
-
 	footer {
 		padding: 0 0 2.2rem;
 		color: var(--placeholder);
