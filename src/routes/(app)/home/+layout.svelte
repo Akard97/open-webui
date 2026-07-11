@@ -11,6 +11,6 @@
 	</title>
 </svelte:head>
 
-<div class="w-full h-screen max-h-[100dvh] overflow-y-auto">
+<div class="w-full h-full max-h-[100dvh] overflow-y-auto">
 	<slot />
 </div>
