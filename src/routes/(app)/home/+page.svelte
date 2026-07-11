@@ -946,7 +946,7 @@
 		display: grid;
 		grid-template-columns: 1.08fr 1.08fr 0.84fr;
 		gap: 3.5rem;
-		align-items: start;
+		align-items: stretch;
 	}
 	.tool-col {
 		min-width: 0;
