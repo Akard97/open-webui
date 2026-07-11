@@ -1645,7 +1645,7 @@
 			padding: 0 1.4rem;
 		}
 		.wrap {
-			padding: 0.6rem 0.6rem 0.6rem 0;
+			padding: 0.6rem;
 		}
 		.tools {
 			grid-template-columns: 1fr 1fr;
