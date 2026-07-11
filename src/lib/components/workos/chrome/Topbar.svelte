@@ -2,6 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { currentWorkstream, currentTeam, workspaces, view, tasks, initials } from '../lib/store';
+	import { avatarColors } from '../lib/avatar';
 
 	$: ws = $currentWorkstream;
 	$: parentWorkspace = ws ? $workspaces.find((w) => w.id === ws.workspace_id) : null;
@@ -39,7 +40,14 @@
 			<div class="hidden md:flex items-center gap-3">
 				<div class="flex -space-x-2">
 				{#each assignees as id (id)}
-					<span class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center" title={initials(id)}>{initials(id)}</span>
+					{@const colors = avatarColors(id)}
+					<span
+						class="size-7 rounded-full border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center"
+						style="background:{colors.background};color:{colors.foreground}"
+						title={initials(id)}
+					>
+						{initials(id)}
+					</span>
 				{/each}
 			</div>
 			<Button variant="ghost" size="sm" disabled><Icon name="share-2" size={14} /> Share</Button>

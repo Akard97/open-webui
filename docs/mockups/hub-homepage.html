@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Home • Osool Intelligence Hub — Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+	/* ============ Osool tokens (mirrors src/tailwind.css) ============ */
+	:root {
+		--brand-50:  oklch(0.975 0.012 216.54);
+		--brand-100: oklch(0.945 0.028 216.54);
+		--brand-200: oklch(0.9 0.055 216.54);
+		--brand-300: oklch(0.84 0.085 216.54);
+		--brand-400: oklch(0.73 0.11 210.62);
+		--brand-500: oklch(0.6618 0.1147 210.62); /* 3125 C */
+		--brand-600: oklch(0.4899 0.0868 216.54); /* 315 C */
+		--brand-700: oklch(0.3263 0.0599 221.22); /* 309 C */
+		--brand-900: oklch(0.23 0.045 221.22);
+		--brand-950: oklch(0.18 0.035 221.22);
+		--success:   oklch(0.6409 0.1158 129.21); /* 576 C */
+
+		--bg: oklch(0.99 0 0);
+		--panel: oklch(0.98 0 0);
+		--card: #ffffff;
+		--card-2: oklch(0.975 0 0);
+		--border: oklch(0.92 0 0);
+		--hairline: oklch(0.945 0 0);
+		--text: oklch(0.16 0 0);
+		--muted: oklch(0.5 0 0);
+		--faint: oklch(0.69 0 0);
+		--grid-line: oklch(0.16 0 0 / 0.045);
+		--hero-wash: oklch(0.945 0.028 216.54 / 0.55);
+		--chip-bg: #ffffff;
+		--shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px oklch(0 0 0 / 0.06);
+		--shadow-lift: 0 2px 4px oklch(0 0 0 / 0.05), 0 16px 40px oklch(0 0 0 / 0.10);
+		--accent: var(--brand-700);
+		--accent-soft: var(--brand-100);
+		--cta-bg: oklch(0.18 0 0);
+		--cta-fg: #ffffff;
+	}
+	.dark {
+		--bg: oklch(0.16 0 0);
+		--panel: oklch(0.18 0 0);
+		--card: oklch(0.21 0 0);
+		--card-2: oklch(0.24 0 0);
+		--border: oklch(1 0 0 / 0.1);
+		--hairline: oklch(1 0 0 / 0.06);
+		--text: oklch(0.97 0 0);
+		--muted: oklch(0.72 0 0);
+		--faint: oklch(0.55 0 0);
+		--grid-line: oklch(1 0 0 / 0.05);
+		--hero-wash: oklch(0.3 0.05 221.22 / 0.45);
+		--chip-bg: oklch(0.23 0 0);
+		--shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.35);
+		--shadow-lift: 0 2px 4px oklch(0 0 0 / 0.35), 0 16px 40px oklch(0 0 0 / 0.5);
+		--accent: var(--brand-500);
+		--accent-soft: oklch(0.3 0.05 221.22);
+		--cta-bg: var(--brand-500);
+		--cta-fg: oklch(0.18 0.035 221.22);
+	}
+
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	html, body { height: 100%; }
+	body {
+		font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
+		background: var(--bg);
+		color: var(--text);
+		display: flex;
+		transition: background 0.25s, color 0.25s;
+		-webkit-font-smoothing: antialiased;
+	}
+	h1, h2, h3 { font-family: 'Archivo', 'Inter', sans-serif; }
+	.icon { width: 1.15rem; height: 1.15rem; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+	/* ============ Hub rail (context only) ============ */
+	.rail {
+		position: sticky; top: 0; height: 100vh; width: 3.6rem; flex: none;
+		display: flex; flex-direction: column; align-items: center;
+		background: var(--panel);
+		border-inline-end: 1px solid var(--hairline);
+		padding: 0.75rem 0; gap: 0.25rem; z-index: 40;
+	}
+	.rail .logo {
+		width: 2rem; height: 2rem; border-radius: 0.5rem; margin-bottom: 0.9rem;
+		background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+		display: grid; place-items: center; color: #fff;
+		font-family: 'Archivo'; font-weight: 700; font-size: 0.9rem;
+	}
+	.rail a {
+		width: 2.4rem; height: 2.4rem; border-radius: 0.6rem; display: grid; place-items: center;
+		color: var(--faint); transition: 0.15s;
+	}
+	.rail a:hover { color: var(--text); background: var(--hairline); }
+	.rail a.active { color: var(--accent); background: var(--accent-soft); }
+	.rail .spacer { flex: 1; }
+	.rail .avatar {
+		width: 1.9rem; height: 1.9rem; border-radius: 999px;
+		background: linear-gradient(135deg, var(--brand-300), var(--brand-600));
+		border: 2px solid var(--card);
+	}
+
+	/* ============ Page ============ */
+	main { flex: 1; min-width: 0; }
+	.container { max-width: 76rem; margin: 0 auto; padding: 0 2.5rem; }
+
+	/* ---- Hero ---- */
+	.hero {
+		position: relative; overflow: hidden;
+		border-bottom: 1px solid var(--hairline);
+	}
+	.hero::before { /* faint blueprint grid */
+		content: ''; position: absolute; inset: 0;
+		background:
+			linear-gradient(var(--grid-line) 1px, transparent 1px),
+			linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+		background-size: 130px 130px;
+		mask-image: radial-gradient(ellipse 90% 90% at 50% 40%, black 40%, transparent 100%);
+	}
+	.hero::after { /* teal wash */
+		content: ''; position: absolute; inset: 0; pointer-events: none;
+		background:
+			radial-gradient(46rem 26rem at 82% 10%, var(--hero-wash), transparent 65%),
+			radial-gradient(30rem 20rem at 8% 95%, var(--hero-wash), transparent 70%);
+	}
+	.hero-inner {
+		position: relative; z-index: 1;
+		display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 3rem; align-items: center;
+		padding: 4.5rem 0 4rem;
+	}
+	.badge {
+		display: inline-flex; align-items: center; gap: 0.45rem;
+		padding: 0.32rem 0.85rem; border-radius: 999px;
+		background: var(--chip-bg); border: 1px solid var(--border);
+		font-size: 0.75rem; font-weight: 500; color: var(--muted);
+		box-shadow: var(--shadow);
+	}
+	.badge .dot { width: 0.45rem; height: 0.45rem; border-radius: 999px; background: var(--brand-500); }
+	.hero h1 {
+		margin-top: 1.4rem;
+		font-size: clamp(2.4rem, 4vw, 3.4rem);
+		font-weight: 600; letter-spacing: -0.03em; line-height: 1.05;
+	}
+	.hero h1 .serif {
+		display: block;
+		font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400;
+		color: var(--accent); letter-spacing: -0.01em;
+		margin-top: 0.35rem;
+	}
+	.hero p.lede {
+		margin-top: 1.25rem; max-width: 34rem;
+		font-size: 1.02rem; line-height: 1.65; color: var(--muted);
+	}
+	.cta-row { margin-top: 1.9rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+	.btn {
+		display: inline-flex; align-items: center; gap: 0.5rem;
+		padding: 0.72rem 1.35rem; border-radius: 999px;
+		font-size: 0.9rem; font-weight: 600; text-decoration: none;
+		transition: 0.18s; border: 1px solid transparent; cursor: pointer;
+	}
+	.btn-primary { background: var(--cta-bg); color: var(--cta-fg); }
+	.btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-lift); }
+	.btn-primary .icon { width: 1rem; height: 1rem; }
+	.btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+	.btn-ghost:hover { background: var(--chip-bg); box-shadow: var(--shadow); }
+
+	/* ---- Hero visual: node network ---- */
+	.hero-visual { position: relative; height: 27rem; }
+	.hero-visual svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+	.hero-visual svg.wires path { fill: none; stroke: var(--brand-400); stroke-opacity: 0.5; stroke-width: 1.3; stroke-dasharray: 4 5; }
+	.hero-visual svg.wires circle { fill: var(--brand-500); }
+	.node {
+		position: absolute; display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
+		animation: float 7s ease-in-out infinite;
+	}
+	.node .tile {
+		width: 3.7rem; height: 3.7rem; border-radius: 1rem;
+		background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+		display: grid; place-items: center; color: var(--accent);
+	}
+	.node .tile .icon { width: 1.4rem; height: 1.4rem; }
+	.node .lbl { font-size: 0.72rem; color: var(--muted); font-weight: 500; }
+	.orb-card {
+		position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+		width: 7.4rem; height: 7.4rem; border-radius: 1.6rem;
+		background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-lift);
+		display: grid; place-items: center;
+	}
+	.orb {
+		width: 4.6rem; height: 4.6rem; border-radius: 999px;
+		background: radial-gradient(circle at 32% 28%, var(--brand-300), var(--brand-500) 45%, var(--brand-700) 90%);
+		box-shadow: 0 0 34px oklch(0.6618 0.1147 210.62 / 0.55), inset 0 2px 8px oklch(1 0 0 / 0.5);
+		animation: pulse 5s ease-in-out infinite;
+	}
+	.mini-avatar {
+		position: absolute; width: 2rem; height: 2rem; border-radius: 999px;
+		border: 2px solid var(--card); box-shadow: var(--shadow);
+		animation: float 8s ease-in-out infinite;
+	}
+	.notif {
+		position: absolute; inset-inline-end: 0; bottom: 0.5rem; width: 17.5rem;
+		background: var(--card); border: 1px solid var(--border); border-radius: 1rem;
+		box-shadow: var(--shadow-lift); padding: 0.9rem 1rem; z-index: 2;
+		animation: float 9s ease-in-out infinite; animation-delay: -3s;
+	}
+	.notif .head { display: flex; align-items: center; justify-content: space-between; }
+	.notif .head span { font-size: 0.78rem; font-weight: 600; }
+	.notif .head .go {
+		font-size: 0.68rem; font-weight: 600; color: #fff; background: var(--brand-600);
+		padding: 0.28rem 0.7rem; border-radius: 999px;
+	}
+	.notif .body { margin-top: 0.55rem; font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+	.notif .task {
+		margin-top: 0.6rem; display: flex; align-items: center; gap: 0.55rem;
+		background: var(--card-2); border: 1px solid var(--hairline); border-radius: 0.6rem; padding: 0.5rem 0.6rem;
+	}
+	.notif .task .sq { width: 1.6rem; height: 1.6rem; border-radius: 0.45rem; background: var(--accent-soft); display: grid; place-items: center; color: var(--accent); }
+	.notif .task .sq .icon { width: 0.9rem; height: 0.9rem; }
+	.notif .task b { display: block; font-size: 0.72rem; }
+	.notif .task small { font-size: 0.65rem; color: var(--faint); }
+	@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+	@keyframes pulse { 0%,100% { box-shadow: 0 0 26px oklch(0.6618 0.1147 210.62 / 0.4), inset 0 2px 8px oklch(1 0 0 / 0.5);} 50% { box-shadow: 0 0 46px oklch(0.6618 0.1147 210.62 / 0.65), inset 0 2px 8px oklch(1 0 0 / 0.5);} }
+
+	/* ---- Sections ---- */
+	section.block { padding: 4rem 0 1rem; }
+	.sec-head { margin-bottom: 1.8rem; }
+	.sec-head .badge { margin-bottom: 1rem; }
+	.sec-head h2 { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; }
+	.sec-head p { margin-top: 0.5rem; color: var(--muted); font-size: 0.95rem; max-width: 36rem; line-height: 1.6; }
+
+	/* ---- Tool grid ---- */
+	.tools-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+	.tool {
+		position: relative; display: flex; flex-direction: column;
+		border-radius: 1.25rem; border: 1px solid var(--border); background: var(--card);
+		padding: 1.5rem; min-height: 12.5rem; text-decoration: none; color: var(--text);
+		transition: 0.2s;
+	}
+	.tool:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: var(--brand-300); }
+	.tool .tool-icon {
+		width: 2.6rem; height: 2.6rem; border-radius: 0.8rem;
+		background: var(--accent-soft); color: var(--accent);
+		display: grid; place-items: center; margin-bottom: auto;
+	}
+	.tool h3 { margin-top: 1.6rem; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+	.tool p { margin-top: 0.45rem; font-size: 0.83rem; line-height: 1.55; color: var(--muted); }
+	.tool .arrow {
+		position: absolute; top: 1.3rem; inset-inline-end: 1.3rem;
+		width: 2rem; height: 2rem; border-radius: 999px; display: grid; place-items: center;
+		color: var(--faint); border: 1px solid var(--hairline);
+		opacity: 0; transform: translateX(-4px); transition: 0.2s;
+	}
+	.tool:hover .arrow { opacity: 1; transform: translateX(0); color: var(--accent); border-color: var(--brand-300); }
+	.tool .chip {
+		position: absolute; top: 1.45rem; inset-inline-end: 1.45rem;
+		font-size: 0.65rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+		color: var(--muted); background: var(--card-2); border: 1px solid var(--hairline);
+		padding: 0.25rem 0.6rem; border-radius: 999px;
+	}
+	.tool:hover .chip { opacity: 0; }
+
+	/* featured Osool AI card */
+	.tool.featured {
+		grid-column: span 2;
+		background:
+			radial-gradient(28rem 16rem at 85% -20%, oklch(0.4899 0.0868 216.54 / 0.55), transparent 60%),
+			linear-gradient(140deg, var(--brand-950), var(--brand-900));
+		border-color: var(--brand-900); color: #fff;
+		flex-direction: row; align-items: stretch; gap: 2rem;
+	}
+	.dark .tool.featured { border-color: oklch(1 0 0 / 0.14); }
+	.tool.featured:hover { border-color: var(--brand-600); }
+	.tool.featured .fcol { display: flex; flex-direction: column; flex: 1; }
+	.tool.featured .tool-icon { background: oklch(1 0 0 / 0.12); color: var(--brand-300); }
+	.tool.featured h3 { color: #fff; font-size: 1.25rem; }
+	.tool.featured p { color: oklch(0.9 0.02 216.54 / 0.85); max-width: 26rem; }
+	.tool.featured .arrow { border-color: oklch(1 0 0 / 0.25); color: var(--brand-200); }
+	.tool.featured:hover .arrow { color: #fff; border-color: var(--brand-400); }
+	.tool.featured .fake-chat {
+		flex: none; width: 15.5rem; align-self: center;
+		background: oklch(1 0 0 / 0.07); border: 1px solid oklch(1 0 0 / 0.14);
+		border-radius: 0.9rem; padding: 0.85rem; backdrop-filter: blur(4px);
+	}
+	.tool.featured .fake-chat .q {
+		font-size: 0.72rem; color: oklch(0.95 0.01 216.54); background: oklch(1 0 0 / 0.12);
+		border-radius: 0.6rem 0.6rem 0.15rem 0.6rem; padding: 0.5rem 0.65rem; width: fit-content; margin-inline-start: auto;
+	}
+	.tool.featured .fake-chat .a {
+		margin-top: 0.55rem; font-size: 0.72rem; line-height: 1.55; color: oklch(0.88 0.03 216.54);
+		background: oklch(0 0 0 / 0.25); border-radius: 0.6rem 0.6rem 0.6rem 0.15rem; padding: 0.5rem 0.65rem;
+	}
+	.tool.featured .fake-chat .a .src {
+		display: inline-flex; align-items: center; gap: 0.3rem; margin-top: 0.45rem;
+		font-size: 0.62rem; color: var(--brand-300); background: oklch(1 0 0 / 0.08);
+		padding: 0.18rem 0.5rem; border-radius: 999px;
+	}
+
+	/* ---- Coming soon ---- */
+	.soon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+	.soon {
+		border: 1.5px dashed var(--border); border-radius: 1.25rem; padding: 1.5rem;
+		background: transparent; min-height: 9rem; position: relative;
+		display: flex; flex-direction: column; color: var(--muted);
+	}
+	.soon .tool-icon {
+		width: 2.4rem; height: 2.4rem; border-radius: 0.8rem;
+		background: var(--card-2); color: var(--faint); display: grid; place-items: center;
+	}
+	.soon h3 { margin-top: 1rem; font-size: 0.98rem; font-weight: 600; color: var(--text); }
+	.soon p { margin-top: 0.35rem; font-size: 0.8rem; line-height: 1.5; }
+	.soon .chip {
+		position: absolute; top: 1.35rem; inset-inline-end: 1.35rem;
+		font-size: 0.63rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+		color: var(--accent); background: var(--accent-soft);
+		padding: 0.25rem 0.6rem; border-radius: 999px;
+	}
+
+	footer { padding: 3.5rem 0 2.5rem; color: var(--faint); font-size: 0.78rem; text-align: center; }
+
+	/* ---- Mockup controls ---- */
+	.mockbar {
+		position: fixed; bottom: 1.25rem; inset-inline-end: 1.25rem; z-index: 50;
+		display: flex; align-items: center; gap: 0.4rem;
+		background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+		padding: 0.35rem; box-shadow: var(--shadow-lift);
+	}
+	.mockbar span { font-size: 0.68rem; color: var(--faint); padding: 0 0.5rem; }
+	.mockbar button {
+		border: none; background: transparent; color: var(--muted); font: inherit; font-size: 0.75rem;
+		font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 999px; cursor: pointer;
+	}
+	.mockbar button.on { background: var(--cta-bg); color: var(--cta-fg); }
+
+	@media (max-width: 980px) {
+		.hero-inner { grid-template-columns: 1fr; padding-top: 3rem; }
+		.hero-visual { display: none; }
+		.tools-grid, .soon-grid { grid-template-columns: 1fr; }
+		.tool.featured { grid-column: span 1; flex-direction: column; }
+		.container { padding: 0 1.25rem; }
+	}
+</style>
+</head>
+<body>
+
+<!-- icon sprite (heroicons outline) -->
+<svg width="0" height="0" style="position:absolute">
+	<symbol id="i-home" viewBox="0 0 24 24"><path d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></symbol>
+	<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.813 15.904 9.5 16.938l-.313-1.034a3.75 3.75 0 0 0-2.466-2.466L5.687 13.5l1.034-.313a3.75 3.75 0 0 0 2.466-2.466L9.5 9.688l.313 1.034a3.75 3.75 0 0 0 2.466 2.466l1.034.312-1.034.313a3.75 3.75 0 0 0-2.466 2.466ZM18.259 8.715 18 9.75l-.259-1.035a2.625 2.625 0 0 0-1.956-1.956L14.75 6.5l1.035-.259a2.625 2.625 0 0 0 1.956-1.956L18 3.25l.259 1.035a2.625 2.625 0 0 0 1.956 1.956l1.035.259-1.035.259a2.625 2.625 0 0 0-1.956 1.956ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/></symbol>
+	<symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"/></symbol>
+	<symbol id="i-doccheck" viewBox="0 0 24 24"><path d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 0 1 9 9v.375M10.125 2.25A3.375 3.375 0 0 1 13.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 0 1 3.375 3.375M9 15l2.25 2.25L15 12"/></symbol>
+	<symbol id="i-note" viewBox="0 0 24 24"><path d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/></symbol>
+	<symbol id="i-cube" viewBox="0 0 24 24"><path d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/></symbol>
+	<symbol id="i-users" viewBox="0 0 24 24"><path d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></symbol>
+	<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></symbol>
+	<symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"/></symbol>
+	<symbol id="i-present" viewBox="0 0 24 24"><path d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.25m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"/></symbol>
+	<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></symbol>
+	<symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.75 6 6 9-13.5"/></symbol>
+</svg>
+
+<!-- Hub rail (mock, for context) -->
+<nav class="rail" aria-hidden="true">
+	<div class="logo">O</div>
+	<a class="active" href="#" tabindex="-1"><svg class="icon"><use href="#i-home"/></svg></a>
+	<a href="#" tabindex="-1"><svg class="icon"><use href="#i-sparkles"/></svg></a>
+	<a href="#" tabindex="-1"><svg class="icon"><use href="#i-note"/></svg></a>
+	<a href="#" tabindex="-1"><svg class="icon"><use href="#i-cube"/></svg></a>
+	<a href="#" tabindex="-1"><svg class="icon"><use href="#i-doccheck"/></svg></a>
+	<a href="#" tabindex="-1"><svg class="icon"><use href="#i-clipboard"/></svg></a>
+	<a href="#" tabindex="-1"><svg class="icon"><use href="#i-users"/></svg></a>
+	<div class="spacer"></div>
+	<div class="avatar"></div>
+</nav>
+
+<main>
+	<!-- ============ HERO ============ -->
+	<section class="hero">
+		<div class="container hero-inner">
+			<div>
+				<span class="badge"><span class="dot"></span> Osool Intelligence Hub</span>
+				<h1>
+					<span id="greeting">Good evening</span>, Ahmed.
+					<span class="serif">One place for knowledge, oversight&nbsp;&amp;&nbsp;execution.</span>
+				</h1>
+				<p class="lede">
+					Your AI-native workspace. Ask Osool AI anything, keep projects moving in WorkOS,
+					and stay on top of policies — all in a single branded hub.
+				</p>
+				<div class="cta-row">
+					<a class="btn btn-primary" href="#">
+						<svg class="icon"><use href="#i-sparkles"/></svg>
+						Ask Osool AI
+						<svg class="icon"><use href="#i-arrow"/></svg>
+					</a>
+					<a class="btn btn-ghost" href="#">Open WorkOS</a>
+				</div>
+			</div>
+
+			<div class="hero-visual" aria-hidden="true">
+				<svg class="wires" viewBox="0 0 520 432" preserveAspectRatio="none">
+					<path d="M 120 96 C 180 120, 210 150, 250 178"/>
+					<path d="M 408 78 C 360 110, 330 140, 292 168"/>
+					<path d="M 448 210 C 400 200, 360 192, 316 186"/>
+					<path d="M 96 260 C 150 230, 190 210, 232 194"/>
+					<path d="M 260 190 C 280 250, 300 290, 330 330"/>
+					<circle cx="120" cy="96" r="3.5"/>
+					<circle cx="408" cy="78" r="3.5"/>
+					<circle cx="448" cy="210" r="3.5"/>
+					<circle cx="96" cy="260" r="3.5"/>
+					<circle cx="330" cy="330" r="3.5"/>
+				</svg>
+
+				<div class="orb-card"><div class="orb"></div></div>
+
+				<div class="node" style="left:12%; top:6%; animation-delay:-1s">
+					<div class="tile"><svg class="icon"><use href="#i-sparkles"/></svg></div>
+					<span class="lbl">Osool AI</span>
+				</div>
+				<div class="node" style="left:70%; top:2%; animation-delay:-3s">
+					<div class="tile"><svg class="icon"><use href="#i-clipboard"/></svg></div>
+					<span class="lbl">WorkOS</span>
+				</div>
+				<div class="node" style="left:82%; top:38%; animation-delay:-5s">
+					<div class="tile"><svg class="icon"><use href="#i-doccheck"/></svg></div>
+					<span class="lbl">Policy Review</span>
+				</div>
+				<div class="node" style="left:6%; top:52%; animation-delay:-2s">
+					<div class="tile"><svg class="icon"><use href="#i-note"/></svg></div>
+					<span class="lbl">Notes</span>
+				</div>
+
+				<div class="mini-avatar" style="left:38%; top:9%; background:linear-gradient(135deg,#f3c98b,#d98352); animation-delay:-4s"></div>
+				<div class="mini-avatar" style="left:88%; top:16%; background:linear-gradient(135deg,#a9c6f5,#5a7dc4); animation-delay:-6s"></div>
+				<div class="mini-avatar" style="left:20%; top:74%; background:linear-gradient(135deg,#b8e0c8,#5f9c78); animation-delay:-1.5s"></div>
+
+				<div class="notif">
+					<div class="head">
+						<span>Task assigned to you</span>
+						<span class="go">Open task</span>
+					</div>
+					<div class="body">Sarah assigned you a new task in <b>WorkOS</b> — review before Sunday.</div>
+					<div class="task">
+						<span class="sq"><svg class="icon"><use href="#i-check"/></svg></span>
+						<span>
+							<b>Q3 policy audit — draft review</b>
+							<small>Due Sun • Compliance board</small>
+						</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ============ TOOLS ============ -->
+	<section class="block">
+		<div class="container">
+			<div class="sec-head">
+				<span class="badge"><span class="dot"></span> Your tools</span>
+				<h2>Everything, in one hub</h2>
+				<p>Jump straight into a tool. What you see here follows your role and permissions.</p>
+			</div>
+
+			<div class="tools-grid">
+				<a class="tool featured" href="#">
+					<div class="fcol">
+						<div class="tool-icon"><svg class="icon"><use href="#i-sparkles"/></svg></div>
+						<h3>Osool AI</h3>
+						<p>Purpose-built conversational AI. Ask questions, draft content, and search company knowledge — with sources, tools, and in-chat widgets.</p>
+					</div>
+					<div class="fake-chat" aria-hidden="true">
+						<div class="q">What's our remote work policy?</div>
+						<div class="a">
+							Employees may work remotely up to 3 days a week with manager approval…
+							<span class="src"><svg class="icon" style="width:.7rem;height:.7rem"><use href="#i-doccheck"/></svg> HR-POL-014</span>
+						</div>
+					</div>
+					<span class="arrow"><svg class="icon"><use href="#i-arrow"/></svg></span>
+				</a>
+
+				<a class="tool" href="#">
+					<div class="tool-icon"><svg class="icon"><use href="#i-clipboard"/></svg></div>
+					<h3>WorkOS</h3>
+					<p>Tasks &amp; projects — boards, lists, calendar and timeline, with comments, mentions and team workload.</p>
+					<span class="arrow"><svg class="icon"><use href="#i-arrow"/></svg></span>
+				</a>
+
+				<a class="tool" href="#">
+					<div class="tool-icon"><svg class="icon"><use href="#i-doccheck"/></svg></div>
+					<h3>Policy Review</h3>
+					<p>Browse the policy library, upload documents, and run AI-assisted compliance checks and approvals.</p>
+					<span class="arrow"><svg class="icon"><use href="#i-arrow"/></svg></span>
+				</a>
+
+				<a class="tool" href="#">
+					<div class="tool-icon"><svg class="icon"><use href="#i-note"/></svg></div>
+					<h3>Notes</h3>
+					<p>Capture meeting notes and ideas, organized and enhanced with AI.</p>
+					<span class="arrow"><svg class="icon"><use href="#i-arrow"/></svg></span>
+				</a>
+
+				<a class="tool" href="#">
+					<div class="tool-icon"><svg class="icon"><use href="#i-cube"/></svg></div>
+					<h3>Workspace</h3>
+					<p>Manage models, knowledge bases, prompts and tools that power the hub.</p>
+					<span class="arrow"><svg class="icon"><use href="#i-arrow"/></svg></span>
+				</a>
+
+				<a class="tool" href="#">
+					<div class="tool-icon"><svg class="icon"><use href="#i-users"/></svg></div>
+					<h3>Admin Panel</h3>
+					<p>Users, groups, permissions and platform settings.</p>
+					<span class="chip">Admins</span>
+					<span class="arrow"><svg class="icon"><use href="#i-arrow"/></svg></span>
+				</a>
+			</div>
+		</div>
+	</section>
+
+	<!-- ============ COMING SOON ============ -->
+	<section class="block">
+		<div class="container">
+			<div class="sec-head">
+				<span class="badge"><span class="dot"></span> Roadmap</span>
+				<h2>Coming soon</h2>
+			</div>
+			<div class="soon-grid">
+				<div class="soon">
+					<div class="tool-icon"><svg class="icon"><use href="#i-book"/></svg></div>
+					<h3>Policies Library</h3>
+					<p>A searchable, versioned home for every company policy.</p>
+					<span class="chip">Soon</span>
+				</div>
+				<div class="soon">
+					<div class="tool-icon"><svg class="icon"><use href="#i-present"/></svg></div>
+					<h3>Presentation Maker</h3>
+					<p>Turn a prompt or document into a branded slide deck.</p>
+					<span class="chip">Soon</span>
+				</div>
+				<div class="soon">
+					<div class="tool-icon"><svg class="icon"><use href="#i-chart"/></svg></div>
+					<h3>Intelligence Survey</h3>
+					<p>Build, distribute and analyze internal surveys with AI summaries.</p>
+					<span class="chip">Soon</span>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<footer class="container">
+		Osool Intelligence Hub — internal platform
+	</footer>
+</main>
+
+<div class="mockbar">
+	<span>Mockup</span>
+	<button id="btn-light" class="on" onclick="setTheme('light')">Light</button>
+	<button id="btn-dark" onclick="setTheme('dark')">Dark</button>
+</div>
+
+<script>
+	const h = new Date().getHours();
+	document.getElementById('greeting').textContent =
+		h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+
+	function setTheme(t) {
+		document.documentElement.classList.toggle('dark', t === 'dark');
+		document.getElementById('btn-light').classList.toggle('on', t === 'light');
+		document.getElementById('btn-dark').classList.toggle('on', t === 'dark');
+	}
+</script>
+</body>
+</html>

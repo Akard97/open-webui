@@ -4,15 +4,19 @@ export const LABEL_PALETTE = ['#00a5ba', '#769a4a', '#d97706', '#dc2626', '#7c3a
 
 export type AvatarColors = Readonly<{ background: string; foreground: string }>;
 
+// Monochromatic teal ramp anchored on the Osool brand ink (#00313f): every avatar
+// is a variance of the same brand teal, dark -> light, so the palette reads as one
+// family instead of a rainbow. Dark shades take white initials, light shades take
+// dark-ink initials (see foregroundFor) — all pairs clear 4.5:1.
 export const AVATAR_BACKGROUNDS = [
 	'#00313f',
+	'#013a4b',
+	'#025468',
 	'#026c80',
 	'#00a5ba',
-	'#769a4a',
-	'#dfa244',
-	'#c96b5d',
+	'#3aa9bb',
 	'#54c2d1',
-	'#a4c979'
+	'#8fd6e0'
 ] as const;
 
 const BRAND_FOREGROUNDS = ['#ffffff', '#00313f'] as const;

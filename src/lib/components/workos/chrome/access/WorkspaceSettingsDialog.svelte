@@ -11,6 +11,7 @@
 		openModal, token, teams, workspaces, directory, initials, loadBootstrap
 	} from '../../lib/store';
 	import { addableWorkspaceMembers } from '../../lib/members';
+	import { avatarColors } from '../../lib/avatar';
 	import type { Member, WorkspaceRole } from '../../lib/types';
 
 	const ROLE_LABEL: Record<string, string> = { admin: 'Admin', member: 'Member' };
@@ -216,8 +217,14 @@
 							<div class="py-2.5 text-[13px] text-gray-400">Loading…</div>
 						{:else}
 							{#each wsMembers as m (m.user_id)}
+								{@const colors = avatarColors(m.user_id)}
 								<div class="flex items-center gap-3 py-2.5 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
-									<span class="size-7 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200 text-[11px] font-semibold inline-flex items-center justify-center flex-none">{initials(m.user_id)}</span>
+									<span
+										class="size-7 rounded-full text-[11px] font-semibold inline-flex items-center justify-center flex-none"
+										style="background:{colors.background};color:{colors.foreground}"
+									>
+										{initials(m.user_id)}
+									</span>
 									<span class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 truncate">{nameOf(m.user_id)}</span>
 									<Select.Root
 										type="single"

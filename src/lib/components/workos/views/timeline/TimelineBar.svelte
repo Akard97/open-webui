@@ -3,6 +3,7 @@
 	import { STATUS_LABEL } from '../../lib/types';
 	import { actualProgress } from '../../lib/progress';
 	import { formatDateShort } from '../../lib/format';
+	import { avatarColors } from '../../lib/avatar';
 	import {
 		barGeometry, applyMove, applyResize, dayToTs,
 		type TimelineItem, type TimelineWindow
@@ -154,7 +155,11 @@
 				>
 					{#if geom.width >= 64}<span class="flex-none overflow-hidden">{stateText}</span>{/if}
 					{#if geom.width >= 48 && t.assignee_ids?.length}
-						<span class="ml-auto flex-none w-[18px] h-[18px] rounded-full bg-white text-[8px] font-bold inline-flex items-center justify-center" style="color:{color}">
+						{@const colors = avatarColors(t.assignee_ids[0])}
+						<span
+							class="ml-auto flex-none size-[18px] rounded-full text-[8px] font-bold inline-flex items-center justify-center"
+							style="background:{colors.background};color:{colors.foreground}"
+						>
 							{initials(t.assignee_ids[0])}
 						</span>
 					{/if}

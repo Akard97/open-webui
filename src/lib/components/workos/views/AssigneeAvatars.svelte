@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from '$lib/components/ui/avatar';
-	import { avatarColor } from '../lib/avatar';
+	import { avatarColors } from '../lib/avatar';
 	import { initials, displayName } from '../lib/store';
 
 	export let ids: string[] = [];
@@ -27,10 +27,11 @@
 {#if (ids ?? []).length}
 	<AvatarGroup class="-space-x-[7px]">
 		{#each shown as id (id)}
+			{@const colors = avatarColors(id)}
 			<Avatar style="width:{px}px;height:{px}px" title={displayName(id)}>
 				<AvatarFallback
-					class="text-white font-semibold"
-					style="background:{avatarColor(id)};font-size:{fontSize}px"
+					class="font-semibold"
+					style="background:{colors.background};color:{colors.foreground};font-size:{fontSize}px"
 				>{initials(id)}</AvatarFallback>
 			</Avatar>
 		{/each}

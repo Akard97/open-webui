@@ -18,6 +18,10 @@
 
 	$: teamWorkspaces = $workspaces.filter((w) => w.team_id === $currentTeamId);
 	$: streamsByWs = (wsId: string) => $workstreams.filter((s) => s.workspace_id === wsId);
+	// A workstream is "selected" in the tree only while a workstream-scoped view is
+	// open. On My Work / Inbox / admin, `currentWorkstreamId` is still set (bootstrap
+	// preselects the first stream), so gate the highlight to avoid a phantom selection.
+	$: onStreamView = $view !== 'mywork' && $view !== 'inbox' && $view !== 'admin';
 	$: myRole = $currentTeamId ? $roles[$currentTeamId] : undefined;
 	$: canManage = $user?.role === 'admin' || canManageMembers(myRole);
 
@@ -108,7 +112,7 @@
 					<div class="ws-tree">
 						{#each streamsByWs(ws.id) as s (s.id)}
 							<button
-								class="ws-tree-item w-full flex items-center rounded-lg pl-2 pr-[11px] py-[6px] text-sm transition {$currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
+								class="ws-tree-item w-full flex items-center rounded-lg pl-2 pr-[11px] py-[6px] text-sm transition {onStreamView && $currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
 								onclick={() => { selectWorkstream(s.id); view.set('board'); onNavigate(); }}
 							>
 								<span class="flex-1 text-left truncate">{s.name}</span>

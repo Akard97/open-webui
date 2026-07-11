@@ -11,7 +11,7 @@
 	import StatusBadge from '../ui/StatusBadge.svelte';
 	import PriorityFlag from '../ui/PriorityFlag.svelte';
 	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar';
-	import { avatarColor } from '../lib/avatar';
+	import { avatarColors } from '../lib/avatar';
 	import TaskHoverCard from './TaskHoverCard.svelte';
 	import * as HoverCard from '$lib/components/ui/hover-card';
 	import type { Task, MyWorkSegment } from '../lib/types';
@@ -388,12 +388,14 @@
 						<EmptyState variant="quiet" title="No recent activity" />
 					{:else}
 						{#each activity as a (a.n.id)}
+							{@const actorName = cleanName(a.who)}
+							{@const colors = avatarColors(actorName)}
 							<button type="button" onclick={() => openNotification(a.n)} class="w-full text-left flex items-start gap-2.5 py-1.5">
-								<Avatar style="width:24px;height:24px" title={cleanName(a.who)}>
+								<Avatar style="width:24px;height:24px" title={actorName}>
 									<AvatarFallback
-										class="text-white font-semibold"
-										style="background:{avatarColor(cleanName(a.who))};font-size:10px"
-									>{initialsOf(a.who)}</AvatarFallback>
+										class="font-semibold"
+										style="background:{colors.background};color:{colors.foreground};font-size:10px"
+									>{initialsOf(actorName)}</AvatarFallback>
 								</Avatar>
 								<div class="flex-1 min-w-0 text-[13px] text-gray-600 dark:text-gray-300 leading-snug">
 									<b class="font-medium text-gray-900 dark:text-gray-100">{a.first}</b> {a.action}{#if a.target} <span class="text-xs font-medium text-primary tabular-nums">{a.target}</span>{/if}{#if a.detail} {a.detail}{/if}
@@ -414,12 +416,14 @@
 						<EmptyState variant="quiet" title="No mentions" />
 					{:else}
 						{#each mentions as m (m.id)}
+							{@const actorName = cleanName(m.data?.actor_name ?? '?')}
+							{@const colors = avatarColors(actorName)}
 							<button type="button" onclick={() => openNotification(m)} class="w-full text-left flex items-start gap-2.5 py-[7px]">
-								<Avatar style="width:24px;height:24px" title={cleanName(m.data?.actor_name ?? '?')}>
+								<Avatar style="width:24px;height:24px" title={actorName}>
 									<AvatarFallback
-										class="text-white font-semibold"
-										style="background:{avatarColor(cleanName(m.data?.actor_name ?? '?'))};font-size:10px"
-									>{initialsOf(m.data?.actor_name ?? '?')}</AvatarFallback>
+										class="font-semibold"
+										style="background:{colors.background};color:{colors.foreground};font-size:10px"
+									>{initialsOf(actorName)}</AvatarFallback>
 								</Avatar>
 								<div class="flex-1 min-w-0">
 									<div class="text-[13px] text-gray-600 dark:text-gray-300 leading-snug">{m.data?.snippet ?? summarizeNotification(m)}</div>

@@ -30,13 +30,13 @@ describe('avatarColor', () => {
 	it('uses the approved Osool avatar backgrounds in order', () => {
 		expect(AVATAR_BACKGROUNDS).toEqual([
 			'#00313f',
+			'#013a4b',
+			'#025468',
 			'#026c80',
 			'#00a5ba',
-			'#769a4a',
-			'#dfa244',
-			'#c96b5d',
+			'#3aa9bb',
 			'#54c2d1',
-			'#a4c979'
+			'#8fd6e0'
 		]);
 		expect(AVATAR_PALETTE.map(({ background }) => background)).toEqual(AVATAR_BACKGROUNDS);
 	});
