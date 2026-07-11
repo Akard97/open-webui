@@ -103,8 +103,8 @@
 
 				<div class="rail-hint" aria-hidden="true">
 					<svg viewBox="0 0 64 64" preserveAspectRatio="xMidYMid meet">
-						<path class="tail" d="M58 54 C 38 56, 16 46, 8 14" />
-						<path class="head" d="M2 22 L8 11 L17 17" />
+						<path class="tail" d="M58 58 C 60 34, 44 14, 10 9" />
+						<path class="head" d="M20 2 L8 9 L19 16" />
 					</svg>
 					<span class="rh-text">{$i18n.t('Hover the sidebar to expand it')}</span>
 				</div>
@@ -719,16 +719,16 @@
 		position: absolute;
 		z-index: 2;
 		inset-inline-start: 1.4rem;
-		top: 2.6rem;
+		top: 4.8rem;
 		display: flex;
 		align-items: flex-end;
-		gap: 0.45rem;
+		gap: 0.55rem;
 		pointer-events: none;
 		animation: fadeUp 0.6s 0.9s cubic-bezier(0.22, 0.7, 0.3, 1) both;
 	}
 	.rail-hint svg {
-		width: 3.2rem;
-		height: 3.2rem;
+		width: 4.4rem;
+		height: 4.4rem;
 		overflow: visible;
 		flex: none;
 	}
@@ -744,8 +744,8 @@
 		animation: dashmove 10s linear infinite;
 	}
 	.rail-hint .rh-text {
-		max-width: 8rem;
-		font-size: 0.7rem;
+		max-width: 9.5rem;
+		font-size: 0.82rem;
 		font-weight: 500;
 		line-height: 1.4;
 		color: var(--faint);
