@@ -508,7 +508,7 @@
 
 		/* layout (replaces the mockup's body responsibilities) */
 		min-height: 100%;
-		background: var(--backdrop);
+		background: var(--frame);
 		color: var(--ink);
 		font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Vazirmatn', ui-sans-serif, system-ui,
 			'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif;
@@ -663,17 +663,9 @@
 		}
 	}
 
-	/* ---------- framed page canvas ---------- */
-	.wrap {
-		padding: 0.9rem;
-	}
+	/* ---------- page canvas (full-bleed — the page IS the surface, no card frame) ---------- */
 	.frame {
-		background: var(--frame);
-		border: 1px solid var(--border);
-		border-radius: 1.25rem;
-		box-shadow: var(--shadow-s);
 		overflow: hidden;
-		min-height: calc(100vh - 1.8rem);
 	}
 	.container {
 		max-width: 70rem;
@@ -1637,9 +1629,6 @@
 	@media (max-width: 1020px) {
 		.container {
 			padding: 0 1.4rem;
-		}
-		.wrap {
-			padding: 0.6rem;
 		}
 		.tools {
 			grid-template-columns: 1fr 1fr;
