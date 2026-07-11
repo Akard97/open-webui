@@ -193,7 +193,7 @@ Full new content of `src/routes/(app)/home/+layout.svelte`:
 	import { getContext } from 'svelte';
 	import { WEBUI_NAME } from '$lib/stores';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<any>('i18n');
 </script>
 
 <svelte:head>
