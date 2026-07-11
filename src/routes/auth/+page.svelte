@@ -60,7 +60,7 @@
 			}
 
 			if (!redirectPath) {
-				redirectPath = $page.url.searchParams.get('redirect') || '/';
+				redirectPath = $page.url.searchParams.get('redirect') || '/home';
 			}
 
 			goto(redirectPath);
@@ -168,7 +168,7 @@
 	onMount(async () => {
 		const redirectPath = $page.url.searchParams.get('redirect');
 		if ($user !== undefined) {
-			goto(redirectPath || '/');
+			goto(redirectPath || '/home');
 		} else {
 			if (redirectPath) {
 				localStorage.setItem('redirectPath', redirectPath);
