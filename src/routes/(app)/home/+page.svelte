@@ -101,6 +101,14 @@
 					<s style="left:8%; top:78%"></s>
 				</div>
 
+				<div class="rail-hint" aria-hidden="true">
+					<svg viewBox="0 0 64 64" preserveAspectRatio="xMidYMid meet">
+						<path class="tail" d="M58 54 C 38 56, 16 46, 8 14" />
+						<path class="head" d="M2 22 L8 11 L17 17" />
+					</svg>
+					<span class="rh-text">{$i18n.t('Hover the sidebar to expand it')}</span>
+				</div>
+
 				<div class="container hero-inner">
 					<div class="hero-copy">
 						<span class="eyebrow"
@@ -705,6 +713,44 @@
 		background: radial-gradient(42rem 24rem at 88% 0%, var(--wash), transparent 62%),
 			radial-gradient(34rem 22rem at 4% -8%, var(--sunwash), transparent 70%),
 			radial-gradient(26rem 18rem at 0% 100%, var(--wash), transparent 68%);
+	}
+	/* dotted hand-drawn arrow nudging users to hover the rail */
+	.rail-hint {
+		position: absolute;
+		z-index: 2;
+		inset-inline-start: 1.4rem;
+		top: 2.6rem;
+		display: flex;
+		align-items: flex-end;
+		gap: 0.45rem;
+		pointer-events: none;
+		animation: fadeUp 0.6s 0.9s cubic-bezier(0.22, 0.7, 0.3, 1) both;
+	}
+	.rail-hint svg {
+		width: 3.2rem;
+		height: 3.2rem;
+		overflow: visible;
+		flex: none;
+	}
+	.rail-hint path {
+		fill: none;
+		stroke: var(--sun-ink);
+		stroke-width: 1.6;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	.rail-hint path.tail {
+		stroke-dasharray: 3 6;
+		animation: dashmove 10s linear infinite;
+	}
+	.rail-hint .rh-text {
+		max-width: 8rem;
+		font-size: 0.7rem;
+		font-weight: 500;
+		line-height: 1.4;
+		color: var(--faint);
+		transform: rotate(-2deg);
+		text-wrap: balance;
 	}
 	.hero-inner {
 		position: relative;
@@ -1603,6 +1649,10 @@
 			grid-template-columns: 1fr;
 		}
 		.viz {
+			display: none;
+		}
+		/* rail is a drawer on mobile — the hover hint makes no sense there */
+		.rail-hint {
 			display: none;
 		}
 		.tools {
