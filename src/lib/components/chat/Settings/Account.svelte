@@ -8,7 +8,7 @@
 
 	import UpdatePassword from './Account/UpdatePassword.svelte';
 	import { getGravatarUrl } from '$lib/apis/utils';
-	import { generateInitialsImage, canvasPixelTest } from '$lib/utils';
+	import { generateInitialsImage, isDefaultInitialsImage, canvasPixelTest } from '$lib/utils';
 	import { copyToClipboard } from '$lib/utils';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -43,7 +43,7 @@
 
 	const submitHandler = async () => {
 		if (name !== $user?.name) {
-			if (profileImageUrl === generateInitialsImage($user?.name) || profileImageUrl === '') {
+			if (isDefaultInitialsImage(profileImageUrl, $user?.name ?? '') || profileImageUrl === '') {
 				profileImageUrl = generateInitialsImage(name);
 			}
 		}

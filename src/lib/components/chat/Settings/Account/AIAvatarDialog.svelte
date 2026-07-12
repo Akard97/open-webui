@@ -3,7 +3,7 @@
 	import { toast } from 'svelte-sonner';
 
 	import { generateAvatar, getAvatarQuota } from '$lib/apis/avatar';
-	import { generateInitialsImage } from '$lib/utils';
+	import { generateInitialsImageVariants } from '$lib/utils';
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { isReusablePhoto, dataUrlToBlob } from './aiAvatar';
@@ -22,8 +22,8 @@
 	let remaining: number | null = null;
 	let limit: number | null = null;
 
-	$: initialsImage = user?.name ? generateInitialsImage(user.name) : '';
-	$: canUseCurrent = isReusablePhoto(currentImage, initialsImage);
+	$: initialsImages = user?.name ? generateInitialsImageVariants(user.name) : [];
+	$: canUseCurrent = isReusablePhoto(currentImage, initialsImages);
 
 	let wasShown = false;
 	$: if (show && !wasShown) {

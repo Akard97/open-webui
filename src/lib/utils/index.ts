@@ -372,20 +372,21 @@ export const compressImage = async (imageUrl, maxWidth, maxHeight) => {
 		img.src = imageUrl;
 	});
 };
-export const generateInitialsImage = (name) => {
+// Every background fill generateInitialsImage has ever shipped with, current first.
+// Users' profiles store the generated avatar as a data URL, so older fills must stay
+// listed for isDefaultInitialsImage to keep recognizing pre-rebrand default avatars.
+const INITIALS_IMAGE_FILLS = [
+	'#00313f', // Osool brand ink (current)
+	'#F39C12' // upstream Open WebUI orange (pre-rebrand)
+];
+
+const drawInitialsImage = (name: string, fill: string): string => {
 	const canvas = document.createElement('canvas');
-	const ctx = canvas.getContext('2d');
+	const ctx = canvas.getContext('2d')!;
 	canvas.width = 100;
 	canvas.height = 100;
 
-	if (!canvasPixelTest()) {
-		console.log(
-			'generateInitialsImage: failed pixel test, fingerprint evasion is likely. Using default image.'
-		);
-		return `${WEBUI_BASE_URL}/user.png`;
-	}
-
-	ctx.fillStyle = '#00313f'; // Osool brand ink
+	ctx.fillStyle = fill;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 	ctx.fillStyle = '#FFFFFF';
@@ -405,6 +406,35 @@ export const generateInitialsImage = (name) => {
 	ctx.fillText(initials.toUpperCase(), canvas.width / 2, canvas.height / 2);
 
 	return canvas.toDataURL();
+};
+
+export const generateInitialsImage = (name) => {
+	if (!canvasPixelTest()) {
+		console.log(
+			'generateInitialsImage: failed pixel test, fingerprint evasion is likely. Using default image.'
+		);
+		return `${WEBUI_BASE_URL}/user.png`;
+	}
+
+	return drawInitialsImage(name, INITIALS_IMAGE_FILLS[0]);
+};
+
+/** Every default-avatar image the app may have stored for `name`, current fill first. */
+export const generateInitialsImageVariants = (name: string): string[] => {
+	if (!canvasPixelTest()) {
+		return [`${WEBUI_BASE_URL}/user.png`];
+	}
+
+	return INITIALS_IMAGE_FILLS.map((fill) => drawInitialsImage(name, fill));
+};
+
+/** True when `imageUrl` is a generated-initials default avatar for `name`, including pre-rebrand fills. */
+export const isDefaultInitialsImage = (imageUrl: unknown, name: unknown): boolean => {
+	if (typeof imageUrl !== 'string' || imageUrl === '' || typeof name !== 'string') {
+		return false;
+	}
+
+	return generateInitialsImageVariants(name).includes(imageUrl);
 };
 
 export const formatDate = (inputDate) => {

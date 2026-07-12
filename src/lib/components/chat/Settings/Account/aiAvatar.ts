@@ -3,17 +3,21 @@
 
 /**
  * True when the current profile image can be reused as the generation reference:
- * a data-URL photo that isn't the generated-initials image (remote URLs like
+ * a data-URL photo that isn't a generated-initials image (remote URLs like
  * gravatar or /static/user.png can't be re-uploaded without a CORS fetch).
+ * `initialsImageUrls` carries every fill the app has ever generated (current and
+ * legacy), so pre-rebrand default avatars are still excluded.
  */
 export const isReusablePhoto = (
 	profileImageUrl: string,
-	initialsImageUrl: string
+	initialsImageUrls: string | readonly string[]
 ): boolean => {
+	const initialsVariants =
+		typeof initialsImageUrls === 'string' ? [initialsImageUrls] : initialsImageUrls;
 	return (
 		typeof profileImageUrl === 'string' &&
 		profileImageUrl.startsWith('data:image/') &&
-		profileImageUrl !== initialsImageUrl
+		!initialsVariants.includes(profileImageUrl)
 	);
 };
 
