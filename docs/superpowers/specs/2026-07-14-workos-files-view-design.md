@@ -64,9 +64,9 @@ Uploader display names are **not** joined server-side — the frontend resolves
   avatar + name, date, size, hover actions (Download, Open task).
 - `views/files/FileCard.svelte` — grid card: large preview (image thumb or tinted
   type glyph + extension pill), name, task key, size.
-- Shared pure helpers in `views/files/lib.ts`: extension → type-group mapping
-  (img / pdf / doc / sheet / other), byte formatting, recency-group bucketing
-  (Today / This week / Earlier, local tz).
+- Shared pure helpers in `lib/files.ts` (colocated with the other tested pure
+  helpers): extension → type-group mapping (img / pdf / doc / sheet / other),
+  byte formatting, recency-group bucketing (Today / This week / Earlier, local tz).
 
 ### Behavior
 
@@ -97,7 +97,7 @@ No store surgery, no new rooms.
 - **Backend (pytest):** endpoint returns joined rows across multiple tasks;
   includes comment attachments; ordering + cap; non-member → 404; restricted
   workspace non-member → 404 (member + app-admin → 200); unknown workstream → 404.
-- **Frontend (vitest):** `views/files/lib.ts` helpers — type-group mapping, byte
+- **Frontend (vitest):** `lib/files.ts` helpers — type-group mapping, byte
   formatting, recency bucketing edge cases (today boundary, week boundary).
 - **Manual browser smoke** (after build): tab activation, chips/search/sort/toggle,
   thumbnail auth, download, open-task, realtime refetch on upload/delete from the
