@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WorkOS • Files view — v1 (clean)</title>
+<style>
+	/* Project fonts — same files the app loads (src/app.css) */
+	@font-face {
+		font-family: 'Inter';
+		src: url('../../static/assets/fonts/Inter-Variable.ttf');
+		font-display: swap;
+	}
+	@font-face {
+		font-family: 'Archivo';
+		src: url('../../static/assets/fonts/Archivo-Variable.ttf');
+		font-display: swap;
+	}
+
+	:root {
+		/* Open WebUI neutral gray ramp (src/tailwind.css) */
+		--gray-50: oklch(0.98 0 0);
+		--gray-100: oklch(0.94 0 0);
+		--gray-200: oklch(0.92 0 0);
+		--gray-300: oklch(0.85 0 0);
+		--gray-400: oklch(0.77 0 0);
+		--gray-500: oklch(0.69 0 0);
+		--gray-600: oklch(0.51 0 0);
+		--gray-700: oklch(0.42 0 0);
+		--gray-800: oklch(0.32 0 0);
+		--gray-850: oklch(0.27 0 0);
+		--gray-900: oklch(0.2 0 0);
+		--gray-950: oklch(0.16 0 0);
+
+		/* Osool brand */
+		--brand-100: oklch(0.945 0.028 216.54);
+		--brand-500: oklch(0.6618 0.1147 210.62); /* 3125 C */
+		--brand-600: oklch(0.4899 0.0868 216.54); /* 315 C */
+		--brand-700: oklch(0.3263 0.0599 221.22); /* 309 C */
+
+		/* WorkOS data colors (lib/colors.ts) */
+		--st-backlog: #9ca3af;
+		--st-todo: #6b7280;
+		--st-progress: #00a5ba;
+		--st-review: #d97706;
+		--st-done: #769a4a;
+
+		/* file-type colors */
+		--ft-pdf: #dc2626;
+		--ft-doc: #2563eb;
+		--ft-slides: #ea580c;
+		--ft-sheet: #769a4a;
+		--ft-zip: #ca8a04;
+		--ft-video: #7c3aed;
+		--ft-other: #6b7280;
+
+		/* surfaces — light */
+		--canvas: #ffffff;
+		--panel: var(--gray-50);
+		--card: #ffffff;
+		--ink: var(--gray-800);
+		--muted: var(--gray-600);
+		--faint: var(--gray-500);
+		--placeholder: var(--gray-400);
+		--border: var(--gray-200);
+		--hairline: var(--gray-100);
+		--hover: oklch(0.975 0 0);
+		--primary: var(--brand-700);
+		--primary-ink: var(--brand-700);
+		--shadow-s: 0 1px 2px oklch(0 0 0 / 0.04), 0 3px 10px oklch(0 0 0 / 0.04);
+		--shadow-m: 0 2px 6px oklch(0 0 0 / 0.06), 0 10px 28px oklch(0 0 0 / 0.08);
+	}
+	.dark {
+		--canvas: var(--gray-950);
+		--panel: var(--gray-900);
+		--card: var(--gray-900);
+		--ink: oklch(0.93 0 0);
+		--muted: var(--gray-400);
+		--faint: var(--gray-500);
+		--placeholder: var(--gray-600);
+		--border: var(--gray-800);
+		--hairline: oklch(0.24 0 0);
+		--hover: oklch(0.23 0 0);
+		--primary: var(--brand-500);
+		--primary-ink: var(--brand-500);
+		--shadow-s: 0 1px 2px oklch(0 0 0 / 0.3);
+		--shadow-m: 0 2px 6px oklch(0 0 0 / 0.4), 0 10px 28px oklch(0 0 0 / 0.5);
+	}
+
+	* { box-sizing: border-box; margin: 0; }
+	html, body { height: 100%; }
+	body {
+		font-family: 'Inter', system-ui, sans-serif;
+		font-size: 13px;
+		line-height: 1.45;
+		color: var(--ink);
+		background: var(--canvas);
+		-webkit-font-smoothing: antialiased;
+	}
+	button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+	input { font: inherit; color: inherit; }
+	svg { display: block; flex: none; }
+
+	/* ---------- shell ---------- */
+	.shell { display: flex; height: 100vh; overflow: hidden; }
+
+	/* ---------- sidebar (context only) ---------- */
+	.sidebar {
+		width: 232px; flex: none;
+		background: var(--panel);
+		border-right: 1px solid var(--border);
+		display: flex; flex-direction: column;
+		padding: 12px 10px;
+		gap: 2px;
+	}
+	.side-logo { display: flex; align-items: center; gap: 8px; padding: 6px 8px 14px; font-family: 'Archivo', 'Inter', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+	.side-logo .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+	.dark .side-logo .mark { color: var(--gray-950); }
+	.snav { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; color: var(--muted); font-weight: 500; }
+	.snav:hover { background: var(--hover); }
+	.side-h { padding: 14px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--placeholder); }
+	.stree { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 22px; border-radius: 8px; color: var(--muted); }
+	.stree.active { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary-ink); font-weight: 600; }
+	.stree:hover:not(.active) { background: var(--hover); }
+
+	/* ---------- main ---------- */
+	.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+	.titlerow { height: 56px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 0; }
+	.titlerow .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.avstack { display: flex; }
+	.avstack .av { margin-left: -7px; border: 2px solid var(--canvas); }
+	.avstack .av:first-child { margin-left: 0; }
+	.ghostbtn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 12.5px; }
+	.ghostbtn:hover { background: var(--hover); }
+
+	.tabs { flex: none; display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+	.tab {
+		display: inline-flex; align-items: center; gap: 6px;
+		padding: 9px 12px; font-size: 13px; color: var(--muted);
+		border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+	}
+	.tab:hover { color: var(--ink); }
+	.tab.active { color: var(--primary-ink); border-color: var(--primary); font-weight: 500; }
+
+	/* ---------- toolbar (FilterBar pattern) ---------- */
+	.toolbar {
+		flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+		padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--canvas);
+	}
+	.chip {
+		display: inline-flex; align-items: center; gap: 6px;
+		height: 30px; padding: 0 11px; border-radius: 999px;
+		border: 1px solid var(--border); color: var(--muted); font-weight: 500; font-size: 12.5px;
+		background: var(--canvas);
+	}
+	.chip:hover { background: var(--hover); }
+	.chip .dot { width: 7px; height: 7px; border-radius: 999px; }
+	.chip .n { font-size: 11px; color: var(--placeholder); font-variant-numeric: tabular-nums; }
+	.chip.on {
+		border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+		background: color-mix(in srgb, var(--primary) 8%, transparent);
+		color: var(--primary-ink); font-weight: 600;
+	}
+	.chip.on .n { color: var(--primary-ink); opacity: 0.7; }
+
+	.tb-meta { color: var(--placeholder); font-size: 12px; padding: 0 4px; white-space: nowrap; }
+	.tb-spacer { flex: 1; }
+
+	.outline-btn {
+		display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
+		border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; font-weight: 500;
+		color: var(--ink); background: var(--canvas); white-space: nowrap;
+	}
+	.outline-btn:hover { background: var(--hover); }
+	.outline-btn .lbl { color: var(--placeholder); font-weight: 400; }
+
+	.search { position: relative; }
+	.search input {
+		height: 30px; width: 220px; padding: 0 10px 0 30px;
+		border: 1px solid var(--border); border-radius: 8px; background: var(--canvas);
+		outline: none; font-size: 12.5px;
+	}
+	.search input:focus { border-color: color-mix(in srgb, var(--primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
+	.search input::placeholder { color: var(--placeholder); }
+	.search .ic { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--placeholder); }
+
+	.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+	.seg button { display: grid; place-items: center; width: 34px; height: 28px; color: var(--placeholder); }
+	.seg button.on { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary-ink); }
+	.seg button:not(.on):hover { background: var(--hover); }
+
+	/* ---------- content ---------- */
+	.content { flex: 1; overflow: auto; padding: 16px; background: var(--canvas); }
+
+	/* column header (global, aligns with row grid) */
+	.cols-head {
+		display: grid; grid-template-columns: minmax(0,1fr) 230px 150px 96px 76px 108px;
+		gap: 12px; align-items: center;
+		padding: 0 14px 8px; font-size: 11px; color: var(--placeholder);
+	}
+	.cols-head .first { padding-left: 46px; }
+
+	/* date-group section — List-view section pattern */
+	.fsec {
+		border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+		overflow: hidden; margin-bottom: 12px;
+	}
+	.fsec-h { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+	.fsec-h .chev { color: var(--placeholder); display: grid; place-items: center; }
+	.fsec-h .chev:hover { color: var(--muted); }
+	.fsec-h .lbl { font-weight: 600; font-size: 13px; }
+	.fsec-h .cnt { font-size: 12px; color: var(--placeholder); font-variant-numeric: tabular-nums; }
+
+	.frow {
+		display: grid; grid-template-columns: minmax(0,1fr) 230px 150px 96px 76px 108px;
+		gap: 12px; align-items: center;
+		padding: 8px 14px; border-top: 1px solid var(--hairline);
+	}
+	.frow:hover { background: var(--hover); }
+
+	.fname { display: flex; align-items: center; gap: 12px; min-width: 0; }
+	.fname .nm { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.fname .nm:hover { color: var(--primary-ink); cursor: pointer; }
+	.fname .sub { font-size: 11px; color: var(--placeholder); margin-top: 1px; display: flex; align-items: center; gap: 6px; }
+	.viacmt {
+		display: inline-flex; align-items: center; gap: 3px;
+		font-size: 10px; font-weight: 600; color: var(--faint);
+		border: 1px solid var(--border); border-radius: 999px; padding: 0.5px 6px;
+	}
+
+	.tile {
+		width: 34px; height: 34px; border-radius: 8px; flex: none;
+		display: grid; place-items: center; position: relative;
+	}
+	.tile.thumb { background-size: cover; background-position: center; box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.06); }
+	.dark .tile.thumb { box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.08); }
+
+	.taskchip { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+	.taskchip:hover .tt { color: var(--primary-ink); }
+	.taskchip .key { font-weight: 600; color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; flex: none; }
+	.taskchip .tt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.sdot { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+	.sdot.half { background: transparent; border: 2px solid currentColor; position: relative; overflow: hidden; }
+	.sdot.half::after { content: ''; position: absolute; inset: 0; width: 50%; background: currentColor; }
+	.sdot.ring { background: transparent; border: 2px solid currentColor; }
+	.sdot.dash { background: transparent; border: 2px dashed currentColor; }
+	.sdot.fill { background: currentColor; }
+
+	.uploader { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: 12.5px; }
+	.uploader span.nm2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.av {
+		width: 22px; height: 22px; border-radius: 999px; flex: none;
+		display: grid; place-items: center; font-size: 9px; font-weight: 700;
+	}
+
+	.fdate, .fsize { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+	.factions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+	.frow:hover .factions, .gcard:hover .gactions { opacity: 1; }
+	.iconbtn { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--placeholder); }
+	.iconbtn:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+
+	/* ---------- grid mode ---------- */
+	.glabel { font-weight: 600; font-size: 13px; margin: 4px 2px 10px; display: flex; align-items: baseline; gap: 8px; }
+	.glabel .cnt { font-size: 12px; color: var(--placeholder); font-weight: 400; }
+	.ggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 12px; margin-bottom: 20px; }
+	.gcard {
+		border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+		overflow: hidden; position: relative; transition: box-shadow 0.15s, transform 0.15s;
+	}
+	.gcard:hover { box-shadow: var(--shadow-m); transform: translateY(-1px); }
+	.gprev { height: 116px; display: grid; place-items: center; position: relative; background-size: cover; background-position: center; }
+	.gprev .extpill {
+		position: absolute; left: 8px; bottom: 8px;
+		font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em;
+		padding: 2px 7px; border-radius: 999px; color: #fff;
+	}
+	.gactions { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s; }
+	.gactions .iconbtn { background: color-mix(in srgb, var(--canvas) 88%, transparent); box-shadow: var(--shadow-s); backdrop-filter: blur(4px); color: var(--muted); }
+	.gactions .iconbtn:hover { color: var(--ink); }
+	.gbody { padding: 10px 12px 11px; }
+	.gbody .nm { font-weight: 500; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.gbody .nm:hover { color: var(--primary-ink); cursor: pointer; }
+	.gmeta { display: flex; align-items: center; gap: 7px; margin-top: 5px; font-size: 11px; color: var(--faint); min-width: 0; }
+	.gmeta .key { font-weight: 600; font-variant-numeric: tabular-nums; }
+	.gmeta .sep { color: var(--border); }
+	.gmeta .grow { flex: 1; }
+
+	/* ---------- empty state ---------- */
+	.empty { display: none; flex-direction: column; align-items: center; gap: 10px; padding: 72px 0; color: var(--placeholder); text-align: center; }
+	.empty .ring { width: 44px; height: 44px; border-radius: 12px; border: 1px dashed var(--border); display: grid; place-items: center; }
+	.empty .l1 { font-weight: 600; color: var(--muted); font-size: 13px; }
+	.empty .l2 { font-size: 12px; }
+
+	/* ---------- floating controls / notes ---------- */
+	.floaters { position: fixed; right: 14px; bottom: 14px; display: flex; gap: 8px; z-index: 50; }
+	.floaters button {
+		display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+		border-radius: 999px; border: 1px solid var(--border); background: var(--card);
+		box-shadow: var(--shadow-s); font-size: 12px; font-weight: 500; color: var(--muted);
+	}
+	.floaters button:hover { color: var(--ink); }
+	.notes {
+		position: fixed; right: 14px; bottom: 56px; width: 320px; z-index: 50;
+		border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+		box-shadow: var(--shadow-m); padding: 14px 16px; display: none;
+	}
+	.notes.open { display: block; }
+	.notes h3 { font-size: 12px; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.02em; }
+	.notes li { font-size: 12px; color: var(--muted); margin: 0 0 6px 14px; }
+
+	/* ---------- responsive ---------- */
+	@media (max-width: 1280px) {
+		.cols-head, .frow { grid-template-columns: minmax(0,1fr) 190px 96px 76px 96px; }
+		.uploader { display: none; }
+		.cols-head .c-up { display: none; }
+	}
+	@media (max-width: 1000px) {
+		.sidebar { display: none; }
+	}
+	.sub-key { display: none; align-items: center; gap: 5px; }
+	@media (max-width: 860px) {
+		.cols-head { display: none; }
+		.frow { grid-template-columns: minmax(0,1fr) auto auto; padding: 10px 14px; }
+		.frow .c-task, .frow .fdate { display: none; }
+		.sub-key { display: inline-flex; }
+		.factions { opacity: 1; }
+		.factions .iconbtn[title="More"] { display: none; }
+		.search input { width: 150px; }
+		.toolbar { gap: 6px; }
+	}
+</style>
+</head>
+<body>
+<div class="shell">
+	<!-- ======= sidebar (context) ======= -->
+	<aside class="sidebar">
+		<div class="side-logo"><span class="mark">O</span> WorkOS</div>
+		<a class="snav" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> My Work</a>
+		<a class="snav" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> Inbox</a>
+		<div class="side-h">Operations</div>
+		<a class="stree active" href="#"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Facilities Ops</a>
+		<a class="stree" href="#"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Marketing</a>
+		<a class="stree" href="#"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Finance</a>
+	</aside>
+
+	<!-- ======= main ======= -->
+	<main class="main">
+		<!-- title row -->
+		<div class="titlerow">
+			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+			<span class="t">Operations · Facilities Ops</span>
+			<span style="flex:1"></span>
+			<span class="avstack">
+				<span class="av" style="background:color-mix(in srgb, #00a5ba 18%, var(--canvas)); color:#00798a;">AA</span>
+				<span class="av" style="background:color-mix(in srgb, #d97706 18%, var(--canvas)); color:#b45309;">SM</span>
+				<span class="av" style="background:color-mix(in srgb, #7c3aed 16%, var(--canvas)); color:#7c3aed;">OK</span>
+			</span>
+			<button class="ghostbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share</button>
+		</div>
+
+		<!-- tab row -->
+		<nav class="tabs">
+			<button class="tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Overview</button>
+			<button class="tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> List</button>
+			<button class="tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg> Board</button>
+			<button class="tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 7h8"/><path d="M11 11h7"/><path d="M14 15h4"/></svg> Timeline</button>
+			<button class="tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Calendar</button>
+			<button class="tab active"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Files</button>
+		</nav>
+
+		<!-- toolbar -->
+		<div class="toolbar" id="toolbar">
+			<!-- type chips injected here -->
+			<span class="tb-meta" id="tbMeta"></span>
+			<span class="tb-spacer"></span>
+			<button class="outline-btn"><span class="lbl">Sort</span> Newest <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+			<span class="search">
+				<span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+				<input id="q" type="text" placeholder="Search files…" />
+			</span>
+			<span class="seg" id="segView">
+				<button data-v="list" class="on" title="List"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+				<button data-v="grid" title="Grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
+			</span>
+		</div>
+
+		<!-- content -->
+		<div class="content">
+			<div id="listWrap"></div>
+			<div id="gridWrap" style="display:none"></div>
+			<div class="empty" id="empty">
+				<span class="ring"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
+				<span class="l1">No files match</span>
+				<span class="l2">Try a different type or clear the search.</span>
+			</div>
+		</div>
+	</main>
+</div>
+
+<!-- floating controls -->
+<div class="floaters">
+	<button id="notesBtn">Notes</button>
+	<button id="themeBtn">Dark</button>
+</div>
+<div class="notes" id="notesCard">
+	<h3>Mockup notes — Files v1</h3>
+	<ul>
+		<li>Activates the existing (currently dead) <b>Files</b> tab in the workstream top bar.</li>
+		<li>Read &amp; download focused — uploading stays on the task detail. Every row links back to its task.</li>
+		<li>Includes comment attachments, marked with a quiet <b>via comment</b> pill.</li>
+		<li>List mode groups by recency (Today / This week / Earlier) using the List view's section style; grid mode is a flat gallery per group.</li>
+		<li>Type chips filter live — try them, and try search + dark mode.</li>
+	</ul>
+</div>
+
+<script>
+/* ---------------- data ---------------- */
+const STATUS = {
+	backlog:     { c: 'var(--st-backlog)',  s: 'dash' },
+	todo:        { c: 'var(--st-todo)',     s: 'ring' },
+	in_progress: { c: 'var(--st-progress)', s: 'half' },
+	in_review:   { c: 'var(--st-review)',   s: 'half' },
+	done:        { c: 'var(--st-done)',     s: 'fill' }
+};
+const TASKS = {
+	'OPS-12': { title: 'Lobby renovation punch list',  st: 'in_progress' },
+	'OPS-18': { title: 'Vendor contract renewal',      st: 'in_review' },
+	'OPS-9':  { title: 'Q3 budget review',             st: 'done' },
+	'OPS-21': { title: 'Fire safety compliance audit', st: 'todo' },
+	'OPS-15': { title: 'Marketing site refresh',       st: 'in_progress' },
+	'OPS-7':  { title: 'Asset register migration',     st: 'backlog' }
+};
+const PEOPLE = {
+	AA: { name: 'Ahmad A.', bg: 'color-mix(in srgb, #00a5ba 18%, var(--canvas))', fg: '#00798a' },
+	SM: { name: 'Sara M.',  bg: 'color-mix(in srgb, #d97706 18%, var(--canvas))', fg: '#b45309' },
+	OK: { name: 'Omar K.',  bg: 'color-mix(in srgb, #7c3aed 16%, var(--canvas))', fg: '#7c3aed' },
+	LH: { name: 'Lina H.',  bg: 'color-mix(in srgb, #769a4a 20%, var(--canvas))', fg: '#5c7a38' }
+};
+/* type => { group chip, tile color, glyph } */
+const TYPE = {
+	jpg:  { grp: 'img',   c: null },
+	png:  { grp: 'img',   c: null },
+	pdf:  { grp: 'pdf',   c: 'var(--ft-pdf)',   g: 'filetext' },
+	docx: { grp: 'doc',   c: 'var(--ft-doc)',   g: 'filetext' },
+	pptx: { grp: 'doc',   c: 'var(--ft-slides)', g: 'pres' },
+	xlsx: { grp: 'sheet', c: 'var(--ft-sheet)', g: 'sheet' },
+	csv:  { grp: 'sheet', c: 'var(--ft-sheet)', g: 'sheet' },
+	zip:  { grp: 'other', c: 'var(--ft-zip)',   g: 'zip' },
+	mp4:  { grp: 'other', c: 'var(--ft-video)', g: 'play' }
+};
+const GROUPS = [
+	{ id: 'today',   lbl: 'Today' },
+	{ id: 'week',    lbl: 'This week' },
+	{ id: 'earlier', lbl: 'Earlier' }
+];
+/* fake image thumbs: layered gradients (no external assets) */
+const THUMBS = [
+	'linear-gradient(135deg, oklch(0.75 0.09 210), oklch(0.4 0.07 221) 60%, oklch(0.3 0.05 240))',
+	'linear-gradient(160deg, oklch(0.9 0.04 90), oklch(0.68 0.1 60) 55%, oklch(0.45 0.08 40))',
+	'linear-gradient(140deg, oklch(0.85 0.06 150), oklch(0.6 0.1 160) 55%, oklch(0.35 0.06 200))',
+	'linear-gradient(150deg, oklch(0.82 0.05 280), oklch(0.55 0.12 290) 60%, oklch(0.35 0.08 260))'
+];
+const FILES = [
+	{ n: 'site-photo-north-wing.jpg', e: 'jpg',  sz: '3.2 MB',  t: 'OPS-12', by: 'SM', d: 'Today 14:02', g: 'today', th: 0 },
+	{ n: 'vendor-contract-signed.pdf', e: 'pdf', sz: '1.8 MB',  t: 'OPS-18', by: 'AA', d: 'Today 11:38', g: 'today', cmt: 1 },
+	{ n: 'budget-forecast-q3.xlsx',    e: 'xlsx', sz: '342 KB', t: 'OPS-9',  by: 'OK', d: 'Today 09:15', g: 'today' },
+	{ n: 'floorplan-level-2.png',      e: 'png', sz: '2.1 MB',  t: 'OPS-12', by: 'LH', d: 'Tue 16:44',   g: 'week', th: 2 },
+	{ n: 'fire-safety-cert-2026.pdf',  e: 'pdf', sz: '940 KB',  t: 'OPS-21', by: 'SM', d: 'Tue 10:02',   g: 'week' },
+	{ n: 'launch-comms-draft.docx',    e: 'docx', sz: '128 KB', t: 'OPS-15', by: 'AA', d: 'Mon 15:27',   g: 'week' },
+	{ n: 'hero-banner-v3.png',         e: 'png', sz: '4.6 MB',  t: 'OPS-15', by: 'LH', d: 'Mon 12:51',   g: 'week', th: 1 },
+	{ n: 'unit-pricing.csv',           e: 'csv', sz: '64 KB',   t: 'OPS-9',  by: 'OK', d: 'Mon 09:40',   g: 'week', cmt: 1 },
+	{ n: 'walkthrough-recording.mp4',  e: 'mp4', sz: '48.7 MB', t: 'OPS-12', by: 'SM', d: 'Sun 17:12',   g: 'week' },
+	{ n: 'brand-assets.zip',           e: 'zip', sz: '21.4 MB', t: 'OPS-15', by: 'LH', d: 'Jul 3',       g: 'earlier' },
+	{ n: 'sop-maintenance-v2.docx',    e: 'docx', sz: '210 KB', t: 'OPS-21', by: 'AA', d: 'Jul 2',       g: 'earlier' },
+	{ n: 'asset-register-export.xlsx', e: 'xlsx', sz: '1.1 MB', t: 'OPS-7',  by: 'OK', d: 'Jul 1',       g: 'earlier' },
+	{ n: 'lobby-moodboard.jpg',        e: 'jpg', sz: '5.8 MB',  t: 'OPS-12', by: 'SM', d: 'Jun 28',      g: 'earlier', th: 3 },
+	{ n: 'board-deck-q3.pptx',         e: 'pptx', sz: '9.2 MB', t: 'OPS-9',  by: 'AA', d: 'Jun 26',      g: 'earlier' },
+	{ n: 'contract-redlines.pdf',      e: 'pdf', sz: '2.3 MB',  t: 'OPS-18', by: 'LH', d: 'Jun 24',      g: 'earlier', cmt: 1 }
+];
+
+/* ---------------- icons ---------------- */
+const IC = {
+	filetext: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12h4"/><path d="M10 16h4"/>',
+	sheet: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M12 13v4"/>',
+	pres: '<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m9 16-2 5"/><path d="m15 16 2 5"/>',
+	zip: '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>',
+	play: '<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>',
+	img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+	dl: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+	open: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
+	more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+	msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'
+};
+const svg = (n, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
+
+/* ---------------- rendering ---------------- */
+const CHIPS = [
+	{ id: 'all',   lbl: 'All',    dot: null },
+	{ id: 'img',   lbl: 'Images', dot: 'var(--st-progress)' },
+	{ id: 'pdf',   lbl: 'PDFs',   dot: 'var(--ft-pdf)' },
+	{ id: 'doc',   lbl: 'Docs',   dot: 'var(--ft-doc)' },
+	{ id: 'sheet', lbl: 'Sheets', dot: 'var(--ft-sheet)' },
+	{ id: 'other', lbl: 'Other',  dot: 'var(--ft-zip)' }
+];
+let ftype = 'all', query = '', mode = 'list';
+
+function tileHtml(f, big) {
+	const ty = TYPE[f.e];
+	if (ty.grp === 'img') {
+		return big
+			? `<div class="gprev" style="background-image:${THUMBS[f.th]}"><span class="extpill" style="background:oklch(0 0 0 / 0.45)">${f.e.toUpperCase()}</span>${gActions()}</div>`
+			: `<span class="tile thumb" style="background-image:${THUMBS[f.th]}"></span>`;
+	}
+	const c = ty.c;
+	if (big) {
+		return `<div class="gprev" style="background:color-mix(in srgb, ${c} 9%, var(--panel))">
+			<span style="color:${c}">${svg(ty.g, 30)}</span>
+			<span class="extpill" style="background:${c}">${f.e.toUpperCase()}</span>${gActions()}</div>`;
+	}
+	return `<span class="tile" style="background:color-mix(in srgb, ${c} 12%, transparent); color:${c}">${svg(ty.g, 17)}</span>`;
+}
+function gActions() {
+	return `<span class="gactions"><button class="iconbtn" title="Download">${svg('dl', 14)}</button><button class="iconbtn" title="Open task">${svg('open', 14)}</button></span>`;
+}
+function taskChip(f, keyOnly) {
+	const t = TASKS[f.t], st = STATUS[t.st];
+	const dot = `<span class="sdot ${st.s}" style="color:${st.c}; ${st.s === 'fill' ? `background:${st.c}` : ''}"></span>`;
+	return keyOnly
+		? `${dot}<span class="key">${f.t}</span>`
+		: `<span class="taskchip" title="${f.t} — ${t.title}">${dot}<span class="key">${f.t}</span><span class="tt">${t.title}</span></span>`;
+}
+function visible() {
+	return FILES.filter(f =>
+		(ftype === 'all' || TYPE[f.e].grp === ftype) &&
+		(!query || f.n.toLowerCase().includes(query))
+	);
+}
+
+function renderChips() {
+	const counts = { all: FILES.length };
+	FILES.forEach(f => { const g = TYPE[f.e].grp; counts[g] = (counts[g] || 0) + 1; });
+	const html = CHIPS.map(c => `
+		<button class="chip ${ftype === c.id ? 'on' : ''}" data-t="${c.id}">
+			${c.dot ? `<span class="dot" style="background:${c.dot}"></span>` : ''}
+			${c.lbl} <span class="n">${counts[c.id] || 0}</span>
+		</button>`).join('');
+	document.querySelectorAll('#toolbar .chip').forEach(el => el.remove());
+	document.getElementById('tbMeta').insertAdjacentHTML('beforebegin', html);
+	document.querySelectorAll('#toolbar .chip').forEach(el =>
+		el.addEventListener('click', () => { ftype = el.dataset.t; renderAll(); }));
+}
+
+function renderList(files) {
+	const wrap = document.getElementById('listWrap');
+	let html = `
+	<div class="cols-head">
+		<span class="first">Name</span><span class="c-task">Task</span><span class="c-up">Uploaded by</span>
+		<span>Added</span><span>Size</span><span></span>
+	</div>`;
+	for (const g of GROUPS) {
+		const rows = files.filter(f => f.g === g.id);
+		if (!rows.length) continue;
+		html += `<section class="fsec">
+			<div class="fsec-h">
+				<span class="chev"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+				<span class="lbl">${g.lbl}</span><span class="cnt">${rows.length}</span>
+			</div>
+			${rows.map(f => {
+				const p = PEOPLE[f.by];
+				return `<div class="frow">
+					<span class="fname">${tileHtml(f)}
+						<span style="min-width:0">
+							<span class="nm">${f.n}</span>
+							<span class="sub"><span class="sub-key">${taskChip(f, true)}</span>${f.cmt ? `<span class="viacmt">${svg('msg', 9)} via comment</span>` : ''}</span>
+						</span>
+					</span>
+					<span class="c-task" style="min-width:0">${taskChip(f)}</span>
+					<span class="uploader"><span class="av" style="background:${p.bg};color:${p.fg}">${f.by}</span><span class="nm2">${p.name}</span></span>
+					<span class="fdate">${f.d}</span>
+					<span class="fsize">${f.sz}</span>
+					<span class="factions">
+						<button class="iconbtn" title="Download">${svg('dl')}</button>
+						<button class="iconbtn" title="Open task">${svg('open')}</button>
+						<button class="iconbtn" title="More">${svg('more')}</button>
+					</span>
+				</div>`;
+			}).join('')}
+		</section>`;
+	}
+	wrap.innerHTML = html;
+}
+
+function renderGrid(files) {
+	const wrap = document.getElementById('gridWrap');
+	let html = '';
+	for (const g of GROUPS) {
+		const rows = files.filter(f => f.g === g.id);
+		if (!rows.length) continue;
+		html += `<div class="glabel">${g.lbl} <span class="cnt">${rows.length}</span></div>
+		<div class="ggrid">
+			${rows.map(f => `
+			<div class="gcard">
+				${tileHtml(f, true)}
+				<div class="gbody">
+					<div class="nm" title="${f.n}">${f.n}</div>
+					<div class="gmeta">${taskChip(f, true)}<span class="grow"></span>${f.cmt ? `<span class="viacmt">${svg('msg', 9)}</span>` : ''}<span>${f.sz}</span></div>
+				</div>
+			</div>`).join('')}
+		</div>`;
+	}
+	wrap.innerHTML = html;
+}
+
+function renderAll() {
+	renderChips();
+	const files = visible();
+	const total = FILES.length;
+	document.getElementById('tbMeta').textContent =
+		files.length === total ? `${total} files · 102 MB` : `${files.length} of ${total} files`;
+	document.getElementById('empty').style.display = files.length ? 'none' : 'flex';
+	document.getElementById('listWrap').style.display = (mode === 'list' && files.length) ? '' : 'none';
+	document.getElementById('gridWrap').style.display = (mode === 'grid' && files.length) ? '' : 'none';
+	if (mode === 'list') renderList(files); else renderGrid(files);
+}
+
+/* ---------------- wiring ---------------- */
+document.getElementById('q').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); renderAll(); });
+document.querySelectorAll('#segView button').forEach(b =>
+	b.addEventListener('click', () => {
+		mode = b.dataset.v;
+		document.querySelectorAll('#segView button').forEach(x => x.classList.toggle('on', x === b));
+		renderAll();
+	}));
+document.getElementById('themeBtn').addEventListener('click', () => {
+	const dark = document.documentElement.classList.toggle('dark');
+	document.getElementById('themeBtn').textContent = dark ? 'Light' : 'Dark';
+});
+document.getElementById('notesBtn').addEventListener('click', () =>
+	document.getElementById('notesCard').classList.toggle('open'));
+
+renderAll();
+</script>
+</body>
+</html>
