@@ -334,3 +334,30 @@ describe('files view realtime', () => {
 		expect(get(wsFiles).items).toEqual([]);
 	});
 });
+
+describe('create dialog store plumbing', () => {
+	it('addTask forwards assignees + attachment flag to the API', async () => {
+		const api = await import('./api');
+		const { addTask } = await import('./store');
+		await addTask('w1', { title: 'New', assignee_ids: ['u2'], attachment_required: true });
+		expect(api.createTask).toHaveBeenLastCalledWith(
+			expect.anything(), 'w1',
+			expect.objectContaining({ assignee_ids: ['u2'], attachment_required: true })
+		);
+	});
+
+	it('editTask rolls back and swallows ATTACHMENT_REQUIRED', async () => {
+		const api = await import('./api');
+		const { editTask } = await import('./store');
+		tasks.set([mk({ id: 'a', status: 'todo', attachment_required: true })]);
+		(api.updateTask as any).mockRejectedValueOnce('ATTACHMENT_REQUIRED');
+		await editTask('a', { status: 'done' }); // must not throw
+		expect(get(tasks)[0].status).toBe('todo'); // rolled back
+	});
+
+	it('openTaskCreate opens the task modal with prefill', async () => {
+		const { openTaskCreate, openModal } = await import('./store');
+		openTaskCreate('w1', { status: 'todo' });
+		expect(get(openModal)).toEqual({ kind: 'task', workstreamId: 'w1', prefill: { status: 'todo' } });
+	});
+});

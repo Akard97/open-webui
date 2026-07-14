@@ -89,13 +89,14 @@ export const listMyTasks = (token: string) => request<Task[]>(token, '/me/tasks'
 export const createTask = (
 	token: string, workstreamId: string,
 	body: { title: string; description?: string; status?: TaskStatus; priority?: TaskPriority | null;
-		assignee_ids?: string[]; start_date?: number | null; due_date?: number | null; labels?: string[] }
+		assignee_ids?: string[]; start_date?: number | null; due_date?: number | null; labels?: string[];
+		attachment_required?: boolean }
 ) => request<Task>(token, `/workstreams/${workstreamId}/tasks`, 'POST', body);
 export const getTask = (token: string, id: string) => request<Task>(token, `/tasks/${id}`);
 export const updateTask = (
 	token: string, id: string,
 	body: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'assignee_ids' | 'start_date' | 'due_date'
-		| 'progress' | 'labels' | 'sort_key'>>
+		| 'progress' | 'labels' | 'sort_key' | 'attachment_required'>>
 	// `deleted_label_ids`: tags this edit orphaned and the server auto-removed.
 ) => request<Task & { deleted_label_ids?: string[] }>(token, `/tasks/${id}`, 'PATCH', body);
 export const deleteTask = (token: string, id: string) =>

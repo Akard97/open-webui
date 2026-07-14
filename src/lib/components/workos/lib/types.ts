@@ -61,6 +61,7 @@ export interface Task {
 	start_date?: number | null;
 	due_date?: number | null;
 	progress: number;
+	attachment_required?: boolean;
 	subtask_total?: number;
 	subtask_completed?: number;
 	labels: string[];

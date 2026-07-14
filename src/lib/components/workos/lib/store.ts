@@ -24,8 +24,16 @@ export type ModalRequest =
 	| { kind: 'workspace'; teamId: string }
 	| { kind: 'workstream'; workspaceId: string }
 	| { kind: 'team-settings'; teamId: string }
-	| { kind: 'workspace-settings'; workspaceId: string };
+	| { kind: 'workspace-settings'; workspaceId: string }
+	| { kind: 'task'; workstreamId: string; prefill?: { status?: TaskStatus; start_date?: number | null; due_date?: number | null } };
 export const openModal: Writable<ModalRequest | null> = writable(null);
+
+export function openTaskCreate(
+	workstreamId: string,
+	prefill?: { status?: TaskStatus; start_date?: number | null; due_date?: number | null }
+): void {
+	openModal.set({ kind: 'task', workstreamId, ...(prefill ? { prefill } : {}) });
+}
 
 export const teams: Writable<Team[]> = writable([]);
 export const workspaces: Writable<Workspace[]> = writable([]);
@@ -237,16 +245,19 @@ export function closeTask(): void {
 export async function addTask(
 	workstreamId: string,
 	fields: {
-		title: string; status?: TaskStatus; priority?: TaskPriority | null;
+		title: string; description?: string; status?: TaskStatus; priority?: TaskPriority | null;
 		assignee_ids?: string[]; start_date?: number | null; due_date?: number | null;
+		labels?: string[]; attachment_required?: boolean;
 	}
 ): Promise<void> {
 	const tempId = `temp-${Date.now()}-${Math.round(performance.now())}`;
 	const optimistic: Task = {
 		id: tempId, workstream_id: workstreamId, team_id: get(currentTeam)?.id ?? '', number: 0, key: '…',
-		title: fields.title, status: fields.status ?? 'backlog', priority: fields.priority ?? null,
+		title: fields.title, description: fields.description ?? null, status: fields.status ?? 'backlog',
+		priority: fields.priority ?? null,
 		assignee_ids: fields.assignee_ids ?? [], start_date: fields.start_date ?? null,
-		due_date: fields.due_date ?? null, progress: 0, labels: [],
+		due_date: fields.due_date ?? null, progress: 0, attachment_required: fields.attachment_required ?? false,
+		labels: fields.labels ?? [],
 		sort_key: Date.now(), created_by_id: get(user)?.id ?? null, completed_at: null,
 		created_at: Date.now(), updated_at: Date.now()
 	};
@@ -270,6 +281,10 @@ export async function editTask(id: string, fields: Partial<Task>): Promise<void>
 		tasks.update((list) => list.map((t) => (t.id === id ? (task as Task) : t)));
 	} catch (e) {
 		if (before) tasks.update((list) => list.map((t) => (t.id === id ? before : t)));
+		if (e === 'ATTACHMENT_REQUIRED') {
+			toast.error('Attach a file before completing this task');
+			return; // handled: rolled back + user informed
+		}
 		throw e;
 	}
 }
