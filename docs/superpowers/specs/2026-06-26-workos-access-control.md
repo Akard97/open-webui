@@ -30,6 +30,12 @@
   the team card opening TeamSettingsDialog / WorkspaceSettingsDialog
   (chrome/access/*). GET /access/overview endpoint + tests kept (currently no
   frontend caller). §6 updated.
+
+  2026-07-15: task.flag.attachment_required capability added (app-admin → creator;
+  assignees/managers may edit tasks but not this flag). PATCH /tasks/{id}
+  additionally blocks status→done with 400 ATTACHMENT_REQUIRED when the flag is
+  set and the task has zero attachment rows. Tasks now require ≥1 assignee at
+  create, and a patch may not clear assignees to [].
 -->
 
 # WorkOS — Access Control & Visibility (Reference)
@@ -149,6 +155,7 @@ Every resource-write rule is table-driven in the policy module — the former sc
 |---|---|---|
 | `task.write` | app-admin → creator → assignee → workspace-manager | `require_task_writable` → `PATCH /tasks/{id}` |
 | `task.delete` | team owner/admin (incl. app-admin via `team_role`) → creator | `DELETE /tasks/{id}` |
+| `task.flag.attachment_required` | app-admin → creator | `PATCH /tasks/{id}` when the patch changes attachment_required |
 | `subtask.write` | app-admin → subtask creator → task creator → assignee → workspace-manager | `require_subtask_writable` → subtask PATCH/DELETE |
 | `comment.edit` | author **only** (deliberately NO app-admin bypass) | `PATCH /comments/{id}` |
 | `comment.delete` | team owner/admin → author | `DELETE /comments/{id}` |
@@ -211,10 +218,10 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 | Route / Helper | Gate applied | Location |
 |---|---|---|
 | `GET /workstreams/{id}/tasks` | `require_workos` + `require_workstream_visible` | [workos.py:605](backend/open_webui/routers/workos.py:605) |
-| `POST /workstreams/{id}/tasks` | `require_workos` + `require_workstream_visible` + `require_team_visible`; field validation; `assignee_ids` validated via `validate_assignees` (closes G1) | [workos.py:614](backend/open_webui/routers/workos.py:614) |
+| `POST /workstreams/{id}/tasks` | `require_workos` + `require_workstream_visible` + `require_team_visible`; field validation; `assignee_ids` validated via `validate_assignees` (closes G1); assignee_ids must be non-empty (400) | [workos.py:614](backend/open_webui/routers/workos.py:614) |
 | `GET /tasks/{id}` | `require_workos` + `require_task_visible` | [workos.py:634](backend/open_webui/routers/workos.py:634) |
 | `GET /me/tasks` | `require_workos`; intrinsically user-scoped; returns tasks where caller is creator OR in `assignee_ids`, each filtered through `can_see_workstream` (assignment/authorship confer no access — visibility still enforced); admin scoped to own created/assigned across all teams | [workos.py:657](backend/open_webui/routers/workos.py:657) |
-| `PATCH /tasks/{id}` | `require_workos` + `require_task_visible` + `require_task_writable`; `assignee_ids` validated via `validate_assignees` (closes G1 + G2) | [workos.py:643](backend/open_webui/routers/workos.py:643) |
+| `PATCH /tasks/{id}` | `require_workos` + `require_task_visible` + `require_task_writable`; `assignee_ids` validated via `validate_assignees` (closes G1 + G2); attachment_required changes gated by require_capability('task.flag.attachment_required'); status→done blocked (400 ATTACHMENT_REQUIRED) when flagged with no attachments | [workos.py:643](backend/open_webui/routers/workos.py:643) |
 | `DELETE /tasks/{id}` | `require_workos` + `require_task_visible` + `require_capability('task.delete')` — creator or team owner/admin (`403` else) | [workos.py:677](backend/open_webui/routers/workos.py:677) |
 
 ### Labels

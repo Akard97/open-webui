@@ -703,6 +703,16 @@ async def update_task(
         if not fields['assignee_ids']:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Task needs at least one assignee.')
         await validate_assignees(fields['assignee_ids'], task.workstream_id, db)
+    if 'attachment_required' in fields and fields['attachment_required'] != task.attachment_required:
+        await require_capability('task.flag.attachment_required', user, db,
+                                 task=task, creator_id=task.created_by_id)
+    # Hard gate: a flagged task cannot TRANSITION to done without at least one
+    # attachment (task-level or comment-level both count). Runs before any field
+    # is persisted so a mixed patch fails atomically.
+    if fields.get('status') == 'done' and task.status != 'done':
+        effective_flag = fields.get('attachment_required', task.attachment_required)
+        if effective_flag and not await Attachments.list_for_task(task_id, db=db):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='ATTACHMENT_REQUIRED')
     before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)
     # Auto-delete tags that this edit orphaned (removed here and used by no other task).

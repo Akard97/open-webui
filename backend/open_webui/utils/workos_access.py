@@ -211,6 +211,8 @@ CAPABILITIES = {
                           'You do not have permission to edit this task.'),
     'task.delete':       ((_team_manager, _owner('creator_id')),
                           'Only the creator or an admin may delete.'),
+    'task.flag.attachment_required': ((_app_admin, _owner('creator_id')),
+                          'Only the task creator or an admin may change the attachment requirement.'),
     'subtask.write':     ((_app_admin, _owner('subtask_creator_id'), _owner('creator_id'), _assignee, _ws_manager),
                           'You do not have permission to modify this subtask.'),
     'comment.edit':      ((_owner('author_id'),),
