@@ -10,7 +10,7 @@ async def _task(c, **body):
     for uid in ('u2', 'u3'):
         await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': uid, 'role': 'member'})
     t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
-                      json={'title': 'T', **body})).json()
+                      json={'title': 'T', 'assignee_ids': ['u1'], **body})).json()
     return team, ws, s, t
 
 
@@ -23,10 +23,11 @@ async def test_create_task_with_multiple_assignees(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_task_without_assignees_defaults_empty(monkeypatch):
+async def test_create_task_without_assignees_rejected(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
-        _, _, _, t = await _task(c)
-        assert t['assignee_ids'] == []
+        team, ws, s = await _stream(c)
+        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'T'})
+        assert r.status_code == 400
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,8 @@ from open_webui.test.workos.test_router_task import _stream
 
 async def _task(c):
     team, ws, s = await _stream(c)
-    t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'T'})).json()
+    t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                      json={'title': 'T', 'assignee_ids': ['u1']})).json()
     return team, ws, s, t
 
 

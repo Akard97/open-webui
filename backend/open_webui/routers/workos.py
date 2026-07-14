@@ -575,6 +575,7 @@ class TaskCreateForm(BaseModel):
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     labels: Optional[list] = None
+    attachment_required: bool = False
 
 
 class TaskUpdateForm(BaseModel):
@@ -588,6 +589,7 @@ class TaskUpdateForm(BaseModel):
     progress: Optional[int] = None
     labels: Optional[list] = None
     sort_key: Optional[float] = None
+    attachment_required: Optional[bool] = None
 
 
 class SubtaskCreateForm(BaseModel):
@@ -662,12 +664,15 @@ async def create_task(
     await require_workos(request, user, db)
     stream, _ = await require_workstream_visible(user, workstream_id, db)
     _validate_task_fields(form.model_dump())
+    if not form.assignee_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Task needs at least one assignee.')
     team = await require_team_visible(user, (await Workspaces.get_by_id(stream.workspace_id, db=db)).team_id, db)
     await validate_assignees(form.assignee_ids, workstream_id, db)
     task = await Tasks.insert(
         workstream_id, team.id, team.key, form.title, user.id,
         description=form.description, status=form.status, priority=form.priority,
-        assignee_ids=form.assignee_ids, start_date=form.start_date, due_date=form.due_date, labels=form.labels, db=db,
+        assignee_ids=form.assignee_ids, start_date=form.start_date, due_date=form.due_date, labels=form.labels,
+        attachment_required=form.attachment_required, db=db,
     )
     await emit_event('workos:task.created', f'workos:workstream:{workstream_id}', task.model_dump())
     if task.assignee_ids:
@@ -695,6 +700,8 @@ async def update_task(
     fields = form.model_dump(exclude_none=True)
     _validate_task_fields(fields, current=task.model_dump())
     if 'assignee_ids' in fields:
+        if not fields['assignee_ids']:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Task needs at least one assignee.')
         await validate_assignees(fields['assignee_ids'], task.workstream_id, db)
     before = task.model_dump()
     updated = await Tasks.update_fields(task_id, fields, db=db)

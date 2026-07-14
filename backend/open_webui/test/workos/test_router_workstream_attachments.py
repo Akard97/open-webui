@@ -22,8 +22,10 @@ async def test_member_lists_files_across_tasks_with_task_join(monkeypatch):
     monkeypatch.setattr(wr, 'Storage', _FakeStorage)
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
-        t1 = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'A'})).json()
-        t2 = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'B'})).json()
+        t1 = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                           json={'title': 'A', 'assignee_ids': ['u1']})).json()
+        t2 = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                           json={'title': 'B', 'assignee_ids': ['u1']})).json()
         a1 = await _upload(c, t1['id'], name='one.txt')
         a2 = await _upload(c, t2['id'], name='two.pdf', ctype='application/pdf')
         # comment attachment on t1 must be included, with comment_id set

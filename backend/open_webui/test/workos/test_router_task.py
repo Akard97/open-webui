@@ -15,7 +15,8 @@ async def _stream(c):
 async def test_task_create_patch_delete(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
-        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'Migrate billing'})
+        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                         json={'title': 'Migrate billing', 'assignee_ids': ['u1']})
         assert r.status_code == 200, r.text
         t = r.json()
         assert t['key'] == 'OSL-1' and t['status'] == 'backlog'
@@ -31,7 +32,8 @@ async def test_task_create_patch_delete(monkeypatch):
 async def test_task_patch_rejects_bad_status(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
-        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'X'})).json()
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'X', 'assignee_ids': ['u1']})).json()
         r = await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'status': 'bogus'})
         assert r.status_code == 400
 
@@ -67,9 +69,9 @@ async def test_unused_tag_auto_deleted_on_unassign(monkeypatch):
         lab = (await c.post(f"/api/v1/workos/teams/{team['id']}/labels",
                             json={'name': 'backend', 'color': 'cyan'})).json()
         a = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
-                          json={'title': 'A', 'labels': [lab['id']]})).json()
+                          json={'title': 'A', 'labels': [lab['id']], 'assignee_ids': ['u1']})).json()
         b = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
-                          json={'title': 'B', 'labels': [lab['id']]})).json()
+                          json={'title': 'B', 'labels': [lab['id']], 'assignee_ids': ['u1']})).json()
 
         # Removing the tag from A leaves it on B, so it survives.
         r = await c.patch(f"/api/v1/workos/tasks/{a['id']}", json={'labels': []})
@@ -91,9 +93,9 @@ async def test_unused_tag_auto_deleted_on_task_delete(monkeypatch):
         solo = (await c.post(f"/api/v1/workos/teams/{team['id']}/labels",
                              json={'name': 'solo', 'color': 'green'})).json()
         keep = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
-                             json={'title': 'Keep', 'labels': [shared['id']]})).json()
+                             json={'title': 'Keep', 'labels': [shared['id']], 'assignee_ids': ['u1']})).json()
         gone = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
-                             json={'title': 'Gone', 'labels': [shared['id'], solo['id']]})).json()
+                             json={'title': 'Gone', 'labels': [shared['id'], solo['id']], 'assignee_ids': ['u1']})).json()
 
         # Deleting 'Gone' orphans only 'solo'; 'shared' is still on 'Keep'.
         r = await c.delete(f"/api/v1/workos/tasks/{gone['id']}")
@@ -107,7 +109,8 @@ async def test_non_member_cannot_create_task(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
     async with _client(monkeypatch, user=U2) as c:
-        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'X'})
+        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                         json={'title': 'X', 'assignee_ids': ['u2']})
         assert r.status_code == 404
 
 
@@ -117,7 +120,7 @@ async def test_task_schedule_fields_and_validation(monkeypatch):
         team, ws, s = await _stream(c)
         r = await c.post(
             f"/api/v1/workos/workstreams/{s['id']}/tasks",
-            json={'title': 'Scheduled', 'start_date': 1000, 'due_date': 2000},
+            json={'title': 'Scheduled', 'start_date': 1000, 'due_date': 2000, 'assignee_ids': ['u1']},
         )
         assert r.status_code == 200, r.text
         t = r.json()
@@ -133,7 +136,8 @@ async def test_task_schedule_fields_and_validation(monkeypatch):
 async def test_subtask_crud_updates_parent_counts(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
-        task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'Parent'})).json()
+        task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                             json={'title': 'Parent', 'assignee_ids': ['u1']})).json()
 
         created = (await c.post(f"/api/v1/workos/tasks/{task['id']}/subtasks", json={'title': 'Draft'})).json()
         assert created['title'] == 'Draft'

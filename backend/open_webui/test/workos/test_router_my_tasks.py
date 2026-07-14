@@ -17,7 +17,8 @@ async def test_me_tasks_returns_created_and_assigned(monkeypatch):
         team, ws, s = await _stream(c)
         # U1 adds U2 to the team so U2 is a valid (visible) assignee.
         await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
-        created = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'Mine'})).json()
+        created = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                                json={'title': 'Mine', 'assignee_ids': ['u1']})).json()
         assigned = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
                                  json={'title': 'For u2', 'assignee_ids': ['u2']})).json()
         # U1 created both -> both appear for U1.
@@ -40,7 +41,8 @@ async def test_me_tasks_excludes_restricted_after_membership_revoked(monkeypatch
         await c.post(f"/api/v1/workos/workspaces/{rws['id']}/members", json={'user_id': 'u2', 'role': 'member'})
         s = (await c.post(f"/api/v1/workos/workspaces/{rws['id']}/workstreams", json={'name': 'S'})).json()
     async with _client(monkeypatch, user=U2) as c:
-        task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'U2 secret'})).json()
+        task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                             json={'title': 'U2 secret', 'assignee_ids': ['u2']})).json()
         assert task['id'] in {t['id'] for t in (await c.get('/api/v1/workos/me/tasks')).json()}
     # U1 revokes U2's access to the restricted workspace.
     async with _client(monkeypatch, user=U1) as c:

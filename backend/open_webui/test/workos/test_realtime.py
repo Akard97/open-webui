@@ -33,5 +33,6 @@ async def test_task_create_emits_event(monkeypatch):
         ws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces",
                           json={'name': 'Eng', 'visibility': 'team'})).json()
         s = (await c.post(f"/api/v1/workos/workspaces/{ws['id']}/workstreams", json={'name': 'P'})).json()
-        await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'X'})
+        await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                    json={'title': 'X', 'assignee_ids': ['u1']})
     assert ('workos:task.created', f"workos:workstream:{s['id']}") in events

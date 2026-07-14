@@ -31,7 +31,8 @@ def test_daily_counts_window_length_and_order():
 async def test_member_gets_items_with_task_join_and_daily(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team, ws, s = await _stream(c)
-        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'T'})).json()
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'T', 'assignee_ids': ['u1']})).json()
         await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'status': 'in_progress'})
         r = await c.get(f"/api/v1/workos/workstreams/{s['id']}/activity")
         assert r.status_code == 200

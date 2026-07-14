@@ -8,7 +8,8 @@ from open_webui.test.workos.test_router_task import _stream
 async def _task(c):
     team, ws, s = await _stream(c)
     await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
-    t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'T'})).json()
+    t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                      json={'title': 'T', 'assignee_ids': ['u1']})).json()
     return team, ws, s, t
 
 
@@ -45,7 +46,7 @@ async def test_actor_not_notified_for_own_status_change(monkeypatch):
 
     monkeypatch.setattr(wr, 'emit_users', _eu)
     async with _client(monkeypatch, user=U1) as c:
-        _, _, _, t = await _task(c)  # creator + (no assignee) = U1 only
+        _, _, _, t = await _task(c)  # creator + assignee = U1 only (self-assigned, no notification)
         await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'status': 'done'})
     assert 'u1' not in sent  # the actor (creator) is filtered out
 

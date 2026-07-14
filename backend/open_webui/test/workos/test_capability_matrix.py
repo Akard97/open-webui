@@ -17,7 +17,8 @@ async def _team_ws_task(c):
     ws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces",
                        json={'name': 'Eng', 'visibility': 'team'})).json()
     s = (await c.post(f"/api/v1/workos/workspaces/{ws['id']}/workstreams", json={'name': 'P'})).json()
-    task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks", json={'title': 'T'})).json()
+    task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                         json={'title': 'T', 'assignee_ids': ['u1']})).json()
     return team, ws, s, task
 
 
