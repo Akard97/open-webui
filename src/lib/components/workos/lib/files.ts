@@ -81,7 +81,7 @@ export function recencyBucket(ts: number, now: number): RecencyBucket {
 	return 'earlier';
 }
 
-/** Today → '09:30 AM'; this week → 'Mon 09:30 AM'; earlier → 'Jun 1'. */
+/** Today → '9:30 AM'; this week → 'Mon 9:30 AM'; earlier → 'Jun 1'. */
 export function formatFileDate(ts: number, now: number): string {
 	const bucket = recencyBucket(ts, now);
 	const d = new Date(ts);
