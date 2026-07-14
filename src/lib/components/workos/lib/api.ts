@@ -2,7 +2,7 @@ import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type {
 	Bootstrap, Team, Workspace, Workstream, Label, Task, Member, WorkosRules,
 	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole,
-	Comment, Attachment, Activity, Notification, Subtask
+	Comment, Attachment, Activity, Notification, Subtask, WorkstreamFile
 } from './types';
 
 const BASE = `${WEBUI_API_BASE_URL}/workos`;
@@ -154,6 +154,8 @@ export const getWorkstreamActivity = (
 // Attachments
 export const listAttachments = (token: string, taskId: string) =>
 	request<Attachment[]>(token, `/tasks/${taskId}/attachments`);
+export const listWorkstreamAttachments = (token: string, workstreamId: string) =>
+	request<WorkstreamFile[]>(token, `/workstreams/${workstreamId}/attachments`);
 export const deleteAttachment = (token: string, id: string) =>
 	request<{ deleted: boolean }>(token, `/attachments/${id}`, 'DELETE');
 export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}/content`;

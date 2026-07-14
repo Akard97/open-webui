@@ -111,6 +111,13 @@ export interface Attachment {
 	created_at: number;
 }
 
+/** Attachment row from the workstream-wide listing, joined with its task. */
+export interface WorkstreamFile extends Attachment {
+	task_key: string;
+	task_title: string;
+	task_status: TaskStatus;
+}
+
 export interface Subtask {
 	id: string;
 	task_id: string;
