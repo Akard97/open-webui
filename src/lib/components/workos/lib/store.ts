@@ -10,14 +10,14 @@ import {
 	type Team, type Workspace, type Workstream, type Label, type Task, type Member,
 	type TeamRole, type TaskStatus, type TaskPriority,
 	type Comment, type Activity, type Attachment, type Notification, type FeedItem, type Subtask,
-	type TaskFilter
+	type TaskFilter, type WorkstreamFile
 } from './types';
 import { applyFilters, emptyFilter } from './filters';
 import { defaultColumnPrefs, parseColumnPrefs, type ColumnPrefs } from './columns';
 import { parseZoom, type ZoomKey } from './timeline';
 import { LABEL_PALETTE } from './avatar';
 
-export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview' | 'timeline';
+export type ViewKey = 'board' | 'list' | 'admin' | 'inbox' | 'mywork' | 'calendar' | 'overview' | 'timeline' | 'files';
 
 export type ModalRequest =
 	| { kind: 'team' }
@@ -103,6 +103,13 @@ export interface WsActivityState {
 	items: WsActivityItem[]; daily: { day: string; n: number }[]; loaded: boolean; error: boolean;
 }
 export const wsActivity: Writable<WsActivityState> = writable({ items: [], daily: [], loaded: false, error: false });
+
+export interface WsFilesState {
+	items: WorkstreamFile[];
+	loaded: boolean;
+	error: boolean;
+}
+export const wsFiles: Writable<WsFilesState> = writable({ items: [], loaded: false, error: false });
 
 export const feed = derived([comments, activity], ([$c, $a]): FeedItem[] => {
 	const items: FeedItem[] = [
@@ -396,6 +403,28 @@ export async function loadWorkstreamActivity(id: string): Promise<void> {
 	}
 }
 
+export async function loadWorkstreamFiles(id: string): Promise<void> {
+	wsFiles.set({ items: [], loaded: false, error: false });
+	try {
+		const items = await api.listWorkstreamAttachments(token(), id);
+		if (get(currentWorkstreamId) !== id) return; // user moved on
+		wsFiles.set({ items, loaded: true, error: false });
+	} catch {
+		if (get(currentWorkstreamId) !== id) return; // user moved on
+		wsFiles.set({ items: [], loaded: true, error: true });
+	}
+}
+
+/** While the Files view is open, an attachment room event for the current
+ * workstream refetches the listing (rows need the server-side task join). */
+export function applyFilesEvent(event: string, payload: any): void {
+	if (event !== 'workos:attachment.created' && event !== 'workos:attachment.deleted') return;
+	if (get(view) !== 'files') return;
+	const ws = get(currentWorkstreamId);
+	if (!ws || !payload || payload.workstream_id !== ws) return;
+	void loadWorkstreamFiles(ws);
+}
+
 function localDayKey(now: number): string {
 	const d = new Date(now);
 	const p = (n: number) => String(n).padStart(2, '0');
@@ -613,6 +642,7 @@ export function connectRealtime(): void {
 		handlers[ev] = (payload: any) => {
 			applyCollabEvent(ev, payload);
 			if (ev === 'workos:activity.created') applyOverviewActivityEvent(payload);
+			applyFilesEvent(ev, payload);
 		};
 		s.on(ev, handlers[ev]);
 	}

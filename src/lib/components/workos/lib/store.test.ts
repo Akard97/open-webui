@@ -26,6 +26,7 @@ vi.mock('./api', () => ({
 	updateSubtask: vi.fn(async (t, id, body) => ({ id, task_id: 'task-1', title: 'Sub', completed: !!body.completed, sort_key: 1, created_at: 1, updated_at: 2 })),
 	deleteSubtask: vi.fn(async () => ({ deleted: true })),
 	getWorkstreamActivity: vi.fn(async () => ({ items: [], daily: [] })),
+	listWorkstreamAttachments: vi.fn(async () => []),
 }));
 
 vi.mock('$lib/stores', () => {
@@ -283,5 +284,53 @@ describe('nav reconcile (sidebar carry-over)', () => {
 		workspaces.set([mkWs({ id: 'ws1' })]);
 		applyNavEvent('workos:workstream.created', mkSt({ id: 's9', workspace_id: 'ws1' }));
 		expect(get(workstreams).map((s) => s.id)).toEqual(['s9']);
+	});
+});
+
+describe('files view realtime', () => {
+	it('attachment events refetch while the Files view is open on that workstream', async () => {
+		const api = await import('./api');
+		const { view, applyFilesEvent } = await import('./store');
+		view.set('files');
+		currentWorkstreamId.set('w1');
+		(api.listWorkstreamAttachments as any).mockClear();
+		applyFilesEvent('workos:attachment.created', { id: 'a1', workstream_id: 'w1' });
+		applyFilesEvent('workos:attachment.deleted', { id: 'a1', workstream_id: 'w1' });
+		expect(api.listWorkstreamAttachments).toHaveBeenCalledTimes(2);
+	});
+	it('ignores other views, other workstreams, and other events', async () => {
+		const api = await import('./api');
+		const { view, applyFilesEvent } = await import('./store');
+		(api.listWorkstreamAttachments as any).mockClear();
+		view.set('board');
+		currentWorkstreamId.set('w1');
+		applyFilesEvent('workos:attachment.created', { id: 'a1', workstream_id: 'w1' });
+		view.set('files');
+		applyFilesEvent('workos:attachment.created', { id: 'a1', workstream_id: 'other' });
+		applyFilesEvent('workos:comment.created', { id: 'c1', workstream_id: 'w1' });
+		expect(api.listWorkstreamAttachments).not.toHaveBeenCalled();
+	});
+	it('loadWorkstreamFiles marks loaded and keeps items on success', async () => {
+		const api = await import('./api');
+		const { wsFiles, loadWorkstreamFiles } = await import('./store');
+		(api.listWorkstreamAttachments as any).mockResolvedValueOnce([
+			{ id: 'f1', task_id: 't1', name: 'a.txt', size: 1, created_at: 1, storage_key: 'k',
+			  task_key: 'OSL-1', task_title: 'T', task_status: 'todo' }
+		]);
+		currentWorkstreamId.set('w1');
+		await loadWorkstreamFiles('w1');
+		expect(get(wsFiles)).toMatchObject({ loaded: true, error: false });
+		expect(get(wsFiles).items.map((f) => f.id)).toEqual(['f1']);
+	});
+	it('loadWorkstreamFiles discards a stale response after workstream switch', async () => {
+		const api = await import('./api');
+		const { wsFiles, loadWorkstreamFiles } = await import('./store');
+		(api.listWorkstreamAttachments as any).mockImplementationOnce(async () => {
+			currentWorkstreamId.set('w2'); // user moved on mid-flight
+			return [{ id: 'stale' }];
+		});
+		currentWorkstreamId.set('w1');
+		await loadWorkstreamFiles('w1');
+		expect(get(wsFiles).items).toEqual([]);
 	});
 });
