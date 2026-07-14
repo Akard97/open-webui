@@ -484,6 +484,7 @@ class WorkosTask(Base):
     start_date = Column(BigInteger, nullable=True)
     due_date = Column(BigInteger, nullable=True)
     progress = Column(Integer, default=0)
+    attachment_required = Column(Boolean, default=False)
     labels = Column(JSON, default=list)
     sort_key = Column(Float, default=0.0)
     created_by_id = Column(Text, nullable=True)
@@ -533,6 +534,7 @@ class TaskModel(BaseModel):
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     progress: int
+    attachment_required: bool = False
     subtask_total: int = 0
     subtask_completed: int = 0
     labels: list = []
@@ -653,6 +655,7 @@ class TasksDao:
         *, description: Optional[str] = None, status: str = 'backlog', priority: Optional[str] = None,
         assignee_ids: Optional[list] = None, start_date: Optional[int] = None,
         due_date: Optional[int] = None, labels: Optional[list] = None,
+        attachment_required: bool = False,
         db: Optional[AsyncSession] = None,
     ) -> TaskModel:
         number = await Teams.next_task_number(team_id, db=db)
@@ -663,6 +666,7 @@ class TasksDao:
                 key=f'{team_key}-{number}', title=title, description=description, status=status,
                 priority=priority, assignee_ids=assignee_ids or [], start_date=start_date,
                 due_date=due_date, progress=0,
+                attachment_required=attachment_required,
                 labels=labels or [], sort_key=float(now), created_by_id=created_by_id,
                 completed_at=now if status == 'done' else None, created_at=now, updated_at=now,
             )

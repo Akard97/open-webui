@@ -105,3 +105,14 @@ async def test_completed_at_cleared_on_reopen_and_restamped_on_redone():
     assert reopened.completed_at is None
     redone = await Tasks.update_fields(t.id, {'status': 'done'})
     assert redone.completed_at is not None and redone.completed_at >= done.completed_at
+
+
+@pytest.mark.asyncio
+async def test_attachment_required_round_trips():
+    team, s = await _stream()
+    flagged = await Tasks.insert(s.id, team.id, team.key, 'Needs proof', 'u1', attachment_required=True)
+    assert flagged.attachment_required is True
+    plain = await Tasks.insert(s.id, team.id, team.key, 'No proof', 'u1')
+    assert plain.attachment_required is False
+    toggled = await Tasks.update_fields(flagged.id, {'attachment_required': False})
+    assert toggled.attachment_required is False
