@@ -1097,6 +1097,27 @@ class AttachmentsDao:
             )
             return [AttachmentModel.model_validate(r) for r in res.scalars().all()]
 
+    async def list_for_workstream(
+        self, workstream_id: str, limit: int = 1000, db: Optional[AsyncSession] = None
+    ) -> list:
+        """Newest attachments across the workstream's tasks, joined with task key/title/status."""
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosAttachment, WorkosTask.key, WorkosTask.title, WorkosTask.status)
+                .join(WorkosTask, WorkosTask.id == WorkosAttachment.task_id)
+                .where(WorkosTask.workstream_id == workstream_id)
+                .order_by(WorkosAttachment.created_at.desc())
+                .limit(limit)
+            )
+            out = []
+            for row, task_key, task_title, task_status in res.all():
+                item = AttachmentModel.model_validate(row).model_dump()
+                item['task_key'] = task_key
+                item['task_title'] = task_title
+                item['task_status'] = task_status
+                out.append(item)
+            return out
+
     async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
         async with get_async_db_context(db) as db:
             res = await db.execute(select(WorkosAttachment).filter_by(id=id))

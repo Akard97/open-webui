@@ -1145,6 +1145,16 @@ async def list_attachments(
     return await Attachments.list_for_task(task_id, db=db)
 
 
+@router.get('/workstreams/{workstream_id}/attachments')
+async def list_workstream_attachments(
+    request: Request, workstream_id: str,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    await require_workos(request, user, db)
+    await require_workstream_visible(user, workstream_id, db)
+    return await Attachments.list_for_workstream(workstream_id, db=db)
+
+
 @router.get('/attachments/{attachment_id}/content')
 async def download_attachment(
     request: Request, attachment_id: str,

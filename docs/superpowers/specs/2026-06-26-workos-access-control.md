@@ -240,6 +240,7 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 |---|---|---|
 | `POST /tasks/{id}/attachments` | `require_workos` + `require_task_visible`; size limit; MIME checked against `ATTACHMENT_MIME_ALLOW`; `comment_id` validated against `task_id` before insert (closes G11) | [workos.py:967](backend/open_webui/routers/workos.py:967) |
 | `GET /tasks/{id}/attachments` | `require_workos` + `require_task_visible` | [workos.py:998](backend/open_webui/routers/workos.py:998) |
+| `GET /workstreams/{id}/attachments` | `require_workos` + `require_workstream_visible` — workstream-wide listing (rows joined w/ task key/title/status), read-only, cap 1000 | [workos.py](backend/open_webui/routers/workos.py) `list_workstream_attachments` |
 | `GET /attachments/{id}/content` | `require_workos`; fetch (`404`); `require_task_visible` on `att.task_id` — visibility-gated, OK | [workos.py:1007](backend/open_webui/routers/workos.py:1007) |
 | `DELETE /attachments/{id}` | `require_workos`; fetch (`404`); `require_task_visible`; `require_capability('attachment.delete')` — **uploader OR team owner/admin** (`403` else) | [workos.py:1031](backend/open_webui/routers/workos.py:1031) |
 
