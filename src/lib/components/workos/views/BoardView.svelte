@@ -3,15 +3,13 @@
 	import { onDestroy, tick } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import StatusDot from '../ui/StatusDot.svelte';
 	import StatusBadge from '../ui/StatusBadge.svelte';
 	import TaskCard from './TaskCard.svelte';
 	import { STATUS_ORDER, STATUS_LABEL, type TaskStatus } from '../lib/types';
-	import { tasksByStatus, currentWorkstream, labels, moveTask, addTask, boardFilter } from '../lib/store';
+	import { tasksByStatus, currentWorkstream, labels, moveTask, openTaskCreate, boardFilter } from '../lib/store';
 	import { STATUS_COLOR, STATUS_SHAPE } from '../lib/colors';
 	import FilterBar from '../chrome/FilterBar.svelte';
-	import { toast } from 'svelte-sonner';
 
 	let columnEls: Record<string, HTMLElement> = {};
 	let sortables: Sortable[] = [];
@@ -19,10 +17,6 @@
 	// rebuild that column's cards from the store, discarding any DOM that SortableJS
 	// mutated directly (see handleEnd).
 	let columnEpoch: Record<string, number> = {};
-	let adding: TaskStatus | null = null;
-	let newTitle = '';
-	let creatingTop = false;
-	let topTitle = '';
 
 	$: byStatus = $tasksByStatus;
 	$: labelById = Object.fromEntries($labels.map((l) => [l.id, l]));
@@ -95,45 +89,6 @@
 	}
 
 	onDestroy(destroySortables);
-
-	async function submitAdd(status: TaskStatus) {
-		const ws = $currentWorkstream;
-		const t = newTitle.trim();
-		if (!t || !ws) return;
-		newTitle = '';
-		adding = null;
-		try {
-			await addTask(ws.id, { title: t, status });
-		} catch {
-			toast.error('Failed to create task');
-			// Give the title back — unless the user already started another entry.
-			if (adding === null && !newTitle) {
-				adding = status;
-				newTitle = t;
-			}
-			return;
-		}
-		await initSortables(); // attach the new card to the sortable list
-	}
-
-	async function submitTop() {
-		const ws = $currentWorkstream;
-		const t = topTitle.trim();
-		if (!t || !ws) return;
-		topTitle = '';
-		creatingTop = false;
-		try {
-			await addTask(ws.id, { title: t });
-		} catch {
-			toast.error('Failed to create task');
-			if (!creatingTop && !topTitle) {
-				creatingTop = true;
-				topTitle = t;
-			}
-			return;
-		}
-		await initSortables();
-	}
 </script>
 
 <div class="h-full flex flex-col min-h-0">
@@ -141,13 +96,9 @@
 	<div class="flex-none flex flex-col md:flex-row md:items-stretch">
 		<div class="flex-1"><FilterBar filter={boardFilter} /></div>
 		<div class="flex items-center px-4 py-2 md:py-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-			{#if creatingTop}
-				<Input class="h-8 w-56" placeholder="Task title…" bind:value={topTitle} onkeydown={(e) => { if (e.key === 'Enter') submitTop(); if (e.key === 'Escape') { creatingTop = false; topTitle = ''; } }} autofocus />
-			{:else}
-				<Button size="sm" onclick={() => (creatingTop = true)}>
-					<Icon name="plus" size={15} /> Add New
-				</Button>
-			{/if}
+			<Button size="sm" onclick={() => { const ws = $currentWorkstream; if (ws) openTaskCreate(ws.id); }}>
+				<Icon name="plus" size={15} /> Add New
+			</Button>
 		</div>
 	</div>
 
@@ -159,7 +110,9 @@
 					<StatusBadge {status} size="md" />
 					<div class="flex-1"></div>
 					<button class="text-gray-400 opacity-50 cursor-default" title="More" aria-disabled="true" tabindex="-1"><Icon name="more-horizontal" size={16} /></button>
-					<Button variant="ghost" size="icon-xs" class="text-gray-400 hover:text-gray-600" onclick={() => (adding = status)} title="Add task"><Icon name="plus" size={16} /></Button>
+					<Button variant="ghost" size="icon-xs" class="text-gray-400 hover:text-gray-600"
+						onclick={() => { const ws = $currentWorkstream; if (ws) openTaskCreate(ws.id, { status }); }}
+						title="Add task"><Icon name="plus" size={16} /></Button>
 				</div>
 
 				<div bind:this={columnEls[status]} data-status={status} class="flex flex-col gap-2.5 min-h-[24px]">
@@ -169,7 +122,7 @@
 						{/each}
 					{/key}
 
-					{#if !(byStatus[status]?.length) && adding !== status}
+					{#if !(byStatus[status]?.length)}
 						<!-- Empty column: a quiet, column-specific hint (no border) -->
 						<div class="flex flex-col items-center justify-center gap-2 py-6 text-center select-none">
 							<span class="opacity-50">
@@ -179,16 +132,6 @@
 						</div>
 					{/if}
 				</div>
-
-				{#if adding === status}
-					<Input
-						class="mt-2.5 h-8 bg-white dark:bg-gray-950"
-						placeholder="Task title…"
-						bind:value={newTitle}
-						onkeydown={(e) => { if (e.key === 'Enter') submitAdd(status); if (e.key === 'Escape') { adding = null; newTitle = ''; } }}
-						autofocus
-					/>
-				{/if}
 			</div>
 		{/each}
 	</div>

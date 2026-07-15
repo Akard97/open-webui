@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
-	import { Input } from '$lib/components/ui/input';
 	import StatusDot from '../ui/StatusDot.svelte';
 	import StatusBadge from '../ui/StatusBadge.svelte';
 	import FilterBar from '../chrome/FilterBar.svelte';
@@ -20,9 +19,8 @@
 	import AssigneeAvatars from './AssigneeAvatars.svelte';
 	import Pills from '../ui/Pills.svelte';
 	import { formatDateShort, isOverdue } from '../lib/format';
-	import { toast } from 'svelte-sonner';
 	import {
-		tasksByStatus, openTask, removeTask, addTask, directory, labels,
+		tasksByStatus, openTask, removeTask, openTaskCreate, directory, labels,
 		boardFilter, listColumns, currentWorkstream, currentTeam, roles
 	} from '../lib/store';
 
@@ -32,53 +30,11 @@
 	$: template = gridTemplate($listColumns);
 	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
 
-	// Ephemeral UI state (not persisted): collapsed groups + per-group quick-add +
-	// the toolbar "Add new" quick-add.
+	// Ephemeral UI state (not persisted): collapsed groups.
 	let collapsed: Record<string, boolean> = {};
-	let adding: TaskStatus | null = null;
-	let newTitle = '';
-	let creatingNew = false;
-	let newGlobalTitle = '';
 
 	function toggle(s: TaskStatus) {
 		collapsed = { ...collapsed, [s]: !collapsed[s] };
-	}
-
-	async function submitAdd(status: TaskStatus) {
-		const ws = $currentWorkstream;
-		const t = newTitle.trim();
-		if (!t || !ws) return;
-		newTitle = '';
-		adding = null;
-		try {
-			await addTask(ws.id, { title: t, status });
-		} catch {
-			toast.error('Failed to create task');
-			// Give the title back — unless the user already started another entry.
-			if (adding === null && !newTitle) {
-				adding = status;
-				newTitle = t;
-			}
-		}
-	}
-
-	// Toolbar "Add new" — creates a task in the default (backlog) status, like the
-	// old Topbar entry point it replaces.
-	async function submitNew() {
-		const ws = $currentWorkstream;
-		const t = newGlobalTitle.trim();
-		if (!t || !ws) return;
-		newGlobalTitle = '';
-		creatingNew = false;
-		try {
-			await addTask(ws.id, { title: t });
-		} catch {
-			toast.error('Failed to create task');
-			if (!creatingNew && !newGlobalTitle) {
-				creatingNew = true;
-				newGlobalTitle = t;
-			}
-		}
 	}
 </script>
 
@@ -100,19 +56,9 @@
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 
-		{#if creatingNew}
-			<Input
-				class="h-8 w-48"
-				placeholder="Task title…"
-				bind:value={newGlobalTitle}
-				onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creatingNew = false; newGlobalTitle = ''; } }}
-				autofocus
-			/>
-		{:else}
-			<Button size="sm" onclick={() => { creatingNew = true; newGlobalTitle = ''; }}>
-				<Icon name="plus" size={15} /> Add new
-			</Button>
-		{/if}
+		<Button size="sm" onclick={() => { const ws = $currentWorkstream; if (ws) openTaskCreate(ws.id); }}>
+			<Icon name="plus" size={15} /> Add new
+		</Button>
 	</FilterBar>
 
 	<!-- Grouped, collapsible status sections -->
@@ -232,19 +178,10 @@
 
 						<!-- Add task — left pad = row px-3 (0.75rem) + 26px name offset (see header above) -->
 						<div class="border-t border-gray-100 dark:border-gray-900 px-3 py-2 md:pl-[calc(0.75rem+26px)]">
-							{#if adding === status}
-								<Input
-									class="h-7 w-64"
-									placeholder="Task title…"
-									bind:value={newTitle}
-									onkeydown={(e) => { if (e.key === 'Enter') submitAdd(status); if (e.key === 'Escape') { adding = null; newTitle = ''; } }}
-									autofocus
-								/>
-							{:else}
-								<Button variant="ghost" size="sm" class="text-primary" onclick={() => { adding = status; newTitle = ''; }}>
-									<Icon name="plus" size={15} /> Add task
-								</Button>
-							{/if}
+							<Button variant="ghost" size="sm" class="text-primary"
+								onclick={() => { const ws = $currentWorkstream; if (ws) openTaskCreate(ws.id, { status }); }}>
+								<Icon name="plus" size={15} /> Add task
+							</Button>
 						</div>
 					{/if}
 				</section>

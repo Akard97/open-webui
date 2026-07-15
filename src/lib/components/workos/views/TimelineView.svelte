@@ -3,7 +3,6 @@
 	import Icon from '../ui/Icon.svelte';
 	import EmptyState from '../ui/EmptyState.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import FilterBar from '../chrome/FilterBar.svelte';
 	import TimelineHeader from './timeline/TimelineHeader.svelte';
 	import TimelineRail from './timeline/TimelineRail.svelte';
@@ -12,7 +11,7 @@
 	import { toast } from 'svelte-sonner';
 	import { mobile } from '$lib/stores';
 	import {
-		boardFilter, filteredTasks, currentWorkstream, timelineZoom, addTask, editTask, openTask
+		boardFilter, filteredTasks, currentWorkstream, timelineZoom, openTaskCreate, editTask, openTask
 	} from '../lib/store';
 	import {
 		timelineItems, computeWindow, todayDay, todayLineX, dayToX, isWeekend, dayToTs,
@@ -59,28 +58,6 @@
 			scrolledFor = key;
 			now = Date.now();
 			tick().then(scrollToToday);
-		}
-	}
-
-	// Toolbar quick-add: schedules for today so the task appears on the chart.
-	let creatingNew = false;
-	let newTitle = '';
-	async function submitNew() {
-		const ws = $currentWorkstream;
-		const title = newTitle.trim();
-		if (!title || !ws) return;
-		newTitle = '';
-		creatingNew = false;
-		const ts = dayToTs(todayDay(Date.now()));
-		try {
-			await addTask(ws.id, { title, start_date: ts, due_date: ts });
-		} catch {
-			toast.error('Failed to create task');
-			// Give the title back — unless the user already started another entry.
-			if (!creatingNew && !newTitle) {
-				creatingNew = true;
-				newTitle = title;
-			}
 		}
 	}
 
@@ -147,25 +124,13 @@
 		}
 	}
 
-	// Per-chart quick add (bottom row).
-	let addingRow = false;
-	let rowTitle = '';
-	async function submitRow() {
+	// Toolbar and bottom-row "Add task" affordances both schedule for today so
+	// the new task appears on the chart immediately.
+	function openTaskCreateToday() {
 		const ws = $currentWorkstream;
-		const title = rowTitle.trim();
-		if (!title || !ws) return;
-		rowTitle = '';
-		addingRow = false;
+		if (!ws) return;
 		const ts = dayToTs(todayDay(Date.now()));
-		try {
-			await addTask(ws.id, { title, start_date: ts, due_date: ts });
-		} catch {
-			toast.error('Failed to create task');
-			if (!addingRow && !rowTitle) {
-				addingRow = true;
-				rowTitle = title;
-			}
-		}
+		openTaskCreate(ws.id, { start_date: ts, due_date: ts });
 	}
 </script>
 
@@ -187,20 +152,9 @@
 			size="sm"
 			onclick={() => { now = Date.now(); scrollToToday(); }}
 		>Today</Button>
-		{#if creatingNew}
-			<Input
-				class="h-8 w-48"
-				placeholder="Task title…"
-				aria-label="Task title"
-				bind:value={newTitle}
-				onkeydown={(e) => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { creatingNew = false; newTitle = ''; } }}
-				autofocus
-			/>
-		{:else}
-			<Button size="sm" onclick={() => { creatingNew = true; newTitle = ''; }}>
-				<Icon name="plus" size={15} /> Add new
-			</Button>
-		{/if}
+		<Button size="sm" onclick={openTaskCreateToday}>
+			<Icon name="plus" size={15} /> Add new
+		</Button>
 	</FilterBar>
 
 	{#if $mobile && unscheduled.length}
@@ -299,7 +253,7 @@
 								title="No tasks on the timeline"
 								sub="Plan your work by creating a task — it lands on today."
 								ctaLabel="Add task"
-								onCta={() => { addingRow = true; rowTitle = ''; }}
+								onCta={openTaskCreateToday}
 							/>
 						{/if}
 					</div>
@@ -308,20 +262,9 @@
 				<!-- Add-task row -->
 				<div class="flex-none flex" style="height: {rowH}px;">
 					<div class="sticky left-0 z-20 flex-none bg-white dark:bg-gray-950 flex items-center px-3" style="width: {railW}px;">
-						{#if addingRow}
-							<!-- svelte-ignore a11y_autofocus -->
-							<input
-								class="text-sm px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent w-full"
-								placeholder="Task title…"
-								bind:value={rowTitle}
-								onkeydown={(e) => { if (e.key === 'Enter') submitRow(); if (e.key === 'Escape') { addingRow = false; rowTitle = ''; } }}
-								autofocus
-							/>
-						{:else}
-							<button class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:opacity-80" onclick={() => { addingRow = true; rowTitle = ''; }}>
-								<Icon name="plus" size={15} /> Add task
-							</button>
-						{/if}
+						<button class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:opacity-80" onclick={openTaskCreateToday}>
+							<Icon name="plus" size={15} /> Add task
+						</button>
 					</div>
 				</div>
 
