@@ -13,7 +13,7 @@
 	import { STATUS_ORDER, STATUS_LABEL, PRIORITY_ORDER, type TaskStatus, type TaskPriority } from '../lib/types';
 	import { STATUS_COLOR, statusShape } from '../lib/colors';
 	import { toggleAssignee } from '../lib/assignees';
-	import { openModal, addTask, directory, labels } from '../lib/store';
+	import { openModal, addTask, directory, labels, createLabel } from '../lib/store';
 
 	$: req = $openModal?.kind === 'task' ? $openModal : null;
 
@@ -42,6 +42,8 @@
 			start = req.prefill?.start_date ? toDateInput(req.prefill.start_date) : '';
 			due = req.prefill?.due_date ? toDateInput(req.prefill.due_date) : '';
 			labelIds = [];
+			labelQuery = '';
+			creatingLabel = false;
 			requireAttachment = false;
 			busy = false;
 			err = '';
@@ -53,7 +55,6 @@
 	}
 
 	$: members = Object.entries($directory).map(([id, u]) => ({ id, name: u.name }));
-	$: labelById = Object.fromEntries($labels.map((l) => [l.id, l]));
 	$: assigneeSummary =
 		assigneeIds.length === 0 ? '' :
 		assigneeIds.length === 1 ? ($directory[assigneeIds[0]]?.name ?? '1 assignee') :
@@ -62,6 +63,39 @@
 
 	function close() {
 		openModal.set(null);
+	}
+
+	// Tag picker — mirrors the task-detail Tags row (search + create-new), but
+	// toggles the local labelIds selection instead of patching a task.
+	let labelQuery = '';
+	let creatingLabel = false;
+	$: filteredLabels = $labels.filter((l) =>
+		l.name.toLowerCase().includes(labelQuery.trim().toLowerCase())
+	);
+	function toggleLabel(id: string) {
+		labelIds = labelIds.includes(id) ? labelIds.filter((x) => x !== id) : [...labelIds, id];
+	}
+	async function createTagFromQuery() {
+		const name = labelQuery.trim();
+		if (!name || creatingLabel) return;
+		creatingLabel = true;
+		try {
+			const created = await createLabel(name);
+			if (created) {
+				toggleLabel(created.id);
+				labelQuery = '';
+			}
+		} finally {
+			creatingLabel = false;
+		}
+	}
+	function onLabelSearchKey(e: KeyboardEvent) {
+		// Block the menu's typeahead from stealing focus/keystrokes from the input.
+		e.stopPropagation();
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			createTagFromQuery();
+		}
 	}
 
 	async function submit() {
@@ -197,36 +231,59 @@
 				</div>
 			</div>
 
-			<!-- Labels (optional) -->
-			{#if $labels.length}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger
-						class="w-full inline-flex items-center gap-2 rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-900"
-					>
-						<Icon name="tag" size={14} />
-						{#if labelIds.length}
-							<span>{labelIds.map((id) => labelById[id]?.name).filter(Boolean).join(', ')}</span>
-						{:else}
-							<span class="text-gray-400">Labels (optional)</span>
-						{/if}
-						<span class="flex-1"></span>
-						<Icon name="chevron-down" size={13} />
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-64 max-h-64 overflow-y-auto">
-						{#each $labels as l (l.id)}
-							<DropdownMenu.CheckboxItem
-								checked={labelIds.includes(l.id)}
-								closeOnSelect={false}
-								onCheckedChange={(v) => (labelIds = v ? [...labelIds, l.id] : labelIds.filter((x) => x !== l.id))}
+			<!-- Tags (optional) — same picker as the task-detail Tags row, incl. create-new -->
+			<div class="space-y-1">
+				<Label class="text-xs text-gray-500">Tags</Label>
+				<div class="flex flex-wrap items-center gap-1.5">
+					{#each $labels.filter((l) => labelIds.includes(l.id)) as l (l.id)}
+						<Pills label={l} size="md" />
+					{/each}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger class="inline-flex items-center justify-center gap-1 text-xs text-gray-400 rounded-md border border-dashed border-gray-300 dark:border-gray-700 hover:border-primary hover:text-primary {labelIds.length ? 'h-6 w-6 p-0' : 'h-6 px-1.5'}">
+							<Icon name="plus" size={12} />{#if !labelIds.length}<span>Add tags</span>{/if}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="w-64 p-0">
+							<!-- Sticky top: search + always-present create button -->
+							<div class="p-1.5 border-b border-gray-100 dark:border-gray-800">
+								<input
+									type="text"
+									placeholder="Search or create a tag…"
+									class="w-full text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1 outline-none focus:border-primary"
+									bind:value={labelQuery}
+									onkeydown={onLabelSearchKey}
+								/>
+							</div>
+							<button
+								type="button"
+								disabled={!labelQuery.trim() || creatingLabel}
+								class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+								onclick={createTagFromQuery}
 							>
-								<span class="inline-flex items-center gap-2">
-									<span class="w-2 h-2 rounded-full" style="background:{l.color}"></span>{l.name}
+								<Icon name="plus" size={14} />
+								<span class="truncate">
+									{#if labelQuery.trim()}Create “{labelQuery.trim()}”{:else}Type a name to create a tag{/if}
 								</span>
-							</DropdownMenu.CheckboxItem>
-						{/each}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			{/if}
+							</button>
+							<div class="max-h-56 overflow-y-auto border-t border-gray-100 dark:border-gray-800 py-1">
+								{#each filteredLabels as l (l.id)}
+									<DropdownMenu.Item closeOnSelect={false} onSelect={() => toggleLabel(l.id)}>
+										<span class="inline-flex items-center gap-2">
+											<span class="w-3.5 inline-flex">{#if labelIds.includes(l.id)}<Icon name="check" size={13} />{/if}</span>
+											<span class="w-2 h-2 rounded-full" style="background:{l.color}"></span>
+											{l.name}
+										</span>
+									</DropdownMenu.Item>
+								{/each}
+								{#if $labels.length && !filteredLabels.length}
+									<DropdownMenu.Item disabled>No matching tags</DropdownMenu.Item>
+								{:else if !$labels.length}
+									<DropdownMenu.Item disabled>No tags yet</DropdownMenu.Item>
+								{/if}
+							</div>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
+			</div>
 
 			<!-- Require attachment to complete -->
 			<label class="flex items-start gap-2.5 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2.5 cursor-pointer">

@@ -1,20 +1,25 @@
 <script lang="ts">
 	import Icon from '../../ui/Icon.svelte';
 	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
 	import {
 		attachments,
 		removeAttachment,
 		uploadFiles,
 		roles,
 		currentTeam,
-		selectedTaskId
+		selectedTaskId,
+		selectedTask,
+		editTask
 	} from '../../lib/store';
 	import { user } from '$lib/stores';
-	import { canDeleteAttachment } from '../../lib/roles';
+	import { canDeleteAttachment, canToggleAttachmentRequired } from '../../lib/roles';
 	import * as api from '../../lib/api';
 
 	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
 	$: files = $attachments.filter((a) => !a.comment_id);
+	$: t = $selectedTask;
+	$: canToggleRequired = !!t && canToggleAttachmentRequired(t, $user);
 
 	const isImage = (ct?: string | null) => !!ct && ct.startsWith('image/');
 	const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -45,6 +50,24 @@
 	<div class="flex items-center justify-between mb-2">
 		<div class="flex items-center gap-2 text-[13px] font-medium text-gray-600 dark:text-gray-300">
 			<Icon name="paperclip" size={15} /> Attachments ({files.length})
+			<!-- Attachment requirement lives on this row (creator/app-admin may toggle; others see state) -->
+			{#if t}
+				{#if canToggleRequired}
+					<button
+						class="inline-flex items-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-900"
+						title="Require an attachment before this task can be completed"
+						onclick={() => editTask(t.id, { attachment_required: !t.attachment_required })}
+					>
+						{#if t.attachment_required}
+							<Badge variant="secondary" class="text-amber-700 dark:text-amber-400">Required to complete</Badge>
+						{:else}
+							<span class="text-xs font-normal text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Not required</span>
+						{/if}
+					</button>
+				{:else if t.attachment_required}
+					<Badge variant="secondary" class="text-amber-700 dark:text-amber-400">Required to complete</Badge>
+				{/if}
+			{/if}
 		</div>
 		{#if files.length}
 			<button
