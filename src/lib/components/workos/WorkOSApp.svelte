@@ -16,6 +16,7 @@
 	import InboxView from './views/InboxView.svelte';
 	import MyWorkView from './views/MyWorkView.svelte';
 	import ModalHost from './views/ModalHost.svelte';
+	import TaskCreateDialog from './views/TaskCreateDialog.svelte';
 	import TeamSettingsDialog from './chrome/access/TeamSettingsDialog.svelte';
 	import WorkspaceSettingsDialog from './chrome/access/WorkspaceSettingsDialog.svelte';
 	import { canUseAdmin } from './lib/roles';
@@ -88,6 +89,7 @@
 		<NavDrawer />
 	{/if}
 	<ModalHost />
+	<TaskCreateDialog />
 	<TeamSettingsDialog />
 	<WorkspaceSettingsDialog />
 </div>
