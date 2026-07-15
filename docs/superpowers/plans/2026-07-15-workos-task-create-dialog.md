@@ -14,7 +14,7 @@
 
 - Branch: `osool`, work directly (no worktree unless executor chooses one).
 - **NEVER use a haiku-model subagent for Svelte file edits** (cp1252 corruption risk — standing project rule).
-- Backend tests: `cd C:\Projects\open-webui` then `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q` (must use the repo `.venv` python).
+- Backend tests: `cd C:\Projects\open-webui` then `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q` (must use the repo `backend.venv` python).
 - Frontend tests: `npm run test:frontend -- --run src/lib/components/workos`.
 - Type check: `npm run check` (run in Tasks 6 and 8; slow).
 - Do NOT start a Vite dev server (standing rule: ask the user first). No Docker rebuild for frontend changes.
@@ -54,7 +54,7 @@ async def test_attachment_required_round_trips():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_models_task.py::test_attachment_required_round_trips -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_models_task.py::test_attachment_required_round_trips -q`
 Expected: FAIL — `TypeError: ... unexpected keyword argument 'attachment_required'`
 
 - [ ] **Step 3: Implement**
@@ -130,7 +130,7 @@ def downgrade() -> None:
 
 - [ ] **Step 4: Run tests**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_models_task.py -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_models_task.py -q`
 Expected: PASS (all)
 
 - [ ] **Step 5: Commit**
@@ -213,7 +213,7 @@ async def test_create_carries_attachment_required(monkeypatch):
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_router_task_rules.py -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_router_task_rules.py -q`
 Expected: FAIL (creates succeed without assignees / `attachment_required` missing)
 
 - [ ] **Step 3: Implement router changes**
@@ -259,12 +259,12 @@ with:
 
 - [ ] **Step 4: Run new tests**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_router_task_rules.py -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_router_task_rules.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Sweep existing tests (suite must stay green)**
 
-Run the full suite to enumerate breakage: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
+Run the full suite to enumerate breakage: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
 Every failing test posts `/workstreams/{...}/tasks` without assignees (~31 sites across 12 files, found via `grep -rn "workstreams/.*}/tasks" backend/open_webui/test/workos`). Fix pattern — add the **creating user's own id** as assignee:
 
 - `test_router_task.py::_stream` callers: change each `json={'title': ...}` to `json={'title': ..., 'assignee_ids': ['u1']}` (creator in those tests is U1). In `test_non_member_cannot_create_task` the U2 request must keep failing with **404** — add `'assignee_ids': ['u2']` so the assertion still tests visibility, not the new rule.
@@ -283,7 +283,7 @@ async def test_create_task_without_assignees_rejected(monkeypatch):
 - Notification-counting tests: assigning the **actor** to their own task fires no notification (actor excluded), so counts are unchanged — verify, don't assume.
 - `test_seeder.py`: seeder writes through the DAO, not the router — should be untouched; if it fails, the failure is elsewhere.
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
 Expected: ALL PASS
 
 - [ ] **Step 6: Commit**
@@ -452,7 +452,7 @@ async def test_mixed_patch_fails_atomically(monkeypatch):
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_router_attachment_required.py -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos\test_router_attachment_required.py -q`
 Expected: FAIL (toggles succeed for everyone, done never blocked)
 
 - [ ] **Step 3: Implement**
@@ -483,7 +483,7 @@ Expected: FAIL (toggles succeed for everyone, done never blocked)
 
 - [ ] **Step 4: Run tests**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
 Expected: ALL PASS
 
 - [ ] **Step 5: Sync the access-control reference doc**
@@ -1153,7 +1153,7 @@ git commit -m "feat(workos): attachment-required affordances — detail toggle, 
 
 - [ ] **Step 1: Backend suite**
 
-Run: `.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
+Run: `backend.venv\Scripts\python.exe -m pytest backend\open_webui\test\workos -q`
 Expected: ALL PASS.
 
 - [ ] **Step 2: Frontend suite + types**
