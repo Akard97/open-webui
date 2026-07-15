@@ -877,6 +877,7 @@ _ACTIVITY_FIELDS = {
     'due_date': 'due_changed',
     'title': 'title_changed',
     'description': 'description_changed',
+    'attachment_required': 'attachment_required_changed',
 }
 
 

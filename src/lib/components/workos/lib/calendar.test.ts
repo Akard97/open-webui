@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dayKey, sameDay, isToday, monthGrid, weekDays, agendaDays } from './calendar';
+import { dayKey, sameDay, isToday, monthGrid, weekDays, agendaDays, utcDayStart } from './calendar';
 import type { Task } from './types';
 
 describe('dayKey / sameDay / isToday', () => {
@@ -14,6 +14,21 @@ describe('dayKey / sameDay / isToday', () => {
 		const now = new Date(2026, 5, 29, 9).getTime();
 		expect(isToday(new Date(2026, 5, 29, 23).getTime(), now)).toBe(true);
 		expect(isToday(new Date(2026, 5, 28, 23).getTime(), now)).toBe(false);
+	});
+});
+
+describe('utcDayStart', () => {
+	it('returns UTC midnight of the same calendar y/m/d regardless of wall-clock time', () => {
+		const morning = new Date(2026, 5, 29, 0, 15);
+		const evening = new Date(2026, 5, 29, 23, 45);
+		expect(utcDayStart(morning)).toBe(Date.UTC(2026, 5, 29));
+		expect(utcDayStart(evening)).toBe(Date.UTC(2026, 5, 29));
+	});
+	it('round-trips through the create dialog\'s toISOString prefill to the same y/m/d', () => {
+		// Mirrors TaskCreateDialog's toDateInput: new Date(ts).toISOString().slice(0, 10).
+		const clicked = new Date(2026, 0, 1, 23, 0); // late local New Year's Day
+		const iso = new Date(utcDayStart(clicked)).toISOString().slice(0, 10);
+		expect(iso).toBe('2026-01-01');
 	});
 });
 

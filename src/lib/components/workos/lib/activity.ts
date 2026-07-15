@@ -28,6 +28,10 @@ export function activityLabel(a: Activity, nameOf: NameOf): string {
 			return `${who} commented`;
 		case 'attachment_added':
 			return `${who} attached ${d.name ?? 'a file'}`;
+		case 'attachment_required_changed':
+			return d.to
+				? `${who} made attachment required to complete`
+				: `${who} removed the attachment requirement`;
 		default:
 			return `${who} updated this task`;
 	}

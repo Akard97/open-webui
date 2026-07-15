@@ -38,3 +38,14 @@ describe('activityLabel — other types still work', () => {
 		expect(s).toBe('Lara changed status Todo → In Progress');
 	});
 });
+
+describe('activityLabel — attachment_required_changed', () => {
+	it('reports the flag being turned on', () => {
+		const s = activityLabel(act({ type: 'attachment_required_changed', data: { from: false, to: true } }), nameOf);
+		expect(s).toBe('Lara made attachment required to complete');
+	});
+	it('reports the flag being turned off', () => {
+		const s = activityLabel(act({ type: 'attachment_required_changed', data: { from: true, to: false } }), nameOf);
+		expect(s).toBe('Lara removed the attachment requirement');
+	});
+});

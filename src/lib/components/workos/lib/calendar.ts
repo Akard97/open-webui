@@ -11,6 +11,14 @@ export function sameDay(a: number, b: number): boolean {
 	return dayKey(a) === dayKey(b);
 }
 
+// UTC midnight (ms) of a local Date's calendar day. WorkOS due/start dates are
+// stored as UTC-midnight epochs (see lib/timeline.ts dayToTs/todayDay) and the
+// create dialog renders prefills via toISOString() (UTC) — use this, not
+// dayKey, when handing a clicked calendar cell's date to openTaskCreate.
+export function utcDayStart(date: Date): number {
+	return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 export function isToday(ms: number, now: number): boolean {
 	return dayKey(ms) === dayKey(now);
 }

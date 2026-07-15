@@ -135,7 +135,8 @@ export type ActivityType =
 	| 'created' | 'status_changed' | 'assignee_changed' | 'priority_changed'
 	| 'due_changed' | 'completed' | 'reopened' | 'comment_added'
 	| 'attachment_added' | 'title_changed' | 'description_changed'
-	| 'start_changed' | 'subtask_created' | 'subtask_completed' | 'subtask_reopened';
+	| 'start_changed' | 'subtask_created' | 'subtask_completed' | 'subtask_reopened'
+	| 'attachment_required_changed';
 
 export interface Activity {
 	id: string;

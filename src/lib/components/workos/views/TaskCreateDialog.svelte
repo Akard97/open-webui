@@ -66,10 +66,14 @@
 
 	async function submit() {
 		if (!req || !canSubmit) return;
+		// Snapshot which dialog session this submit belongs to — if Cancel/Escape closes
+		// this dialog and a new one opens before the request resolves, lastReq moves on
+		// and the continuation below must not close/paint-error into the new session.
+		const myReq = req;
 		busy = true;
 		err = '';
 		try {
-			await addTask(req.workstreamId, {
+			await addTask(myReq.workstreamId, {
 				title: title.trim(),
 				assignee_ids: assigneeIds,
 				description: description.trim() || undefined,
@@ -80,11 +84,13 @@
 				labels: labelIds.length ? labelIds : undefined,
 				attachment_required: requireAttachment
 			});
+			if (lastReq !== myReq) return; // a new dialog session opened while this create was in flight
 			close();
 		} catch (e: any) {
+			if (lastReq !== myReq) return; // stale session — don't paint an error into the new dialog
 			err = typeof e === 'string' ? e : (e?.detail ?? 'Could not create the task.');
 		} finally {
-			busy = false;
+			if (lastReq === myReq) busy = false;
 		}
 	}
 </script>
@@ -237,7 +243,7 @@
 		</div>
 
 		<Dialog.Footer>
-			<Button variant="outline" size="sm" onclick={close}>Cancel</Button>
+			<Button variant="outline" size="sm" onclick={close} disabled={busy}>Cancel</Button>
 			<Button size="sm" onclick={submit} disabled={!canSubmit}>Create task</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

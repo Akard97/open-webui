@@ -355,6 +355,34 @@ describe('create dialog store plumbing', () => {
 		expect(get(tasks)[0].status).toBe('todo'); // rolled back
 	});
 
+	it('editTask rolls back and swallows the last-assignee-cleared error, with a toast', async () => {
+		const api = await import('./api');
+		const { editTask } = await import('./store');
+		tasks.set([mk({ id: 'a', assignee_ids: ['u2'] })]);
+		(api.updateTask as any).mockRejectedValueOnce('Task needs at least one assignee.');
+		await editTask('a', { assignee_ids: [] }); // must not throw
+		expect(get(tasks)[0].assignee_ids).toEqual(['u2']); // rolled back
+	});
+
+	it('addTask drops the temp row instead of duplicating when a realtime event beats the create response', async () => {
+		const api = await import('./api');
+		const { addTask } = await import('./store');
+		let resolveCreate!: (t: Task) => void;
+		(api.createTask as any).mockImplementationOnce(
+			() => new Promise<Task>((resolve) => { resolveCreate = resolve; })
+		);
+		const promise = addTask('w1', { title: 'New' });
+		// Simulate the realtime workos:task.created event landing before api.createTask resolves.
+		const serverTask = mk({ id: 'srv-1', title: 'New' });
+		tasks.update((list) => [...list, serverTask]);
+		resolveCreate(serverTask);
+		await promise;
+		const rows = get(tasks).filter((t) => t.title === 'New');
+		expect(rows).toHaveLength(1);
+		expect(rows[0].id).toBe('srv-1');
+		expect(get(tasks).some((t) => t.id.startsWith('temp-'))).toBe(false);
+	});
+
 	it('openTaskCreate opens the task modal with prefill', async () => {
 		const { openTaskCreate, openModal } = await import('./store');
 		openTaskCreate('w1', { status: 'todo' });

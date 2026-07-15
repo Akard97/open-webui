@@ -3,7 +3,7 @@
 	import CalChip from './CalChip.svelte';
 	import type { Task } from '../../lib/types';
 	import { openTaskCreate, currentWorkstream } from '../../lib/store';
-	import { dayKey } from '../../lib/calendar';
+	import { dayKey, utcDayStart } from '../../lib/calendar';
 
 	export let date: Date;
 	export let dimmed = false;
@@ -47,7 +47,7 @@
 			class="absolute bottom-1 right-1 w-[22px] h-[22px] rounded-md inline-flex items-center justify-center text-primary bg-white dark:bg-gray-900 ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm hover:bg-primary hover:text-primary-foreground hover:ring-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
 			title="Add task on this day"
 			aria-label="Add task on {date.toDateString()}"
-			onclick={() => { const ws = $currentWorkstream; if (ws) openTaskCreate(ws.id, { due_date: dayKey(date.getTime()) }); }}
+			onclick={() => { const ws = $currentWorkstream; if (ws) openTaskCreate(ws.id, { due_date: utcDayStart(date) }); }}
 		><Icon name="plus" size={14} /></button>
 	</div>
 </div>

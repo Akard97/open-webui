@@ -264,7 +264,14 @@ export async function addTask(
 	tasks.update((list) => [...list, optimistic]);
 	try {
 		const saved = await api.createTask(token(), workstreamId, fields);
-		tasks.update((list) => list.map((t) => (t.id === tempId ? saved : t)));
+		tasks.update((list) =>
+			// A realtime task.created event may have already inserted the saved
+			// row while this request was in flight — drop the temp row rather
+			// than mapping it, so we don't end up with a duplicate id.
+			list.some((t) => t.id === saved.id)
+				? list.filter((t) => t.id !== tempId)
+				: list.map((t) => (t.id === tempId ? saved : t))
+		);
 	} catch (e) {
 		tasks.update((list) => list.filter((t) => t.id !== tempId)); // rollback
 		throw e;
@@ -283,6 +290,10 @@ export async function editTask(id: string, fields: Partial<Task>): Promise<void>
 		if (before) tasks.update((list) => list.map((t) => (t.id === id ? before : t)));
 		if (e === 'ATTACHMENT_REQUIRED') {
 			toast.error('Attach a file before completing this task');
+			return; // handled: rolled back + user informed
+		}
+		if (e === 'Task needs at least one assignee.') {
+			toast.error('A task needs at least one assignee');
 			return; // handled: rolled back + user informed
 		}
 		throw e;

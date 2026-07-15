@@ -123,6 +123,18 @@ async def test_resending_same_flag_value_is_not_gated(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_toggle_records_activity(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _setup(c, flag=False)
+        r = await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'attachment_required': True})
+        assert r.status_code == 200, r.text
+        acts = (await c.get(f"/api/v1/workos/tasks/{t['id']}/activity")).json()
+        changed = [a for a in acts if a['type'] == 'attachment_required_changed']
+        assert changed, 'expected an attachment_required_changed activity'
+        assert changed[0]['data'] == {'from': False, 'to': True}
+
+
+@pytest.mark.asyncio
 async def test_mixed_patch_fails_atomically(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         _, _, _, t = await _setup(c, flag=False)
