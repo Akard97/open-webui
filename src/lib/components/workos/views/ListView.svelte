@@ -97,6 +97,9 @@
 									<span class="inline-flex items-center gap-2.5 min-w-0">
 										<StatusCell {task} />
 										<button class="text-sm font-medium truncate text-left hover:text-primary" onclick={() => openTask(task.id)}>{task.title}</button>
+										{#if task.attachment_required}
+											<span class="flex-none text-amber-600 dark:text-amber-500" title="Attachment required to complete"><Icon name="paperclip" size={13} /></span>
+										{/if}
 									</span>
 
 									{#if $listColumns.assignee}
@@ -167,6 +170,9 @@
 												<span class="flex-none {isOverdue(task.due_date, task.status, Date.now()) ? 'text-red-600 dark:text-red-400 font-medium' : ''}">{formatDateShort(task.due_date)}</span>
 											{/if}
 											{#if task.priority}<Pills priority={task.priority} />{/if}
+											{#if task.attachment_required}
+												<span class="flex-none text-amber-600 dark:text-amber-500" title="Attachment required to complete"><Icon name="paperclip" size={13} /></span>
+											{/if}
 										</span>
 									</span>
 									{#if task.assignee_ids?.length}

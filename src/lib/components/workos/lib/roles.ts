@@ -66,3 +66,12 @@ export function canEditSubtask(
 ): boolean {
 	return subtask.created_by_id === userId || canEditTask(task, userId, teamRole, workspaceRole);
 }
+
+// Mirrors the server capability 'task.flag.attachment_required': app-admin → creator.
+export function canToggleAttachmentRequired(
+	task: Task,
+	user: { id?: string; role?: string } | null | undefined
+): boolean {
+	if (!user) return false;
+	return user.role === 'admin' || (task.created_by_id != null && task.created_by_id === user.id);
+}

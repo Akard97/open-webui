@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	canManageTeam, canManageMembers, canCreateWorkspace, canManageWorkspace, canDeleteTask, canUseAdmin,
-	canEditTask, canEditSubtask
+	canEditTask, canEditSubtask, canToggleAttachmentRequired
 } from './roles';
 import type { Task } from './types';
 
@@ -47,5 +47,22 @@ describe('roles', () => {
 	it('subtask editing: subtask author or task editor', () => {
 		expect(canEditSubtask({ created_by_id: 'u1' }, task({ created_by_id: 'u9' }), 'u1', 'member', undefined)).toBe(true);
 		expect(canEditSubtask({ created_by_id: 'u9' }, task({ created_by_id: 'u9' }), 'u1', 'member', undefined)).toBe(false);
+	});
+});
+
+describe('canToggleAttachmentRequired', () => {
+	it('creator may toggle', () => {
+		expect(canToggleAttachmentRequired(task({ created_by_id: 'u1' }), { id: 'u1', role: 'user' })).toBe(true);
+	});
+	it('app admin may toggle', () => {
+		expect(canToggleAttachmentRequired(task({ created_by_id: 'u1' }), { id: 'zz', role: 'admin' })).toBe(true);
+	});
+	it('assignee / other members may not', () => {
+		expect(canToggleAttachmentRequired(task({ created_by_id: 'u1' }), { id: 'u2', role: 'user' })).toBe(false);
+	});
+	it('legacy task without creator: admin only', () => {
+		const legacy = task({ created_by_id: null });
+		expect(canToggleAttachmentRequired(legacy, { id: 'u1', role: 'user' })).toBe(false);
+		expect(canToggleAttachmentRequired(legacy, { id: 'u1', role: 'admin' })).toBe(true);
 	});
 });

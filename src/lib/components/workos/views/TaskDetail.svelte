@@ -19,12 +19,16 @@
 		STATUS_ORDER, STATUS_LABEL, PRIORITY_ORDER, type TaskStatus, type TaskPriority
 	} from '../lib/types';
 	import { formatDateLong } from '../lib/format';
-	import { selectedTask, closeTask, editTask, labels, comments, activity, createLabel } from '../lib/store';
+	import { selectedTask, closeTask, editTask, labels, comments, activity, createLabel, attachments } from '../lib/store';
 	import { STATUS_COLOR, statusShape } from '../lib/colors';
+	import { user } from '$lib/stores';
+	import { canToggleAttachmentRequired } from '../lib/roles';
 
 	$: t = $selectedTask;
 	$: sortedComments = [...$comments].sort((a, b) => a.created_at - b.created_at);
 	$: sortedActivity = [...$activity].sort((a, b) => a.created_at - b.created_at);
+	$: needsAttachment = !!t?.attachment_required && $attachments.length === 0;
+	$: canToggleRequired = !!t && canToggleAttachmentRequired(t, $user);
 
 	let showDetails = false;
 	let editingTitle = false;
@@ -274,6 +278,11 @@
 										<DropdownMenu.Item onSelect={() => editTask(t.id, { status: s })}>
 											<span class="inline-flex items-center gap-2">
 												<StatusDot shape={statusShape(s)} color={STATUS_COLOR[s]} /> {STATUS_LABEL[s]}
+												{#if s === 'done' && needsAttachment}
+													<span class="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-500">
+														<Icon name="paperclip" size={12} /> attachment required
+													</span>
+												{/if}
 											</span>
 										</DropdownMenu.Item>
 									{/each}
@@ -358,6 +367,26 @@
 						<!-- Assignee -->
 						<PropertyRow icon="user" label="Assignee">
 							<AssigneeField task={t} />
+						</PropertyRow>
+
+						<!-- Attachment requirement (creator/app-admin may toggle; others see state) -->
+						<PropertyRow icon="paperclip" label="Attachment">
+							{#if canToggleRequired}
+								<button
+									class="inline-flex items-center gap-2 rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-900"
+									onclick={() => editTask(t.id, { attachment_required: !t.attachment_required })}
+								>
+									{#if t.attachment_required}
+										<Badge variant="secondary" class="text-amber-700 dark:text-amber-400">Required to complete</Badge>
+									{:else}
+										<span class="text-gray-400">Not required</span>
+									{/if}
+								</button>
+							{:else if t.attachment_required}
+								<Badge variant="secondary" class="text-amber-700 dark:text-amber-400">Required to complete</Badge>
+							{:else}
+								<span class="text-gray-400">Not required</span>
+							{/if}
 						</PropertyRow>
 
 						<!-- Tags -->

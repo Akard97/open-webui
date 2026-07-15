@@ -136,6 +136,11 @@
 			<span class="text-gray-400">Unassigned</span>
 		{/if}
 		<div class="flex-1"></div>
+		{#if task.attachment_required}
+			<span class="flex-none text-amber-600 dark:text-amber-500" title="Attachment required to complete">
+				<Icon name="paperclip" size={13} />
+			</span>
+		{/if}
 		{#if (task.subtask_total ?? 0) > 0}
 			<span class="text-gray-500 dark:text-gray-400 flex-none">{task.subtask_completed ?? 0}/{task.subtask_total ?? 0} subtasks</span>
 		{/if}
