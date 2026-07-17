@@ -159,10 +159,11 @@
 			return;
 		}
 		const target = level;
+		const fnId = functionId;
 		try {
 			let base: unknown = valves;
 			try {
-				const fresh = await getUserValvesById(localStorage.token, functionId);
+				const fresh = await getUserValvesById(localStorage.token, fnId);
 				if (fresh && typeof fresh === 'object' && !Array.isArray(fresh)) {
 					base = fresh;
 				}
@@ -170,7 +171,7 @@
 				console.warn('EffortMenu: refresh before write failed, using snapshot', e);
 			}
 			const updated = mergeEffort(base, target);
-			const res = await updateUserValvesById(localStorage.token, functionId, updated);
+			const res = await updateUserValvesById(localStorage.token, fnId, updated);
 			if (!res) {
 				throw new Error('valve update failed');
 			}
