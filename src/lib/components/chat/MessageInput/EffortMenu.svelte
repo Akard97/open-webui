@@ -160,8 +160,20 @@
 		}
 		const target = level;
 		try {
-			const updated = mergeEffort(valves, target);
-			await updateUserValvesById(localStorage.token, functionId, updated);
+			let base: unknown = valves;
+			try {
+				const fresh = await getUserValvesById(localStorage.token, functionId);
+				if (fresh && typeof fresh === 'object' && !Array.isArray(fresh)) {
+					base = fresh;
+				}
+			} catch (e) {
+				console.warn('EffortMenu: refresh before write failed, using snapshot', e);
+			}
+			const updated = mergeEffort(base, target);
+			const res = await updateUserValvesById(localStorage.token, functionId, updated);
+			if (!res) {
+				throw new Error('valve update failed');
+			}
 			valves = updated;
 			confirmedLevel = target;
 		} catch (e) {
@@ -303,7 +315,7 @@
 				aria-valuemax={EFFORT_LEVELS.length - 1}
 				aria-valuenow={levelIndex(level)}
 				aria-valuetext={levelLabel(level)}
-				class="relative h-[26px] rounded-full bg-gray-100 dark:bg-gray-900 cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-700"
+				class="relative h-[26px] rounded-full bg-gray-100 dark:bg-gray-900 cursor-pointer touch-none focus:outline-hidden focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-700"
 				on:pointerdown={onTrackPointerDown}
 				on:keydown={onTrackKeydown}
 			>
