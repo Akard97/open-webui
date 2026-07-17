@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Effort Switcher — Mockup v1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #ececf1;
+    color: #1a1a1a;
+    padding: 40px 24px 120px;
+  }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: #666; font-size: 14px; margin-bottom: 36px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin: 44px 0 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; max-width: 1200px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .stage {
+    border-radius: 18px;
+    padding: 90px 28px 28px;
+    position: relative;
+    overflow: visible;
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .stage.light { background: #ffffff; border: 1px solid #e2e2e6; }
+  .stage.dark  { background: #101014; border: 1px solid #26262c; }
+  .stage-label {
+    position: absolute; top: 14px; left: 18px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .stage.light .stage-label { color: #9a9aa2; }
+  .stage.dark  .stage-label { color: #5a5a64; }
+
+  /* ===== composer replica ===== */
+  .composer {
+    border-radius: 24px;
+    padding: 14px 16px 10px;
+    position: relative;
+  }
+  .stage.light .composer { background: #f6f6f8; border: 1px solid #e4e4e8; }
+  .stage.dark  .composer { background: #1b1b21; border: 1px solid #2e2e36; }
+  .composer .ph {
+    font-size: 15px; padding: 2px 4px 16px;
+  }
+  .stage.light .ph { color: #9a9aa2; }
+  .stage.dark  .ph { color: #5f5f6a; }
+  .row { display: flex; align-items: center; gap: 6px; }
+  .row .spacer { flex: 1; }
+
+  .iconbtn {
+    width: 32px; height: 32px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: transparent; cursor: pointer;
+  }
+  .stage.light .iconbtn { color: #4a4a52; }
+  .stage.dark  .iconbtn { color: #c9c9d2; }
+  .stage.light .iconbtn:hover { background: #ececf0; }
+  .stage.dark  .iconbtn:hover { background: #26262e; }
+  .iconbtn svg { width: 20px; height: 20px; }
+
+  .vsep { width: 1px; height: 16px; margin: 0 4px; }
+  .stage.light .vsep { background: #e0e0e4; }
+  .stage.dark  .vsep { background: #32323a; }
+
+  .send {
+    width: 34px; height: 34px; border-radius: 999px; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stage.light .send { background: #1a1a1e; color: #fff; }
+  .stage.dark  .send { background: #ececf1; color: #111; }
+  .send svg { width: 16px; height: 16px; }
+
+  /* ===== effort chip ===== */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 11px 0 9px;
+    border-radius: 999px; border: 1px solid transparent;
+    font-size: 12.5px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    background: transparent;
+  }
+  .chip svg { width: 15px; height: 15px; }
+  .chip .lvl { letter-spacing: 0.01em; }
+
+  /* muted default state */
+  .stage.light .chip.state-default { color: #6b6b74; }
+  .stage.dark  .chip.state-default { color: #9b9ba6; }
+  .stage.light .chip.state-default:hover { background: #ececf0; }
+  .stage.dark  .chip.state-default:hover { background: #26262e; }
+
+  /* variant A (claude purple) active states */
+  .vA .chip.state-active {
+    color: #7c5cff; background: rgba(124, 92, 255, 0.10);
+    border-color: rgba(124, 92, 255, 0.25);
+  }
+  .stage.dark .vA .chip.state-active {
+    color: #b3a1ff; background: rgba(139, 108, 255, 0.14);
+    border-color: rgba(139, 108, 255, 0.3);
+  }
+  /* variant B (osool teal/gold) active states */
+  .vB .chip.state-active {
+    color: #17707f; background: rgba(61, 148, 168, 0.12);
+    border-color: rgba(61, 148, 168, 0.3);
+  }
+  .stage.dark .vB .chip.state-active {
+    color: #6fc4d4; background: rgba(61, 148, 168, 0.16);
+    border-color: rgba(61, 148, 168, 0.35);
+  }
+  .vB .chip.state-max { color: #a06716; background: rgba(224, 161, 63, 0.14); border-color: rgba(224, 161, 63, 0.35); }
+  .stage.dark .vB .chip.state-max { color: #f0c274; background: rgba(224, 161, 63, 0.13); border-color: rgba(224, 161, 63, 0.3); }
+
+  /* ===== popover ===== */
+  .pop {
+    position: absolute; bottom: calc(100% + 10px); left: 0;
+    width: 250px; border-radius: 14px; padding: 14px 16px 16px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    z-index: 10; display: none;
+  }
+  .pop.open { display: block; }
+  .stage.light .pop { background: #ffffff; border: 1px solid #e4e4e8; box-shadow: 0 12px 32px rgba(0,0,0,0.14); }
+  .stage.dark  .pop { background: #202027; border: 1px solid #34343e; }
+
+  .pop-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .pop-head .t { font-size: 13px; font-weight: 600; }
+  .stage.light .pop-head .t { color: #3a3a42; }
+  .stage.dark  .pop-head .t { color: #d6d6de; }
+  .pop-head .lvlname { font-size: 13px; font-weight: 700; }
+  .vA .pop-head .lvlname { color: #7c5cff; }
+  .stage.dark .vA .pop-head .lvlname { color: #b3a1ff; }
+  .vB .pop-head .lvlname { color: #17707f; }
+  .stage.dark .vB .pop-head .lvlname { color: #6fc4d4; }
+  .vB .pop-head .lvlname.is-max { color: #a06716; }
+  .stage.dark .vB .pop-head .lvlname.is-max { color: #f0c274; }
+  .pop-head .q {
+    margin-left: auto; width: 16px; height: 16px; border-radius: 999px;
+    font-size: 10px; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; cursor: default;
+  }
+  .stage.light .q { background: #ececf0; color: #8a8a92; }
+  .stage.dark  .q { background: #2e2e38; color: #8a8a96; }
+
+  .ends { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 500; margin-bottom: 8px; }
+  .stage.light .ends { color: #8a8a92; }
+  .stage.dark  .ends { color: #7a7a86; }
+
+  /* dotted track */
+  .track {
+    position: relative; height: 26px; border-radius: 999px; cursor: pointer;
+  }
+  .stage.light .track { background: #f0f0f4; }
+  .stage.dark  .track { background: #16161b; }
+  .dots {
+    position: absolute; inset: 0; border-radius: 999px; overflow: hidden;
+  }
+  .dots canvas { width: 100%; height: 100%; display: block; }
+  .thumb {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    width: 18px; height: 18px; border-radius: 999px;
+    transition: left 0.18s cubic-bezier(.4,0,.2,1);
+    pointer-events: none;
+  }
+  .stage.light .thumb { background: #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.06); }
+  .stage.dark  .thumb { background: #ececf1; box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+
+  .stops { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .stage.light .stops span { color: #b0b0b8; }
+  .stage.dark  .stops span { color: #5a5a66; }
+  .stage.light .stops span.on { color: #3a3a42; }
+  .stage.dark  .stops span.on { color: #e2e2ea; }
+
+  .note {
+    max-width: 1200px; margin-top: 10px; font-size: 13px; color: #777; line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<h1>Effort switcher — Claude Code style popover</h1>
+<div class="sub">Chip in composer toolbar (left cluster, next to +). Click chip → popover slider. 3 stops: Default · X-High · Max. Writes the existing per-user EFFORT valve. Popovers shown open; click chips to toggle, drag/click slider to change level.</div>
+
+<h2>Variant A — faithful clone (Claude purple)</h2>
+<div class="grid">
+  <div class="stage light vA" data-variant="A"><span class="stage-label">Light</span></div>
+  <div class="stage dark vA" data-variant="A" data-open="1" data-level="1"><span class="stage-label">Dark</span></div>
+</div>
+<div class="note">Chip idle at Default = muted gray, icon + “Effort”. At X-High/Max it tints purple and shows the level name. Popover header shows <b>Effort&nbsp;<i>Level</i></b>, dotted track brightens toward Smarter.</div>
+
+<h2>Variant B — Osool flavor (teal → gold)</h2>
+<div class="grid">
+  <div class="stage light vB" data-variant="B" data-open="1" data-level="2"><span class="stage-label">Light</span></div>
+  <div class="stage dark vB" data-variant="B" data-level="2"><span class="stage-label">Dark</span></div>
+</div>
+<div class="note">Same anatomy, Osool palette: X-High tints teal <b>#3d94a8</b>, Max tints gold <b>#e0a13f</b> (chip + header + track glow). Reads as “higher = warmer”.</div>
+
+<script>
+const LEVELS = ['Default', 'X-High', 'Max'];
+
+function boltIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>';
+}
+function plusIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+}
+function gridIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+}
+function micIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>';
+}
+function upIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+}
+
+function accentFor(variant, level, dark) {
+  if (variant === 'A') return dark ? '#b3a1ff' : '#7c5cff';
+  if (level === 2) return dark ? '#f0c274' : '#e0a13f';
+  return dark ? '#6fc4d4' : '#3d94a8';
+}
+
+function buildStage(stage) {
+  const variant = stage.dataset.variant;
+  const dark = stage.classList.contains('dark');
+  let level = parseInt(stage.dataset.level || '0', 10);
+  let open = stage.dataset.open === '1';
+
+  const composer = document.createElement('div');
+  composer.className = 'composer';
+  composer.innerHTML = `
+    <div class="ph">Ask Osool AI…</div>
+    <div class="row">
+      <button class="iconbtn">${plusIcon()}</button>
+      <div class="vsep"></div>
+      <button class="iconbtn">${gridIcon()}</button>
+      <span style="position:relative; display:inline-flex;">
+        <button class="chip"></button>
+        <div class="pop">
+          <div class="pop-head">
+            <span class="t">Effort</span><span class="lvlname"></span><span class="q">?</span>
+          </div>
+          <div class="ends"><span>Faster</span><span>Smarter</span></div>
+          <div class="track"><div class="dots"><canvas></canvas></div><div class="thumb"></div></div>
+          <div class="stops"><span>Default</span><span>X-High</span><span>Max</span></div>
+        </div>
+      </span>
+      <div class="spacer"></div>
+      <button class="iconbtn">${micIcon()}</button>
+      <button class="send">${upIcon()}</button>
+    </div>`;
+  stage.appendChild(composer);
+
+  const chip = composer.querySelector('.chip');
+  const pop = composer.querySelector('.pop');
+  const lvlname = composer.querySelector('.lvlname');
+  const thumb = composer.querySelector('.thumb');
+  const track = composer.querySelector('.track');
+  const stops = composer.querySelectorAll('.stops span');
+  const canvas = composer.querySelector('canvas');
+
+  function drawDots() {
+    const w = track.clientWidth, h = track.clientHeight;
+    canvas.width = w * 2; canvas.height = h * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, w, h);
+    const accent = accentFor(variant, level, dark);
+    const cols = Math.floor(w / 7), rows = 3;
+    const frac = level / (LEVELS.length - 1);
+    for (let c = 0; c < cols; c++) {
+      const x = 6 + c * 7;
+      const t = c / (cols - 1);
+      for (let r = 0; r < rows; r++) {
+        const y = h / 2 + (r - 1) * 7;
+        const active = t <= frac + 0.001;
+        const base = dark ? 0.12 : 0.18;
+        const alpha = active ? base + t * 0.85 : (dark ? 0.07 : 0.10);
+        const rad = active ? 1.1 + t * 1.3 : 1.1;
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, Math.PI * 2);
+        ctx.fillStyle = active ? hexA(accent, alpha) : (dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)');
+        ctx.fill();
+      }
+    }
+  }
+  function hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+
+  function render() {
+    const isMax = level === 2;
+    chip.innerHTML = boltIcon() + `<span class="lvl">${level === 0 ? 'Effort' : LEVELS[level]}</span>`;
+    chip.className = 'chip ' + (level === 0 ? 'state-default' : 'state-active' + (variant === 'B' && isMax ? ' state-max' : ''));
+    lvlname.textContent = LEVELS[level];
+    lvlname.className = 'lvlname' + (isMax ? ' is-max' : '');
+    stops.forEach((s, i) => s.classList.toggle('on', i === level));
+    const pct = [8, 50, 92][level];
+    thumb.style.left = pct + '%';
+    pop.classList.toggle('open', open);
+    if (open) requestAnimationFrame(drawDots);
+  }
+
+  chip.addEventListener('click', () => { open = !open; render(); });
+  function setFromX(clientX) {
+    const r = track.getBoundingClientRect();
+    const t = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    level = Math.round(t * (LEVELS.length - 1));
+    render();
+  }
+  track.addEventListener('pointerdown', (e) => {
+    setFromX(e.clientX);
+    const move = (ev) => setFromX(ev.clientX);
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  });
+
+  render();
+}
+
+document.querySelectorAll('.stage').forEach(buildStage);
+</script>
+</body>
+</html>
