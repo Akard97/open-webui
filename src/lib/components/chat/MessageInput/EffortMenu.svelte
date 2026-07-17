@@ -40,6 +40,8 @@
 	let writeTimer: ReturnType<typeof setTimeout> | null = null;
 	let initSeq = 0;
 
+	let dragCleanup: (() => void) | null = null;
+
 	// session cache: function id -> whether its user-valves spec exposes EFFORT
 	const specCache: Record<string, boolean> = {};
 
@@ -187,19 +189,29 @@
 			return;
 		}
 		const rect = trackEl.getBoundingClientRect();
+		if (rect.width === 0) {
+			return;
+		}
 		const t = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
 		setLevel(indexToLevel(t * (EFFORT_LEVELS.length - 1)));
 	};
 
 	const onTrackPointerDown = (e: PointerEvent) => {
+		if (dragCleanup) {
+			dragCleanup();
+		}
 		setFromClientX(e.clientX);
 		const move = (ev: PointerEvent) => setFromClientX(ev.clientX);
-		const up = () => {
+		const end = () => dragCleanup?.();
+		dragCleanup = () => {
 			window.removeEventListener('pointermove', move);
-			window.removeEventListener('pointerup', up);
+			window.removeEventListener('pointerup', end);
+			window.removeEventListener('pointercancel', end);
+			dragCleanup = null;
 		};
 		window.addEventListener('pointermove', move);
-		window.addEventListener('pointerup', up);
+		window.addEventListener('pointerup', end);
+		window.addEventListener('pointercancel', end);
 	};
 
 	const onTrackKeydown = (e: KeyboardEvent) => {
@@ -220,6 +232,7 @@
 	};
 
 	onDestroy(() => {
+		dragCleanup?.();
 		if (writeTimer) {
 			clearTimeout(writeTimer);
 			void commitWrite();
