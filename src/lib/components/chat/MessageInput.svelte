@@ -66,6 +66,7 @@
 	import { getSuggestionRenderer } from '../common/RichTextInput/suggestions';
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
+	import EffortMenu from './MessageInput/EffortMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 
 	import ToolServersModal from './ToolServersModal.svelte';
@@ -1706,6 +1707,10 @@
 												<Component className="size-4.5" strokeWidth="1.5" />
 											</div>
 										</IntegrationsMenu>
+									{/if}
+
+									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
+										<EffortMenu modelId={selectedModelIds[0]} />
 									{/if}
 
 									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
