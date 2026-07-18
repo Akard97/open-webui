@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WorkOS Inbox — mockups</title>
+<style>
+	/* ───────────────────────── tokens (mirrors workos styles.css) ───────────────────────── */
+	:root {
+		--gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db;
+		--gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151;
+		--gray-800: oklch(0.32 0 0); --gray-850: oklch(0.27 0 0); --gray-900: oklch(0.2 0 0); --gray-950: oklch(0.16 0 0);
+
+		--wos-status-backlog:#9ca3af; --wos-status-todo:#6b7280; --wos-status-in-progress:#00a5ba;
+		--wos-status-in-review:#d97706; --wos-status-done:#769a4a;
+		--wos-priority-urgent:#dc2626; --wos-priority-high:#ea580c; --wos-priority-medium:#ca8a04; --wos-priority-low:#6b7280;
+		--wos-done:#769a4a; --wos-danger:#dc2626; --wos-due:#f59e0b; --wos-warn:#d97706;
+
+		--primary: oklch(0.3263 0.0599 221.22);   /* Osool 309 C */
+		--primary-fg:#fafafa;
+		--wos-canvas:var(--gray-50); --wos-card:#fff; --wos-border:var(--gray-200);
+		--wos-hairline:var(--gray-100); --wos-hover:var(--gray-50);
+		--ink:#111827; --ink-2:var(--gray-600); --ink-3:var(--gray-400);
+	}
+	body.dark {
+		--primary: oklch(0.6618 0.1147 210.62);   /* Osool 3125 C */
+		--primary-fg: oklch(0.18 0.035 221.22);
+		--wos-danger:#f87171;
+		--wos-canvas:var(--gray-950); --wos-card:var(--gray-900); --wos-border:var(--gray-800);
+		--wos-hairline:var(--gray-900); --wos-hover:var(--gray-850);
+		--ink:#f3f4f6; --ink-2:var(--gray-400); --ink-3:var(--gray-500);
+	}
+
+	* { box-sizing:border-box; margin:0; padding:0; }
+	body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; background:var(--wos-canvas); color:var(--ink);
+		-webkit-font-smoothing:antialiased; }
+
+	/* type ramp */
+	.wos-micro{font-size:10px;font-weight:600;line-height:1.2}
+	.wos-caption{font-size:11px;font-weight:500;line-height:1.35}
+	.wos-meta{font-size:12px;line-height:1.4}
+	.wos-body{font-size:13px;line-height:1.45}
+	.wos-title{font-size:14px;font-weight:600;line-height:1.4}
+	.wos-heading{font-size:17px;font-weight:650;line-height:1.3;letter-spacing:-0.01em}
+	.wos-display{font-size:28px;font-weight:700;line-height:1.1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+
+	/* ───────────────────────── mockup chrome (not part of design) ───────────────────────── */
+	.mock-bar { position:sticky; top:0; z-index:50; display:flex; gap:8px; align-items:center;
+		padding:10px 16px; background:#18181b; color:#e4e4e7; font-size:12.5px; }
+	.mock-bar b{ color:#fff }
+	.mock-bar button { font:inherit; padding:5px 12px; border-radius:8px; border:1px solid #3f3f46;
+		background:#27272a; color:#d4d4d8; cursor:pointer; }
+	.mock-bar button.on { background:#0891b2; border-color:#0891b2; color:#fff; font-weight:600; }
+	.mock-bar .spacer{flex:1}
+	.variant { display:none; }
+	.variant.on { display:block; }
+	.vlabel { max-width:1280px; margin:18px auto 10px; padding:0 20px; font-size:13px; color:var(--ink-2); }
+	.vlabel b { color:var(--ink); font-size:15px; }
+
+	/* ───────────────────────── shared app frame ───────────────────────── */
+	.frame { max-width:1280px; margin:0 auto 40px; height:780px; display:flex; border:1px solid var(--wos-border);
+		border-radius:16px; overflow:hidden; background:var(--wos-canvas); box-shadow:0 8px 30px rgb(0 0 0 / 0.08); }
+	.pane-list { flex:1.15; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--wos-border); }
+	.pane-detail { flex:1; min-width:0; background:var(--wos-card); display:flex; flex-direction:column; }
+	.scroll { overflow-y:auto; flex:1; scrollbar-width:thin; }
+
+	.avatar { width:28px; height:28px; border-radius:9999px; flex:none; display:flex; align-items:center;
+		justify-content:center; font-size:11px; font-weight:600; color:#fff; }
+	.avatar.sm { width:22px; height:22px; font-size:9px; }
+	.dot { width:8px; height:8px; border-radius:9999px; background:var(--primary); flex:none; }
+	.key { font-size:11px; font-weight:600; color:var(--ink-2); background:var(--wos-hairline);
+		border:1px solid var(--wos-border); padding:1px 6px; border-radius:6px; white-space:nowrap; }
+	.time { font-size:11px; color:var(--ink-3); white-space:nowrap; font-variant-numeric:tabular-nums; }
+
+	.status-chip { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500;
+		padding:2px 8px; border-radius:8px; white-space:nowrap; }
+	.status-chip i { width:8px; height:8px; border-radius:9999px; display:inline-block; }
+	.arrow { color:var(--ink-3); font-size:11px; }
+
+	.icn { width:15px; height:15px; stroke:currentColor; stroke-width:2; fill:none;
+		stroke-linecap:round; stroke-linejoin:round; flex:none; }
+
+	.typebubble { width:30px; height:30px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex:none; }
+
+	.rowact { display:flex; gap:4px; opacity:0; transition:opacity .15s; }
+	.rowact button { display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+		border-radius:8px; border:1px solid var(--wos-border); background:var(--wos-card); color:var(--ink-2); cursor:pointer; }
+	.rowact button:hover { color:var(--ink); border-color:var(--ink-3); }
+	.nrow:hover .rowact { opacity:1; }
+
+	.snippet { font-size:12px; color:var(--ink-2); border-left:2px solid var(--wos-border);
+		padding:2px 0 2px 10px; margin-top:6px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box;
+		-webkit-line-clamp:2; -webkit-box-orient:vertical; }
+
+	.dayhead { display:flex; align-items:center; gap:10px; padding:16px 20px 8px; }
+	.dayhead span { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); }
+	.dayhead::after { content:''; flex:1; height:1px; background:var(--wos-hairline); }
+
+	.seg { display:flex; gap:2px; background:var(--wos-hairline); border-radius:9999px; padding:3px; }
+	.seg button { font:inherit; font-size:12px; font-weight:500; color:var(--ink-2); padding:4px 12px;
+		border-radius:9999px; border:none; background:transparent; cursor:pointer; display:flex; gap:6px; align-items:center; }
+	.seg button.on { background:var(--wos-card); color:var(--ink); font-weight:600; box-shadow:0 1px 3px rgb(0 0 0 / 0.1); }
+	.seg .ct { font-size:10px; font-weight:600; background:var(--wos-hover); color:var(--ink-2);
+		border-radius:9999px; padding:0 6px; min-width:16px; text-align:center; }
+	.seg button.on .ct { background:var(--primary); color:var(--primary-fg); }
+
+	.ghostbtn { font:inherit; font-size:12px; font-weight:500; display:inline-flex; gap:6px; align-items:center;
+		color:var(--ink-2); background:none; border:1px solid var(--wos-border); border-radius:10px;
+		padding:5px 11px; cursor:pointer; }
+	.ghostbtn:hover { color:var(--ink); background:var(--wos-hover); }
+
+	.toggle { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--ink-2); cursor:pointer; }
+	.toggle .tr { width:30px; height:17px; border-radius:9999px; background:var(--gray-300); position:relative; transition:.15s; }
+	body.dark .toggle .tr { background:var(--gray-700); }
+	.toggle .tr::after { content:''; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:9999px;
+		background:#fff; transition:.15s; }
+	.toggle.on .tr { background:var(--primary); }
+	.toggle.on .tr::after { left:15px; }
+
+	/* ───────────────────────── detail pane (shared) ───────────────────────── */
+	.dt-top { padding:18px 22px 0; }
+	.dt-crumb { font-size:11px; color:var(--ink-3); display:flex; gap:6px; align-items:center; margin-bottom:10px; }
+	.dt-title { font-size:17px; font-weight:650; letter-spacing:-0.01em; margin:8px 0 14px; }
+	.dt-props { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+	.dt-tabs { display:flex; gap:18px; border-bottom:1px solid var(--wos-border); padding:0 22px; }
+	.dt-tabs span { font-size:13px; font-weight:500; color:var(--ink-2); padding:9px 2px; border-bottom:2px solid transparent; }
+	.dt-tabs span.on { color:var(--ink); font-weight:600; border-color:var(--primary); }
+	.dt-comment { display:flex; gap:10px; padding:14px 22px; border-bottom:1px solid var(--wos-hairline); }
+	.dt-comment .who { font-size:12.5px; font-weight:600; }
+	.dt-comment .body { font-size:13px; color:var(--ink-2); margin-top:3px; line-height:1.5; }
+	.dt-comment.hl { background:color-mix(in srgb, var(--primary) 7%, transparent);
+		border-left:2px solid var(--primary); }
+	.prio { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:2px 8px;
+		border-radius:8px; }
+
+	/* ═════════════════════════ V4 — CLEAN DECK (system-faithful) ═════════════════════════ */
+	/* Anatomy mirrors MyWorkView/board: white canvas (gray-950 dark), flat rounded-lg cards,
+	   hairline dividers, 13px-medium section headers (no uppercase), sm StatusBadge rectangles. */
+	.v4 .pane-list { background:#fff; }
+	body.dark .v4 .pane-list { background:var(--gray-950); }
+	.v4 .head { padding:18px 20px 0; }
+	.v4 .head h1 { font-size:22px; font-weight:600; letter-spacing:-0.02em; }
+	.v4 .head .sub { font-size:13px; color:var(--ink-3); margin-top:3px; }
+	.v4 .head .sub b { color:var(--ink-2); font-weight:600; }
+	.v4 .controls { display:flex; align-items:center; gap:8px; padding:13px 20px; border-bottom:1px solid var(--wos-hairline); flex-wrap:wrap; }
+	.v4 .chiptoggle { font:inherit; display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 7px 0 11px;
+		border-radius:10px; font-size:12px; font-weight:500; border:1px solid var(--wos-border);
+		background:transparent; color:var(--ink-2); cursor:pointer; }
+	.v4 .chiptoggle .mini { width:26px; height:15px; border-radius:9999px; background:var(--gray-300); position:relative; transition:.15s; }
+	body.dark .v4 .chiptoggle .mini { background:var(--gray-700); }
+	.v4 .chiptoggle .mini::after { content:''; position:absolute; top:2px; left:2px; width:11px; height:11px;
+		border-radius:9999px; background:#fff; transition:.15s; }
+	.v4 .chiptoggle.on { border-color:color-mix(in srgb, var(--primary) 40%, transparent);
+		background:color-mix(in srgb, var(--primary) 9%, transparent); color:var(--primary); }
+	.v4 .chiptoggle.on .mini { background:var(--primary); }
+	.v4 .chiptoggle.on .mini::after { left:13px; }
+	.v4 .sect { display:flex; align-items:center; gap:7px; padding:15px 20px 8px; font-size:13px; font-weight:500; color:var(--ink-2); }
+	.v4 .sect .icn { width:14px; height:14px; color:var(--primary); }
+	.v4 .sect .ct { font-size:11px; font-weight:600; color:var(--primary);
+		background:color-mix(in srgb, var(--primary) 12%, transparent); border-radius:9999px; padding:0 7px; }
+	.v4 .card { margin:0 20px 8px; border:1px solid var(--wos-border); border-radius:8px; background:var(--wos-card);
+		box-shadow:inset 2px 0 0 var(--primary); padding:10px 13px 10px 15px; display:flex; gap:10px; cursor:pointer;
+		transition:background .15s, border-color .15s; }
+	.v4 .card:hover { background:var(--wos-hover); }
+	.v4 .card.sel { border-color:var(--primary); }
+	.v4 .frow { display:flex; align-items:center; gap:9px; padding:8px 20px; cursor:pointer; border-bottom:1px solid var(--wos-hairline); }
+	.v4 .frow:hover { background:var(--wos-hover); }
+	.v4 .frow .line1 { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.v4 .frow.read .line1 { color:var(--ink-2); }
+	.v4 .frow.read .line1 b { font-weight:500; }
+	.v4 .dayh { padding:14px 20px 5px; font-size:13px; font-weight:500; color:var(--ink-3); }
+	.v4 .tico { display:inline-flex; color:var(--ink-3); vertical-align:-2px; }
+	.v4 .tico .icn { width:13px; height:13px; }
+	.v4 .tico.mention { color:var(--primary); }
+	.v4 .tico.assigned { color:var(--wos-status-in-progress); }
+	.status-chip.smc { font-size:11px; border-radius:6px; padding:1px 6px; gap:4px; }
+	.status-chip.smc i { width:7px; height:7px; }
+	.v4 .xstack { font-size:10px; font-weight:600; color:var(--ink-2); background:var(--wos-hairline);
+		border-radius:9999px; padding:1px 7px; flex:none; }
+	/* feed rows — V1 anatomy kept per user pick (roomy two-line, icon bubble, uppercase day rule) */
+	.v4 .feedrow { display:flex; gap:11px; padding:10px 20px; cursor:pointer; align-items:flex-start; }
+	.v4 .feedrow:hover { background:var(--wos-hover); }
+	.v4 .feedrow.unread .line1 b { font-weight:650; }
+	.v4 .stack { margin-left:8px; font-size:11px; font-weight:600; color:var(--ink-2);
+		background:var(--wos-hairline); border-radius:9999px; padding:1px 8px; }
+
+	/* ═════════════════════════ V1 — COMMAND DECK ═════════════════════════ */
+	.v1 .hero { padding:20px 20px 14px; border-bottom:1px solid var(--wos-border);
+		background:linear-gradient(135deg, color-mix(in srgb, var(--primary) 9%, transparent), transparent 55%); }
+	.v1 .hero-top { display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+	.v1 .hero-top .sub { font-size:12.5px; color:var(--ink-2); }
+	.v1 .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+	.v1 .kpi { background:var(--wos-card); border:1px solid var(--wos-border); border-radius:12px; padding:10px 12px; }
+	.v1 .kpi .n { font-size:22px; font-weight:700; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; }
+	.v1 .kpi .l { font-size:11px; font-weight:500; color:var(--ink-2); margin-top:1px; }
+	.v1 .kpi .l b { font-weight:600; }
+	.v1 .kpi.accent .n { color:var(--primary); }
+	.v1 .kpi.amber .n { color:var(--wos-due); }
+	.v1 .toolbar { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--wos-hairline); flex-wrap:wrap; }
+
+	.v1 .needshead { display:flex; align-items:center; gap:8px; padding:16px 20px 10px; }
+	.v1 .needshead .t { font-size:12px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--primary); }
+	.v1 .needshead .n { font-size:11px; font-weight:600; background:var(--primary); color:var(--primary-fg);
+		border-radius:9999px; padding:1px 7px; }
+	.v1 .needcard { margin:0 20px 8px; background:var(--wos-card); border:1px solid var(--wos-border);
+		border-left:3px solid var(--primary); border-radius:12px; padding:12px 14px; display:flex; gap:11px;
+		cursor:pointer; transition:box-shadow .15s, border-color .15s; }
+	.v1 .needcard:hover { box-shadow:0 3px 12px rgb(0 0 0 / 0.07); }
+	.v1 .needcard.sel { border-color:var(--primary); box-shadow:0 0 0 1px var(--primary); }
+	.v1 .needcard.assigned { border-left-color:var(--wos-status-in-progress); }
+	.v1 .feedrow { display:flex; gap:11px; padding:10px 20px; cursor:pointer; align-items:flex-start; }
+	.v1 .feedrow:hover { background:var(--wos-hover); }
+	.v1 .feedrow.unread .line1 b { font-weight:650; }
+	.v1 .stack { margin-left:8px; font-size:11px; font-weight:600; color:var(--ink-2);
+		background:var(--wos-hairline); border-radius:9999px; padding:1px 8px; }
+	.line1 { font-size:13px; }
+	.line1 b { font-weight:600; }
+	.line1 .act { color:var(--ink-2); }
+
+	/* ═════════════════════════ V2 — TRIAGE DESK ═════════════════════════ */
+	.v2 .toolbar { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--wos-border); flex-wrap:wrap; }
+	.v2 .toolbar .wos-heading { margin-right:4px; }
+	.v2 .nrow { display:flex; align-items:center; gap:10px; padding:9px 16px; cursor:pointer;
+		border-bottom:1px solid var(--wos-hairline); }
+	.v2 .nrow:hover { background:var(--wos-hover); }
+	.v2 .nrow.sel { background:color-mix(in srgb, var(--primary) 8%, transparent);
+		box-shadow:inset 2px 0 0 var(--primary); }
+	.v2 .nrow .line1 { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+	.v2 .nrow.read .line1 { color:var(--ink-2); }
+	.v2 .nrow.read .line1 b { font-weight:500; }
+	.v2 .pinhead { display:flex; align-items:center; gap:8px; padding:12px 16px 6px; }
+	.v2 .pinhead span { font-size:11px; font-weight:650; text-transform:uppercase; letter-spacing:.05em; color:var(--primary); }
+	.v2 .pin { background:color-mix(in srgb, var(--primary) 5%, transparent); }
+	.v2 .typemini { width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; flex:none; }
+	.v2 .typemini .icn { width:13px; height:13px; }
+
+	/* ═════════════════════════ V3 — STORY STREAM ═════════════════════════ */
+	.v3 .toolbar { display:flex; align-items:center; gap:10px; padding:14px 20px; flex-wrap:wrap; }
+	.v3 .scroll { padding-bottom:24px; }
+	.v3 .ncard { margin:0 20px 10px; background:var(--wos-card); border:1px solid var(--wos-border);
+		border-radius:14px; padding:13px 15px; display:flex; gap:12px; cursor:pointer; position:relative;
+		transition:transform .15s, box-shadow .15s; }
+	.v3 .ncard:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgb(0 0 0 / 0.08); }
+	.v3 .ncard.sel { box-shadow:0 0 0 2px var(--primary); }
+	.v3 .ncard.unread::before { content:''; position:absolute; top:14px; right:14px; width:8px; height:8px;
+		border-radius:9999px; background:var(--primary); }
+	.v3 .needwrap { margin:14px 20px 18px; border-radius:16px; padding:14px;
+		background:linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent),
+			color-mix(in srgb, var(--wos-status-in-progress) 10%, transparent));
+		border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
+	.v3 .needwrap .hd { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+	.v3 .needwrap .hd .t { font-size:12px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--primary); }
+	.v3 .needwrap .ncard { margin:0 0 8px; }
+	.v3 .needwrap .ncard:last-child { margin-bottom:0; }
+	.v3 .daychip { position:sticky; top:10px; z-index:5; display:flex; justify-content:center; margin:16px 0 10px; }
+	.v3 .daychip span { font-size:11px; font-weight:600; color:var(--ink-2); background:var(--wos-card);
+		border:1px solid var(--wos-border); border-radius:9999px; padding:3px 12px; box-shadow:0 2px 6px rgb(0 0 0 / 0.06); }
+</style>
+</head>
+<body>
+
+<div class="mock-bar">
+	<b>WorkOS Inbox mockups</b>
+	<span class="spacer"></span>
+	<button data-v="v4" class="on">V4 · Clean Deck (new)</button>
+	<button data-v="v1">V1 · Command Deck</button>
+	<button data-v="v2">V2 · Triage Desk</button>
+	<button data-v="v3">V3 · Story Stream</button>
+	<button id="theme">☾ dark</button>
+</div>
+
+<!-- ════════════════════ V4 ════════════════════ -->
+<section class="variant v4 on" id="v4">
+	<div class="vlabel"><b>V4 — Clean Deck</b> · V1's structure, decluttered + on-system: flat white canvas, no gradients or KPI tiles (stats live in the subtitle + tab counts), "Needs you" as flat accent-inset cards, dense one-line feed. Mirrors My&nbsp;Work / board card anatomy exactly.</div>
+	<div class="frame">
+		<div class="pane-list">
+			<div class="head">
+				<h1>Inbox</h1>
+				<div class="sub"><b>3 need your attention</b> · 9 more updates · oldest unread 3h</div>
+			</div>
+			<div class="controls">
+				<div class="seg">
+					<button class="on">All <span class="ct">12</span></button>
+					<button>Mentions <span class="ct">2</span></button>
+					<button>Assigned <span class="ct">1</span></button>
+					<button>Comments <span class="ct">6</span></button>
+					<button>Status <span class="ct">3</span></button>
+				</div>
+				<span style="flex:1"></span>
+				<button class="chiptoggle on">Unread only <span class="mini"></span></button>
+				<button class="ghostbtn" title="Archived"><svg class="icn" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9M10 13h4"/></svg></button>
+				<button class="ghostbtn"><svg class="icn" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Mark all read</button>
+			</div>
+			<div class="scroll" id="v4list"></div>
+		</div>
+		<div class="pane-detail" id="v4detail"></div>
+	</div>
+</section>
+
+<!-- ════════════════════ V1 ════════════════════ -->
+<section class="variant v1" id="v1">
+	<div class="vlabel"><b>V1 — Command Deck</b> · bold hero band with inbox KPIs, "Needs you" as accent-bordered cards, ambient feed with day headers + task stacking below. Kin of the My&nbsp;Work command center.</div>
+	<div class="frame">
+		<div class="pane-list">
+			<div class="hero">
+				<div class="hero-top">
+					<span class="wos-heading">Inbox</span>
+					<span class="sub">3 need your attention · 9 updates</span>
+				</div>
+				<div class="kpis">
+					<div class="kpi accent"><div class="n">12</div><div class="l">Unread</div></div>
+					<div class="kpi accent"><div class="n">2</div><div class="l">Mentions waiting</div></div>
+					<div class="kpi"><div class="n">1</div><div class="l">New assignment</div></div>
+					<div class="kpi amber"><div class="n">3h</div><div class="l">Oldest unread</div></div>
+				</div>
+			</div>
+			<div class="toolbar">
+				<div class="seg">
+					<button class="on">All <span class="ct">12</span></button>
+					<button>Mentions <span class="ct">2</span></button>
+					<button>Assigned <span class="ct">1</span></button>
+					<button>Comments <span class="ct">6</span></button>
+					<button>Status <span class="ct">3</span></button>
+				</div>
+				<span style="flex:1"></span>
+				<label class="toggle on"><span class="tr"></span>Unread</label>
+				<button class="ghostbtn"><svg class="icn" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Mark all read</button>
+			</div>
+			<div class="scroll" id="v1list"></div>
+		</div>
+		<div class="pane-detail" id="v1detail"></div>
+	</div>
+</section>
+
+<!-- ════════════════════ V2 ════════════════════ -->
+<section class="variant v2" id="v2">
+	<div class="vlabel"><b>V2 — Triage Desk</b> · dense single list, quiet chrome. "Needs you" is a pinned tinted group, one-line rows, hover actions (archive / mark read). Color only in type icons + unread accents.</div>
+	<div class="frame">
+		<div class="pane-list">
+			<div class="toolbar">
+				<span class="wos-heading">Inbox</span>
+				<div class="seg">
+					<button class="on">All <span class="ct">12</span></button>
+					<button>Mentions <span class="ct">2</span></button>
+					<button>Assigned <span class="ct">1</span></button>
+					<button>Comments <span class="ct">6</span></button>
+					<button>Status <span class="ct">3</span></button>
+				</div>
+				<span style="flex:1"></span>
+				<label class="toggle"><span class="tr"></span>Unread</label>
+				<button class="ghostbtn"><svg class="icn" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9M10 13h4"/></svg>Archived</button>
+				<button class="ghostbtn"><svg class="icn" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Mark all read</button>
+			</div>
+			<div class="scroll" id="v2list"></div>
+		</div>
+		<div class="pane-detail" id="v2detail"></div>
+	</div>
+</section>
+
+<!-- ════════════════════ V3 ════════════════════ -->
+<section class="variant v3" id="v3">
+	<div class="vlabel"><b>V3 — Story Stream</b> · rich cards with big avatars, quoted snippets, status-transition chips. "Needs you" sits in a gradient spotlight panel; day markers float as sticky chips.</div>
+	<div class="frame">
+		<div class="pane-list">
+			<div class="toolbar">
+				<span class="wos-heading">Inbox</span>
+				<div class="seg">
+					<button class="on">All <span class="ct">12</span></button>
+					<button>Mentions <span class="ct">2</span></button>
+					<button>Assigned <span class="ct">1</span></button>
+					<button>Comments <span class="ct">6</span></button>
+					<button>Status <span class="ct">3</span></button>
+				</div>
+				<span style="flex:1"></span>
+				<label class="toggle"><span class="tr"></span>Unread</label>
+				<button class="ghostbtn"><svg class="icn" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Mark all read</button>
+			</div>
+			<div class="scroll" id="v3list"></div>
+		</div>
+		<div class="pane-detail" id="v3detail"></div>
+	</div>
+</section>
+
+<script>
+/* ─────────── shared fake data ─────────── */
+const AV = { 'Sara Haddad':'#0e7490','Omar Khalil':'#7c3aed','Lina Nasser':'#be185d','Yousef Amin':'#b45309','Rana Aziz':'#4d7c0f' };
+const ST = { in_progress:['In Progress','#00a5ba'], in_review:['In Review','#d97706'], todo:['Todo','#6b7280'], done:['Done','#769a4a'] };
+
+const ICONS = {
+	mention:'<svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></svg>',
+	assigned:'<svg class="icn" viewBox="0 0 24 24"><path d="M2 21a8 8 0 0 1 13.29-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6M16 19h6"/></svg>',
+	comment:'<svg class="icn" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+	status:'<svg class="icn" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
+	archive:'<svg class="icn" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9M10 13h4"/></svg>',
+	check:'<svg class="icn" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>'
+};
+const TYPE_COLOR = { mention:'var(--primary)', assigned:'#00a5ba', comment:'var(--ink-2)', status:'var(--ink-2)' };
+
+const NEEDS = [
+	{ type:'mention', who:'Sara Haddad', act:'mentioned you in', key:'PRC-142', title:'Vendor shortlist for Q3 procurement', ws:'Procurement', time:'26m',
+	  snip:'@Ahmad can you confirm the compliance checklist covers the new vendors before Thursday’s review?' },
+	{ type:'mention', who:'Omar Khalil', act:'mentioned you in', key:'AUD-57', title:'Field audit — Amman branch', ws:'Q3 Audit', time:'3h',
+	  snip:'@Ahmad the branch manager asked to move the walkthrough — does Sunday 10am work for you?' },
+	{ type:'assigned', who:'Lina Nasser', act:'assigned you', key:'WEB-88', title:'Landing page copy — Arabic localization', ws:'Website Revamp', time:'1h', snip:null }
+];
+const FEED = [
+	{ day:'Today', items:[
+		{ type:'comment', who:'Yousef Amin', act:'commented on', key:'PRC-142', title:'Vendor shortlist for Q3 procurement', ws:'Procurement', time:'41m', unread:true, stack:3,
+		  snip:'Uploaded the revised pricing sheet — column F has the delta vs last quarter.' },
+		{ type:'status', who:'Rana Aziz', act:'moved', key:'FIN-23', title:'Close June reconciliation', ws:'Finance Ops', time:'2h', unread:true, from:'in_review', to:'done' },
+		{ type:'comment', who:'Omar Khalil', act:'commented on', key:'AUD-61', title:'Inventory sampling plan', ws:'Q3 Audit', time:'4h', unread:false, stack:0,
+		  snip:'Sampling ratio approved by the committee, proceeding with 12%.' }
+	]},
+	{ day:'Yesterday', items:[
+		{ type:'status', who:'Lina Nasser', act:'moved', key:'WEB-71', title:'New hero illustration', ws:'Website Revamp', time:'1d', unread:false, from:'todo', to:'in_progress' },
+		{ type:'comment', who:'Sara Haddad', act:'commented on', key:'PRC-138', title:'Contract template refresh', ws:'Procurement', time:'1d', unread:false, stack:2,
+		  snip:'Legal signed off — merging the tracked changes now.' },
+		{ type:'status', who:'Yousef Amin', act:'moved', key:'AUD-55', title:'Access review — ERP roles', ws:'Q3 Audit', time:'1d', unread:false, from:'in_progress', to:'in_review' }
+	]}
+];
+
+const initials = n => n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const avatar = (n,sm) => `<span class="avatar${sm?' sm':''}" style="background:${AV[n]}">${initials(n)}</span>`;
+const chip = s => { const [l,c] = ST[s]; return `<span class="status-chip" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)"><i style="background:${c}"></i>${l}</span>`; };
+const bubble = (t,big) => `<span class="${big?'typebubble':'typemini'}" style="color:${TYPE_COLOR[t]};background:color-mix(in srgb, ${TYPE_COLOR[t]} 12%, transparent)">${ICONS[t]}</span>`;
+const acts = `<span class="rowact"><button title="Mark read">${ICONS.check}</button><button title="Archive">${ICONS.archive}</button></span>`;
+
+/* ─────────── detail pane (same content all variants) ─────────── */
+const DETAIL = `
+	<div class="dt-top">
+		<div class="dt-crumb">Procurement · Vendor Management <span style="opacity:.5">›</span> <span class="key">PRC-142</span></div>
+		<div class="dt-title">Vendor shortlist for Q3 procurement</div>
+		<div class="dt-props">
+			${chip('in_progress')}
+			<span class="prio" style="color:var(--wos-priority-high);background:color-mix(in srgb, var(--wos-priority-high) 14%, transparent)">⚑ High</span>
+			<span class="status-chip" style="color:var(--wos-due);background:color-mix(in srgb, var(--wos-due) 14%, transparent)">Due Thu · Jul 17</span>
+			<span style="display:inline-flex">${avatar('Sara Haddad',1)}<span style="margin-left:-6px">${avatar('Yousef Amin',1)}</span></span>
+		</div>
+	</div>
+	<div class="dt-tabs"><span>Subtasks</span><span class="on">Comments</span><span>Activity</span></div>
+	<div class="scroll">
+		<div class="dt-comment"><div>${avatar('Yousef Amin')}</div><div><div class="who">Yousef Amin <span class="time">· 41m</span></div><div class="body">Uploaded the revised pricing sheet — column F has the delta vs last quarter.</div></div></div>
+		<div class="dt-comment hl"><div>${avatar('Sara Haddad')}</div><div><div class="who">Sara Haddad <span class="time">· 26m</span></div><div class="body"><b style="color:var(--primary)">@Ahmad</b> can you confirm the compliance checklist covers the new vendors before Thursday's review?</div></div></div>
+		<div class="dt-comment" style="border:0"><div>${avatar('Omar Khalil')}</div><div><div class="who">Omar Khalil <span class="time">· 12m</span></div><div class="body">Happy to help with the two ISO ones if needed.</div></div></div>
+	</div>
+	<div style="padding:14px 22px;border-top:1px solid var(--wos-border)">
+		<div style="border:1px solid var(--wos-border);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink-3)">Reply… (jumps to the highlighted comment)</div>
+	</div>`;
+
+/* ─────────── V1 render ─────────── */
+function v1() {
+	let h = `<div class="needshead"><span class="t">Needs you</span><span class="n">3</span></div>`;
+	NEEDS.forEach((n,i)=>{ h += `
+		<div class="needcard nrow ${n.type==='assigned'?'assigned':''} ${i===0?'sel':''}">
+			${avatar(n.who)}
+			<div style="flex:1;min-width:0">
+				<div class="line1"><b>${n.who}</b> <span class="act">${n.act}</span> <span class="key">${n.key}</span> <b>${n.title}</b></div>
+				${n.snip?`<div class="snippet">${n.snip}</div>`:''}
+				<div style="display:flex;gap:8px;margin-top:7px;align-items:center">
+					${bubble(n.type)} <span class="wos-caption" style="color:var(--ink-3)">${n.ws}</span>
+					<span style="flex:1"></span><span class="time">${n.time}</span>${acts}
+				</div>
+			</div>
+		</div>`; });
+	FEED.forEach(g=>{ h += `<div class="dayhead"><span>${g.day}</span></div>`;
+		g.items.forEach(it=>{ h += `
+			<div class="feedrow nrow ${it.unread?'unread':''}">
+				${it.unread?'<span class="dot" style="margin-top:11px"></span>':'<span style="width:8px"></span>'}
+				${bubble(it.type,1)}
+				<div style="flex:1;min-width:0">
+					<div class="line1"><b>${it.who}</b> <span class="act">${it.act}</span> <span class="key">${it.key}</span> ${it.title}
+						${it.stack>1?`<span class="stack">${it.stack} updates</span>`:''}</div>
+					${it.from?`<div style="display:flex;gap:6px;align-items:center;margin-top:5px">${chip(it.from)}<span class="arrow">→</span>${chip(it.to)}</div>`:''}
+					${it.snip&&it.type==='comment'?`<div class="snippet">${it.snip}</div>`:''}
+				</div>
+				<span class="time" style="margin-top:2px">${it.time}</span>${acts}
+			</div>`; }); });
+	document.getElementById('v1list').innerHTML = h;
+	document.getElementById('v1detail').innerHTML = DETAIL;
+}
+
+/* ─────────── V2 render ─────────── */
+function v2() {
+	let h = `<div class="pinhead">${ICONS.mention.replace('class="icn"','class="icn" style="color:var(--primary);width:13px;height:13px"')}<span>Needs you · 3</span></div>`;
+	NEEDS.forEach((n,i)=>{ h += `
+		<div class="nrow pin ${i===0?'sel':''}">
+			<span class="dot"></span>${bubble(n.type)}${avatar(n.who,1)}
+			<div class="line1"><b>${n.who}</b> <span class="act">${n.act}</span> <span class="key">${n.key}</span> <b>${n.title}</b>
+				${n.snip?`<span class="act" style="color:var(--ink-3)"> — “${n.snip.slice(0,48)}…”</span>`:''}</div>
+			<span class="time">${n.time}</span>${acts}
+		</div>`; });
+	FEED.forEach(g=>{ h += `<div class="dayhead"><span>${g.day}</span></div>`;
+		g.items.forEach(it=>{ h += `
+			<div class="nrow ${it.unread?'':'read'}">
+				${it.unread?'<span class="dot"></span>':'<span style="width:8px;flex:none"></span>'}
+				${bubble(it.type)}${avatar(it.who,1)}
+				<div class="line1"><b>${it.who}</b> <span class="act">${it.act}</span> <span class="key">${it.key}</span> <b>${it.title}</b>
+					${it.from?`<span class="act"> · ${ST[it.from][0]} → <span style="color:${ST[it.to][1]};font-weight:600">${ST[it.to][0]}</span></span>`:''}
+					${it.snip&&it.type==='comment'?`<span class="act" style="color:var(--ink-3)"> — “${it.snip.slice(0,44)}…”</span>`:''}</div>
+				${it.stack>1?`<span class="stack" style="font-size:10px;font-weight:600;color:var(--ink-2);background:var(--wos-hairline);border-radius:9999px;padding:1px 7px">×${it.stack}</span>`:''}
+				<span class="time">${it.time}</span>${acts}
+			</div>`; }); });
+	document.getElementById('v2list').innerHTML = h;
+	document.getElementById('v2detail').innerHTML = DETAIL;
+}
+
+/* ─────────── V3 render ─────────── */
+function v3() {
+	const card = (n,sel,unread) => `
+		<div class="ncard nrow ${sel?'sel':''} ${unread?'unread':''}">
+			${avatar(n.who)}
+			<div style="flex:1;min-width:0">
+				<div class="line1"><b>${n.who}</b> <span class="act">${n.act}</span> <span class="key">${n.key}</span> <b>${n.title}</b>
+					${n.stack>1?`<span class="stack" style="font-size:10px;background:var(--wos-hairline);border-radius:9999px;padding:1px 7px">${n.stack} updates</span>`:''}</div>
+				${n.from?`<div style="display:flex;gap:6px;align-items:center;margin-top:6px">${chip(n.from)}<span class="arrow">→</span>${chip(n.to)}</div>`:''}
+				${n.snip?`<div class="snippet">${n.snip}</div>`:''}
+				<div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+					${bubble(n.type)}<span class="wos-caption" style="color:var(--ink-3)">${n.ws||''}</span>
+					<span style="flex:1"></span><span class="time">${n.time}</span>${acts}
+				</div>
+			</div>
+		</div>`;
+	let h = `<div class="needwrap"><div class="hd"><span class="t">✦ Needs you</span></div>`;
+	NEEDS.forEach((n,i)=>{ h += card(n, i===0, true); });
+	h += `</div>`;
+	FEED.forEach(g=>{ h += `<div class="daychip"><span>${g.day}</span></div>`;
+		g.items.forEach(it=>{ h += card(it, false, it.unread); }); });
+	document.getElementById('v3list').innerHTML = h;
+	document.getElementById('v3detail').innerHTML = DETAIL;
+}
+
+/* ─────────── V4 render ─────────── */
+function v4() {
+	const tico = t => `<span class="tico ${t}">${ICONS[t]}</span>`;
+	const chipSm = s => { const [l,c] = ST[s]; return `<span class="status-chip smc" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)"><i style="background:${c}"></i>${l}</span>`; };
+	let h = `<div class="sect">${ICONS.mention}<span>Needs you</span><span class="ct">3</span></div>`;
+	NEEDS.forEach((n,i)=>{ h += `
+		<div class="card nrow ${i===0?'sel':''}">
+			${avatar(n.who)}
+			<div style="flex:1;min-width:0">
+				<div class="line1" style="font-size:13px">${tico(n.type)} <b>${n.who}</b> <span class="act">${n.act}</span> <span class="key">${n.key}</span> <b>${n.title}</b></div>
+				${n.snip?`<div class="snippet" style="-webkit-line-clamp:1">${n.snip}</div>`:''}
+			</div>
+			<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+				<span class="time">${n.time}</span>${acts}
+			</div>
+		</div>`; });
+	FEED.forEach(g=>{ h += `<div class="dayhead"><span>${g.day}</span></div>`;
+		g.items.forEach(it=>{ h += `
+			<div class="feedrow nrow ${it.unread?'unread':''}">
+				${it.unread?'<span class="dot" style="margin-top:11px"></span>':'<span style="width:8px"></span>'}
+				${bubble(it.type,1)}
+				<div style="flex:1;min-width:0">
+					<div class="line1"><b>${it.who}</b> <span class="act">${it.act}</span> <span class="key">${it.key}</span> ${it.title}
+						${it.stack>1?`<span class="stack">${it.stack} updates</span>`:''}</div>
+					${it.from?`<div style="display:flex;gap:6px;align-items:center;margin-top:5px">${chipSm(it.from)}<span class="arrow">→</span>${chipSm(it.to)}</div>`:''}
+					${it.snip&&it.type==='comment'?`<div class="snippet">${it.snip}</div>`:''}
+				</div>
+				<span class="time" style="margin-top:2px">${it.time}</span>${acts}
+			</div>`; }); });
+	document.getElementById('v4list').innerHTML = h;
+	document.getElementById('v4detail').innerHTML = DETAIL;
+}
+
+v4(); v1(); v2(); v3();
+
+/* ─────────── mockup chrome wiring ─────────── */
+document.querySelectorAll('.mock-bar button[data-v]').forEach(b=>{
+	b.onclick = ()=>{
+		document.querySelectorAll('.mock-bar button[data-v]').forEach(x=>x.classList.remove('on'));
+		document.querySelectorAll('.variant').forEach(x=>x.classList.remove('on'));
+		b.classList.add('on');
+		document.getElementById(b.dataset.v).classList.add('on');
+	};
+});
+document.getElementById('theme').onclick = e=>{
+	document.body.classList.toggle('dark');
+	e.target.textContent = document.body.classList.contains('dark') ? '☀ light' : '☾ dark';
+};
+</script>
+</body>
+</html>
