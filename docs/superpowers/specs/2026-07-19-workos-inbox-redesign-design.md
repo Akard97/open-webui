@@ -26,7 +26,7 @@ audit bug (Mark-all-read shown on empty inbox).
 | D5 | Feed: day headers + same-task stacking (consecutive same-task rows within a day collapse to one row + "N updates" pill; expand in place). |
 | D6 | Controls: type tabs with counts (All / Mentions / Assigned / Comments / Status), "Unread only" chip-toggle, Archived view, Mark all read. |
 | D7 | Visual: V4 Clean Deck — flat white canvas (gray-950 dark), `rounded-lg` hairline cards, no gradients/KPI tiles; stats live in the subtitle + tab counts. Feed rows use the V1 anatomy per user pick (incl. uppercase day headers with rule). |
-| D8 | Sidebar unread badge switches stray `sky-500` → `bg-primary` (design-system D1 fix folded in). |
+| D8 | Unread badges switch stray `sky-500` → `bg-primary` in all chrome — Sidebar, NavDrawer, MobileHeader (design-system D1 fix folded in). |
 
 ## 3. UX spec (left pane, top to bottom)
 
@@ -39,8 +39,11 @@ audit bug (Mark-all-read shown on empty inbox).
     `/counts`); active tab count pill uses primary.
   - "Unread only" chip-toggle — the My Work "Need attention" chip pattern (bordered chip
     with embedded mini switch), primary when on.
-  - Archived ghost icon-button → switches list to archived view (flat list, no needs-you
-    section, hover action = Unarchive; back button returns).
+  - Archived ghost icon-button → switches list to archived view (day-grouped like the
+    feed, no needs-you section — archived rows are read so none qualify; hover action =
+    Unarchive; back button returns). Entering/leaving archived resets "Unread only"
+    (archived rows are always read) and hides the tab count pills (counts describe the
+    inbox, not the archive).
   - "Mark all read" ghost button — hidden when nothing unread (audit bug #4 fix).
 - **Needs you section:** header 13px/500 with primary @ icon + primary count pill.
   Cards: flat `rounded-lg`, hairline border, 2px primary inset (`box-shadow:inset`),
@@ -101,7 +104,12 @@ Bootstrap `notifications_unread` unchanged (archived rows are read, so already e
 ### 5.4 Realtime
 
 No new events. Archive is user-local; the acting client updates its own store.
-`workos:notification.created` keeps feeding live rows.
+`workos:notification.created` keeps feeding live rows. Split-pane opens join the
+notification's workstream room (`enterRoom(streamKey(data.workstream_id))`,
+ref-counted, left again on `closeTask`) so the existing comment/activity/task
+events stream into the pane even for tasks outside the current workstream;
+`task.updated` / `task.deleted` also reconcile the `inboxTask` fallback (a
+deleted task flips the pane to "Task no longer available").
 
 ## 6. Frontend architecture
 
@@ -120,9 +128,12 @@ Store (`lib/store.ts`):
 - `archiveNotifications(ids, archived)` — optimistic removal/restore + server sync;
   `archiveAllRead()`.
 - Archived list lazy-loads on first Archived-view open (separate store or param refetch).
-- `openNotification` (inbox context): mark read + `openTask` + set `highlightCommentId`;
-  **no** `view.set('board')`. The old navigate-away behavior remains for notification
-  clicks from other surfaces (My Work rail).
+- `openInboxNotification` (desktop split-pane): mark read + resolve the task + set
+  `highlightCommentId` + join the task's workstream room (ref-counted); **no**
+  `view.set('board')`. The old navigate-away `openNotification` remains for other
+  surfaces (My Work rail) and for mobile inbox taps — and the InboxView unmount
+  cleanup must not clear the selection on mobile, or that navigate-away open would
+  close the task dialog before it renders.
 - Realtime `notification.created`: prepend + bump `unread` and `by_type[type]`.
 
 ## 7. Out of scope
@@ -138,7 +149,8 @@ Store (`lib/store.ts`):
 - **Vitest:** `lib/inbox.ts` grouping (day buckets incl. Today/Yesterday boundaries,
   stacking merges consecutive same-task only, needs-you extraction = unread
   mentioned/assigned only); store tests — optimistic archive + rollback, counts
-  decrement on read, realtime prepend + count bump (extend `store.test.ts`).
+  decrement on read, realtime prepend + count bump, split-pane `inboxTask`
+  reconcile on cross-workstream `task.updated` (extend `store.test.ts`).
 - **Pytest:** archive endpoint scoping (cannot archive another user's rows), archive
   implies read, `all_read` sweep, `archived` list filter, counts correctness, limit
   clamp regression.

@@ -12,6 +12,7 @@
 
 - Follow the WorkOS design system (`docs/superpowers/specs/2026-07-09-workos-design-system-design.md`): unread affordance = **primary token** (never `sky-500`); status pills = `StatusBadge` (soft rectangle); radius contract (cards `rounded-lg` in this view, matching My Work's CARD constant; chips `rounded-full`); `focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none` on every new interactive element; `transition-colors duration-150` on hoverables.
 - Deliberate deviation (user-picked): feed day headers are **uppercase letter-spaced with trailing hairline** (V1 mockup style).
+- Deliberate deviation: task-key chips (`OSL-12`) render `rounded-md` kbd/tag style per the mockup — exempt from the rounded-full chip rule.
 - All new endpoints: `require_workos` first, intrinsically scoped to `user.id`, no cross-user access.
 - Frontend runs on the user's own Vite hot-reload server — never start a Vite dev server; never rebuild the Docker image for frontend edits. Backend container: `osool-ai-open-webui-1` (restart needed once for the migration).
 - Backend tests run with the venv python: `cd backend` then `.venv\Scripts\python.exe -m pytest ...` (Windows).
@@ -109,7 +110,7 @@ async def test_counts_for_user_by_type_unread_nonarchived_only():
 cd backend
 .venv\Scripts\python.exe -m pytest open_webui/test/workos/test_models_notifications.py -q
 ```
-Expected: FAIL — `TypeError: ... unexpected keyword argument 'archived'` / `AttributeError: ... 'set_archived'`.
+Expected: FAIL — `AttributeError: 'NotificationModel' object has no attribute 'archived'` on the first test; `AttributeError: ... 'set_archived'` / `TypeError: ... unexpected keyword argument 'archived'` on the rest.
 
 - [ ] **Step 3: Add the migration**
 
@@ -330,7 +331,7 @@ async def test_counts_endpoint(monkeypatch):
 cd backend
 .venv\Scripts\python.exe -m pytest open_webui/test/workos/test_router_activity_notifications.py -q
 ```
-Expected: new tests FAIL with 404 / 405 (routes don't exist); the 5 existing tests still pass.
+Expected: new tests FAIL with 404 / 405 (routes don't exist); the 6 existing tests still pass.
 
 - [ ] **Step 3: Implement the routes**
 
@@ -388,7 +389,7 @@ async def archive_notifications(
 ```
 .venv\Scripts\python.exe -m pytest open_webui/test/workos/test_router_activity_notifications.py -q
 ```
-Expected: all pass (9 total).
+Expected: all pass (10 total).
 
 - [ ] **Step 5: Update the access-control reference doc**
 
@@ -449,7 +450,7 @@ Then append the suite:
 
 ```ts
 import {
-	notifications, notificationCounts, archivedNotifications, unreadCount,
+	notifications, notificationCounts, archivedNotifications, unreadCount, inboxTask,
 	applyNotificationEvent, archiveNotificationsAction, markRead
 } from './store';
 import type { Notification } from './types';
@@ -463,6 +464,7 @@ describe('inbox notification store', () => {
 	beforeEach(() => {
 		notifications.set([]);
 		archivedNotifications.set([]);
+		inboxTask.set(null);
 		unreadCount.set(0);
 		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
 	});
@@ -502,8 +504,16 @@ describe('inbox notification store', () => {
 		expect(get(notifications).map((n) => n.id)).toEqual(['a', 'b']);
 		expect(get(archivedNotifications)).toHaveLength(0);
 	});
+
+	it('task.updated reconciles the inbox split-pane task across workstreams', () => {
+		inboxTask.set({ id: 't9', workstream_id: 'other', title: 'old' } as any);
+		applyTaskEvent('workos:task.updated', { id: 't9', workstream_id: 'other', title: 'new' });
+		expect(get(inboxTask)?.title).toBe('new');
+	});
 });
 ```
+
+(`applyTaskEvent` is already imported at the top of the existing file — no new import needed for it.)
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -578,6 +588,9 @@ export const inboxTask: Writable<Task | null> = writable(null);
 export const inboxTaskError: Writable<boolean> = writable(false);
 // Comment to scroll-to + highlight in the detail pane (mentioned/commented opens).
 export const highlightCommentId: Writable<string | null> = writable(null);
+// Workstream room joined for the split-pane task (ref-counted, so overlap with
+// the current-workstream / my-work rooms is safe). Left again on closeTask.
+let inboxRoomKey: string | null = null;
 ```
 
 Extend the `selectedTask` derived (~line 144):
@@ -600,12 +613,33 @@ In `closeTask` (~line 237) add at the end:
 	inboxTask.set(null);
 	inboxTaskError.set(false);
 	highlightCommentId.set(null);
+	if (inboxRoomKey) {
+		leaveRoom(inboxRoomKey);
+		inboxRoomKey = null;
+	}
 ```
 
-In `editTask` (~line 281), after the second `tasks.update(...)` that applies the server response, add:
+(`streamKey` / `enterRoom` / `leaveRoom` already exist further down store.ts as function declarations — hoisted, so callable from here without moving anything.)
+
+In `editTask` (~line 281) mirror every `tasks` write onto `inboxTask`, so split-pane edits of foreign-workstream tasks stay optimistic and roll back:
+
+- after the optimistic `tasks.update(...)` at the top:
+
+```ts
+	const beforeInbox = get(inboxTask);
+	inboxTask.update((t) => (t && t.id === id ? { ...t, ...fields } : t));
+```
+
+- after the second `tasks.update(...)` that applies the server response:
 
 ```ts
 		inboxTask.update((t) => (t && t.id === id ? { ...t, ...(task as Task) } : t));
+```
+
+- in the `catch`, directly after the `if (before) tasks.update(...)` rollback line (before the handled-error early returns):
+
+```ts
+		if (beforeInbox) inboxTask.update((t) => (t && t.id === id ? beforeInbox : t));
 ```
 
 Replace `loadNotifications` (~line 416) and add the new loaders/actions after it:
@@ -697,6 +731,18 @@ export async function openInboxNotification(n: Notification): Promise<void> {
 	highlightCommentId.set(n.comment_id ?? null);
 	inboxTask.set(null);
 	inboxTaskError.set(false);
+	// Join the task's workstream room so comment/activity/task events stream into
+	// the pane even when the task lives outside the current workstream. Rooms are
+	// ref-counted, so overlapping the current workstream's own room is safe.
+	if (inboxRoomKey) {
+		leaveRoom(inboxRoomKey);
+		inboxRoomKey = null;
+	}
+	const ws = n.data?.workstream_id;
+	if (ws) {
+		inboxRoomKey = streamKey(ws);
+		enterRoom(inboxRoomKey);
+	}
 	selectedTaskId.set(n.task_id ?? null);
 	if (!n.task_id) return;
 	void loadTaskDetail(n.task_id);
@@ -742,14 +788,39 @@ export function applyNotificationEvent(payload: any): void {
 }
 ```
 
-Leave the existing `openNotification` untouched — the My Work rail keeps its navigate-away behavior.
+Update `applyTaskEvent` (~line 578) to reconcile the split-pane task **before** its current-workstream guard, so task updates/deletes reach the pane for foreign-workstream tasks (their room is joined by `openInboxNotification`):
+
+```ts
+export function applyTaskEvent(event: string, payload: any): void {
+	if (!payload) return;
+	// Split-pane inbox: the inline task may belong to another workstream.
+	if (event === 'workos:task.updated') {
+		inboxTask.update((t) => (t && t.id === payload.id ? payload : t));
+	} else if (event === 'workos:task.deleted' && get(inboxTask)?.id === payload.id) {
+		inboxTask.set(null);
+		inboxTaskError.set(true); // pane flips to "Task no longer available"
+	}
+	const ws = get(currentWorkstreamId);
+	if (payload.workstream_id !== ws) return;
+	if (event === 'workos:task.created') {
+		tasks.update((list) => (list.some((t) => t.id === payload.id) ? list : [...list, payload]));
+	} else if (event === 'workos:task.updated') {
+		tasks.update((list) => list.map((t) => (t.id === payload.id ? payload : t)));
+	} else if (event === 'workos:task.deleted') {
+		tasks.update((list) => list.filter((t) => t.id !== payload.id));
+		if (get(selectedTaskId) === payload.id) selectedTaskId.set(null);
+	}
+}
+```
+
+Leave the existing `openNotification` untouched — the My Work rail and mobile inbox taps keep its navigate-away behavior.
 
 - [ ] **Step 6: Run the store tests**
 
 ```
 npm run test:frontend -- --run src/lib/components/workos/lib/store.test.ts
 ```
-Expected: all pass (existing + 4 new).
+Expected: all pass (existing + 5 new).
 
 - [ ] **Step 7: Type-check**
 
@@ -963,7 +1034,7 @@ git commit -m "feat(workos): inbox grouping - needs-you split, day buckets, task
 Move into it, unchanged:
 - The **entire** `<script lang="ts">` block from TaskDetail.svelte **except** the `import * as Dialog from '$lib/components/ui/dialog';` line. Fix the relative import paths (`../ui/…` → `../../ui/…`, `./detail/…` → `./…`, `../lib/…` → `../../lib/…`). Keep `closeTask` imported (mobile header X uses it if present in the moved markup).
 - The `<svelte:window onpointerdown={onWindowPointerDown} />` line.
-- The template INNER CONTENT (everything between `<Dialog.Content …>` and `</Dialog.Content>`), wrapped in:
+- The template INNER CONTENT (everything between `<Dialog.Content …>` and `</Dialog.Content>` **except** the `<Dialog.Title class="sr-only">…</Dialog.Title>` and `<Dialog.Description class="sr-only">…</Dialog.Description>` lines at the top — those are Dialog-context components and must stay in the wrapper; moving them would break the compile after the Dialog import is dropped and crash when the body mounts inline without a Dialog.Root), wrapped in:
 
 ```svelte
 {#if t}
@@ -1000,13 +1071,15 @@ Replace the whole file with:
 			showCloseButton={false}
 			class="flex flex-col gap-0 p-0 overflow-hidden w-[95vw] max-w-[1100px] sm:max-w-[1100px] max-h-[85vh] max-md:w-screen max-md:max-w-none max-md:h-dvh max-md:max-h-dvh max-md:rounded-none max-md:border-0 bg-white dark:bg-gray-950"
 		>
+			<Dialog.Title class="sr-only">{t.title}</Dialog.Title>
+			<Dialog.Description class="sr-only">Task details</Dialog.Description>
 			<TaskDetailBody />
 		</Dialog.Content>
 	</Dialog.Root>
 {/if}
 ```
 
-(The `class` string is copied verbatim from the current Dialog.Content — do not alter it.)
+(The `class` string is copied verbatim from the current Dialog.Content — do not alter it. The sr-only Title/Description lines are the ones excluded from the Step 1 move — they keep the dialog's accessible name.)
 
 - [ ] **Step 3: CommentItem highlight**
 
@@ -1142,7 +1215,7 @@ In `src/lib/components/workos/ui/Icon.svelte`'s glyph map add (lucide paths, sam
 
 <div
 	class="group mx-4 mb-2 flex cursor-pointer gap-2.5 rounded-lg border bg-white p-2.5 pl-3
-		shadow-[inset_2px_0_0_var(--primary)] transition-colors duration-150 dark:bg-gray-900
+		shadow-[inset_2px_0_0_var(--primary)] transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:bg-gray-900
 		{selected ? 'border-primary' : 'border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-850'}"
 	role="button"
 	tabindex="0"
@@ -1235,7 +1308,7 @@ export function agoShort(ms: number, now = Date.now()): string {
 
 {#each rows as item, i (item.id)}
 	<div
-		class="group flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-gray-850
+		class="group flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none dark:hover:bg-gray-850
 			{selected && item.id === n.id ? 'bg-primary/5 shadow-[inset_2px_0_0_var(--primary)]' : ''}
 			{i > 0 ? 'pl-10' : ''}"
 		role="button"
@@ -1315,6 +1388,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 - Rewrite: `src/lib/components/workos/views/InboxView.svelte`
 - Modify: `src/lib/components/workos/WorkOSApp.svelte` (line 83: drawer suppression)
 - Modify: `src/lib/components/workos/chrome/Sidebar.svelte` (lines 50 + 115: `bg-sky-500` → `bg-primary`; line 115 also `text-white` → `text-primary-foreground`)
+- Modify: `src/lib/components/workos/chrome/NavDrawer.svelte` (line 42: same badge fix) and `src/lib/components/workos/chrome/MobileHeader.svelte` (line 29: same dot fix)
 
 **Interfaces:**
 - Consumes: everything produced by Tasks 3–6 (`groupInbox`, `notificationCounts`, `archiveNotificationsAction`, `archiveAllRead`, `openInboxNotification`, `loadMoreNotifications`, `loadArchivedNotifications`, `NeedsYouCard`, `FeedRow`, `TaskDetailBody`, `inboxTaskError`), plus `mobile` from `$lib/stores` and `EmptyState`.
@@ -1342,12 +1416,20 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 		openInboxNotification, openNotification, closeTask
 	} from '../lib/store';
 
+	let now = Date.now();
+
 	onMount(() => {
 		void loadNotifications();
-		return () => closeTask(); // leaving the inbox clears the split-pane selection
+		const tick = setInterval(() => (now = Date.now()), 60_000); // keep day labels + ages fresh
+		return () => {
+			clearInterval(tick);
+			// Desktop: leaving the inbox clears the split-pane selection. Mobile taps
+			// navigate away (openNotification → view 'board'), which unmounts this
+			// view — that selection must survive the unmount or the full-screen
+			// task dialog would be closed before it ever opens.
+			if (!$mobile) closeTask();
+		};
 	});
-
-	const now = Date.now();
 
 	type Tab = 'all' | NotificationType;
 	const TABS: { k: Tab; label: string }[] = [
@@ -1363,6 +1445,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 
 	function toggleArchived(): void {
 		showArchived = !showArchived;
+		unreadOnly = false; // archived rows are always read — a stale unread filter would blank the list
 		if (showArchived) void loadArchivedNotifications();
 	}
 
@@ -1421,7 +1504,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 						onclick={() => (tab = t.k)}
 					>
 						{t.label}
-						{#if tabCount(t.k) > 0}
+						{#if !showArchived && tabCount(t.k) > 0}
 							<span class="min-w-4 rounded-full px-1 text-center text-[10px] font-semibold tabular-nums
 								{tab === t.k ? 'bg-primary text-primary-foreground' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}">{tabCount(t.k)}</span>
 						{/if}
@@ -1558,11 +1641,13 @@ to:
 {/if}
 ```
 
-- [ ] **Step 3: Sidebar unread badge → primary token (design-system D1 fix)**
+- [ ] **Step 3: Unread badges → primary token, all chrome (design-system D1 fix)**
 
-In `src/lib/components/workos/chrome/Sidebar.svelte`:
-- line 50: `bg-sky-500` → `bg-primary`
-- line 115: `bg-sky-500 text-white` → `bg-primary text-primary-foreground`
+`sky-500` lives in four spots across desktop + mobile chrome — fix all of them:
+- `src/lib/components/workos/chrome/Sidebar.svelte` line 50: `bg-sky-500` → `bg-primary`
+- `src/lib/components/workos/chrome/Sidebar.svelte` line 115: `bg-sky-500 text-white` → `bg-primary text-primary-foreground`
+- `src/lib/components/workos/chrome/NavDrawer.svelte` line 42: `bg-sky-500 text-white` → `bg-primary text-primary-foreground`
+- `src/lib/components/workos/chrome/MobileHeader.svelte` line 29: `bg-sky-500` → `bg-primary`
 
 Then confirm no `sky-500` remains anywhere in WorkOS:
 
@@ -1582,7 +1667,7 @@ Expected: clean / all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/components/workos/views/InboxView.svelte src/lib/components/workos/WorkOSApp.svelte src/lib/components/workos/chrome/Sidebar.svelte
+git add src/lib/components/workos/views/InboxView.svelte src/lib/components/workos/WorkOSApp.svelte src/lib/components/workos/chrome/Sidebar.svelte src/lib/components/workos/chrome/NavDrawer.svelte src/lib/components/workos/chrome/MobileHeader.svelte
 git commit -m "feat(workos): inbox split-pane view - needs-you, day feed, archive, counts"
 ```
 
@@ -1630,7 +1715,7 @@ Smoke checklist (user's Vite hot-reload server; seed by acting as a second user 
 4. Click opens the task in the right pane, mentioned/commented scrolls to + highlights the comment; inbox scroll position keeps.
 5. Tabs filter + counts match; "Unread only" toggle; Mark all read hides at zero; Sweep read archives.
 6. Archived view lists archived rows; Unarchive returns them.
-7. Realtime: new notification while the inbox is open prepends + bumps counts + sidebar badge (now primary teal, not sky blue).
+7. Realtime: new notification while the inbox is open prepends + bumps counts + unread badges (primary teal in the sidebar, nav drawer, and mobile header — not sky blue). With a task from a *different* workstream open in the split pane, a comment posted by the second user appears live in the right pane (inbox room join), and a status change made by them updates the pane header.
 8. Mobile width (<768px): full-width list, tap opens full-screen detail (old flow).
 9. Dark mode pass over all of the above.
 10. Board view task drawer still works exactly as before (TaskDetailBody extraction regression check).
