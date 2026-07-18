@@ -21,7 +21,7 @@ audit bug (Mark-all-read shown on empty inbox).
 |---|---|
 | D1 | Scope: frontend redesign + small backend (archive state, counts endpoint). |
 | D2 | Core model: hybrid dashboard — "Needs you" (unread mentions + assignments) pinned on top, ambient feed below. |
-| D3 | Click opens the task **in-place**: desktop split-pane with `TaskDetail` inline right; no view switch. Mobile keeps full-screen detail. |
+| D3 | Click opens the task **in-place**: ≥1280px split-pane with the detail inline right; 768–1279px the task dialog opens **over** the inbox (sidebar 256px + list would leave the pane a sliver); no view switch either way. Mobile keeps full-screen detail. |
 | D4 | Lifecycle: unread → read → archived. Archive implies read. |
 | D5 | Feed: day headers + same-task stacking (consecutive same-task rows within a day collapse to one row + "N updates" pill; expand in place). |
 | D6 | Controls: type tabs with counts (All / Mentions / Assigned / Comments / Status), "Unread only" chip-toggle, Archived view, Mark all read. |
@@ -67,17 +67,26 @@ audit bug (Mark-all-read shown on empty inbox).
 - **Empty states:** existing `EmptyState` block variant — inbox icon, "You're all caught
   up" (+ per-filter variants: e.g. no mentions); archived view its own empty state.
 
-## 4. Right pane (desktop ≥768px)
+## 4. Right pane (desktop ≥1280px; dialog-over-inbox at 768–1279px)
 
-- Existing `TaskDetail` rendered **inline** (not the drawer overlay) in a `flex:1` pane
-  with left border. The list pane is fixed-width (400px, 440px ≥xl) so the detail pane
-  gets every remaining pixel; the extracted `TaskDetailBody` is **container-responsive**
-  (`@container`, two-column ≥880px container width, stacked below) so a narrow pane or
-  window degrades to the compact single-column layout instead of crushing comments.
-- Selecting a notification: mark read → resolve the task (clearing the shared
+- Split pane gated by `inboxSplit` (min-width 1280px media query): below it the inbox
+  stays full-width and a selection opens the normal task dialog over it (same
+  mark-read/highlight/room-join flow; WorkOSApp only suppresses the dialog when the
+  pane is active). The list pane is fixed-width at ≥xl (400px, 440px ≥2xl) so the
+  detail pane gets every remaining pixel; the extracted `TaskDetailBody` is
+  **container-responsive** (`@container`, two-column ≥880px container width, stacked
+  below) so a narrow pane or window degrades to the compact single-column layout
+  instead of crushing comments. Tab row scrolls horizontally when cramped.
+- Selecting a notification: mark read (non-blocking — its own optimistic
+  update/rollback handles the row; awaiting it would let a slow A-click clobber a fast
+  B-click) → resolve the task under an open-generation guard (clearing the shared
   comments/activity/attachments/subtasks stores first, so the previous task's data never
   renders under the new one) → detail renders beside the list. Selection highlight is
-  per-notification, not per-task.
+  per-notification, not per-task. `selectedTask` resolution prefers the freshly fetched
+  `inboxTask` over the current-workstream list and (last) `myTasks`, which can be stale;
+  the pane checks the error state before the body so a stale copy never renders over
+  "Task no longer available" (realtime `task.deleted` keeps the selection id for that
+  error pane instead of clearing it).
 - Cross-team tasks render correctly: role affordances derive from `task.team_id`,
   breadcrumb from the task's workstream; label editing is hidden for foreign-team tasks
   (the labels store and `createLabel` are current-team-scoped).
@@ -139,10 +148,16 @@ Store (`lib/store.ts`):
 - `notificationCounts` writable, set by `loadNotifications()` (list + `/counts` in
   parallel) and adjusted client-side on read/receive events.
 - `archiveNotifications(ids, archived)` — optimistic removal/restore + server sync;
-  failure rolls back lists **and** `notificationCounts`; `markRead`/`markAllRead` roll
-  back the same way. `archiveAllRead()`.
+  failure rolls back lists **and** `notificationCounts`, preserving realtime rows that
+  arrived mid-request (snapshot restore merges fresh ids + re-adds their count deltas);
+  `markRead`/`markAllRead` roll back the same way. `archiveAllRead()`.
 - Archived list lazy-loads on first Archived-view open, paginated 50/page with the
-  same compound cursor (`archivedHasMore` + load-more).
+  same compound cursor (`archivedHasMore` + load-more). Both load-more paths refill
+  from page 1 when a bulk mutation emptied the loaded array (no cursor to derive —
+  the button must never be a visible no-op).
+- Feed rows/cards: plain `div` container + **stretched sibling open button**
+  (`absolute inset-0`); hover actions and the stack pill are z-raised siblings — no
+  nested interactive elements in the accessibility tree.
 - `openInboxNotification` (desktop split-pane): mark read + resolve the task + set
   `highlightCommentId` + join the task's workstream room (ref-counted); **no**
   `view.set('board')`. The old navigate-away `openNotification` remains for other
@@ -165,8 +180,9 @@ Store (`lib/store.ts`):
   stacking merges consecutive same-task only, needs-you extraction = unread
   mentioned/assigned only); store tests — optimistic archive + failure rollback of
   lists and counts, counts decrement on read, realtime prepend + count bump,
-  split-pane `inboxTask` reconcile on cross-workstream `task.updated`
-  (extend `store.test.ts`).
+  split-pane `inboxTask` reconcile on cross-workstream `task.updated`, rollback
+  preserving mid-request realtime rows, `task.deleted` keeping the selection for the
+  error pane (extend `store.test.ts`).
 - **Pytest:** archive endpoint scoping (cannot archive another user's rows), archive
   implies read, `all_read` sweep, `archived` list filter, counts correctness,
   compound-cursor pagination across a shared millisecond, limit clamp regression.

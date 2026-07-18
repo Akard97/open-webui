@@ -458,7 +458,7 @@ git commit -m "feat(workos): notification archive + counts endpoints"
 - Produces (Tasks 6–7 rely on these exact names):
   - types: `Notification.archived?: boolean`; `interface NotificationCounts { unread: number; by_type: Record<NotificationType, number> }`
   - api: `listNotifications(token, opts?: { unreadOnly?: boolean; archived?: boolean; before?: number; beforeId?: string; limit?: number })`; `archiveNotifications(token, body: { ids?: string[]; all_read?: boolean; archived?: boolean })`; `getNotificationCounts(token)`
-  - store: `notificationCounts: Writable<NotificationCounts>`, `archivedNotifications: Writable<Notification[]>`, `notificationsHasMore: Writable<boolean>`, `archivedHasMore: Writable<boolean>`, `inboxTask: Writable<Task | null>`, `inboxTaskError: Writable<boolean>`, `highlightCommentId: Writable<string | null>`, `loadMoreNotifications()`, `loadArchivedNotifications()`, `loadMoreArchivedNotifications()`, `archiveNotificationsAction(ids: string[], archived?: boolean)`, `archiveAllRead()`, `openInboxNotification(n: Notification)`
+  - store: `notificationCounts: Writable<NotificationCounts>`, `archivedNotifications: Writable<Notification[]>`, `notificationsHasMore: Writable<boolean>`, `archivedHasMore: Writable<boolean>`, `inboxTask: Writable<Task | null>`, `inboxTaskError: Writable<boolean>`, `highlightCommentId: Writable<string | null>`, `inboxSplit: Readable<boolean>` (min-width 1280px media query — split-pane gate), `loadMoreNotifications()`, `loadArchivedNotifications()`, `loadMoreArchivedNotifications()`, `archiveNotificationsAction(ids: string[], archived?: boolean)`, `archiveAllRead()`, `openInboxNotification(n: Notification)`
 
 - [ ] **Step 1: Write the failing store tests**
 
@@ -476,11 +476,11 @@ Append to `src/lib/components/workos/lib/store.test.ts`. First extend the `vi.mo
 Then append the suite:
 
 ```ts
-// CAREFUL: `notifications`, `unreadCount`, `applyNotificationEvent` are ALREADY
-// imported by the mid-file import block (~line 89) — re-importing them is a
-// duplicate-binding SyntaxError. Import ONLY the new names:
+// CAREFUL: `notifications`, `unreadCount`, `applyNotificationEvent`, and
+// `selectedTaskId` are ALREADY imported by the mid-file import block (~line 89)
+// — re-importing them is a duplicate-binding SyntaxError. Import ONLY the new names:
 import {
-	notificationCounts, archivedNotifications, inboxTask,
+	notificationCounts, archivedNotifications, inboxTask, inboxTaskError,
 	archiveNotificationsAction, markRead
 } from './store';
 import * as apiMock from './api';
@@ -496,6 +496,8 @@ describe('inbox notification store', () => {
 		notifications.set([]);
 		archivedNotifications.set([]);
 		inboxTask.set(null);
+		inboxTaskError.set(false);
+		selectedTaskId.set(null);
 		unreadCount.set(0);
 		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
 	});
@@ -538,6 +540,30 @@ describe('inbox notification store', () => {
 		expect(get(notificationCounts)).toEqual({
 			unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
 		});
+	});
+
+	it('rollback keeps realtime rows that arrived during the failed request', async () => {
+		vi.mocked(apiMock.archiveNotifications).mockImplementationOnce(async () => {
+			applyNotificationEvent(mkN({ id: 'live', type: 'assigned', created_at: 5000 }));
+			throw new Error('nope');
+		});
+		notifications.set([mkN({ id: 'a' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		await expect(archiveNotificationsAction(['a'])).rejects.toThrow();
+		expect(get(notifications).map((n) => n.id)).toEqual(['live', 'a']); // snapshot restore must not eat 'live'
+		expect(get(archivedNotifications)).toHaveLength(0);
+		expect(get(notificationCounts)).toEqual({
+			unread: 2, by_type: { assigned: 1, mentioned: 0, commented: 1, status_changed: 0 }
+		});
+	});
+
+	it('task.deleted keeps the selection and flags the pane error', () => {
+		inboxTask.set({ id: 't9', workstream_id: 'other' } as any);
+		selectedTaskId.set('t9');
+		applyTaskEvent('workos:task.deleted', { id: 't9', workstream_id: 'other' });
+		expect(get(inboxTask)).toBeNull();
+		expect(get(inboxTaskError)).toBe(true);
+		expect(get(selectedTaskId)).toBe('t9'); // kept: the pane shows "Task no longer available"
 	});
 
 	it('unarchive moves the row back sorted by created_at', async () => {
@@ -636,19 +662,37 @@ export const highlightCommentId: Writable<string | null> = writable(null);
 // Workstream room joined for the split-pane task (ref-counted, so overlap with
 // the current-workstream / my-work rooms is safe). Left again on closeTask.
 let inboxRoomKey: string | null = null;
+// Monotonic open counter — a stale openInboxNotification resolution must not
+// clobber a newer selection (rapid A→B clicks).
+let inboxOpenSeq = 0;
+// Split-pane gate: the 256px sidebar + 400px list leave a usable detail pane
+// only at ≥1280px viewports; below that the inbox keeps the dialog flow.
+export const inboxSplit: Readable<boolean> = readable(false, (set) => {
+	if (!browser) return;
+	const mq = window.matchMedia('(min-width: 1280px)');
+	const update = () => set(mq.matches);
+	update();
+	mq.addEventListener('change', update);
+	return () => mq.removeEventListener('change', update);
+});
 ```
+
+(Add `readable` and `type Readable` to store.ts's existing `svelte/store` import line.)
 
 Extend the `selectedTask` derived (~line 144):
 
 ```ts
 export const selectedTask = derived(
-	// Falls back to myTasks (My Work opens) and then inboxTask (Inbox split-pane opens)
-	// so tasks outside the current workstream's `tasks` store still resolve.
+	// inboxTask FIRST: it is freshly fetched and realtime-reconciled, while
+	// `myTasks` can be stale (it persists after leaving My Work and only
+	// reconciles while My Work is active) — a stale copy must not shadow it.
+	// Then the current workstream's live `tasks`; `myTasks` is the last resort.
 	[tasks, myTasks, inboxTask, selectedTaskId],
 	([$t, $my, $inbox, $id]) =>
+		($inbox && $inbox.id === $id ? $inbox : null) ??
 		$t.find((x) => x.id === $id) ??
 		$my.find((x) => x.id === $id) ??
-		($inbox && $inbox.id === $id ? $inbox : null)
+		null
 );
 ```
 
@@ -705,7 +749,9 @@ export async function loadNotifications(): Promise<void> {
 
 export async function loadMoreNotifications(): Promise<void> {
 	const cur = get(notifications);
-	if (!cur.length) return;
+	// Bulk mutations (sweep read) can empty the page while more rows exist on
+	// the server — with no row to derive a cursor from, refill from page 1.
+	if (!cur.length) return loadNotifications();
 	const oldest = cur[cur.length - 1];
 	const more = await api
 		.listNotifications(token(), { limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id })
@@ -724,7 +770,7 @@ export async function loadArchivedNotifications(): Promise<void> {
 
 export async function loadMoreArchivedNotifications(): Promise<void> {
 	const cur = get(archivedNotifications);
-	if (!cur.length) return;
+	if (!cur.length) return loadArchivedNotifications(); // emptied by bulk unarchive → refill
 	const oldest = cur[cur.length - 1];
 	const more = await api
 		.listNotifications(token(), {
@@ -744,6 +790,24 @@ function decrementCounts(rows: Notification[]): void {
 		for (const n of affected) by[n.type] = Math.max(0, (by[n.type] ?? 0) - 1);
 		return { unread: Math.max(0, c.unread - affected.length), by_type: by };
 	});
+}
+
+/** Inverse of decrementCounts — re-add unread rows' count contributions. */
+function incrementCounts(rows: Notification[]): void {
+	const affected = rows.filter((n) => !n.read);
+	if (!affected.length) return;
+	notificationCounts.update((c) => {
+		const by = { ...c.by_type };
+		for (const n of affected) by[n.type] = (by[n.type] ?? 0) + 1;
+		return { unread: c.unread + affected.length, by_type: by };
+	});
+}
+
+/** Restore a snapshot but keep rows that arrived (realtime) after it was taken —
+ * a plain snapshot restore would silently delete them. */
+function restoreKeepingFresh(snapshot: Notification[], cur: Notification[]): Notification[] {
+	const fresh = cur.filter((c) => !snapshot.some((s) => s.id === c.id));
+	return fresh.length ? [...fresh, ...snapshot].sort((a, b) => b.created_at - a.created_at) : snapshot;
 }
 
 export async function archiveNotificationsAction(ids: string[], archived = true): Promise<void> {
@@ -768,9 +832,13 @@ export async function archiveNotificationsAction(ids: string[], archived = true)
 		const r = await api.archiveNotifications(token(), { ids, archived });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		notifications.set(before);
-		archivedNotifications.set(beforeArch);
+		// Drop this action's own optimistic copies, restore the snapshots while
+		// keeping realtime rows that arrived mid-request, then re-add those fresh
+		// rows' count contributions (the counts snapshot predates them).
+		notifications.update((cur) => restoreKeepingFresh(before, cur.filter((n) => !ids.includes(n.id))));
+		archivedNotifications.update((cur) => restoreKeepingFresh(beforeArch, cur.filter((n) => !ids.includes(n.id))));
 		notificationCounts.set(beforeCounts);
+		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
 		throw e;
 	}
 }
@@ -781,7 +849,7 @@ export async function archiveAllRead(): Promise<void> {
 	try {
 		await api.archiveNotifications(token(), { all_read: true, archived: true });
 	} catch (e) {
-		notifications.set(before);
+		notifications.update((cur) => restoreKeepingFresh(before, cur));
 		throw e;
 	}
 	void loadArchivedNotifications().catch(() => {});
@@ -789,7 +857,12 @@ export async function archiveAllRead(): Promise<void> {
 
 /** Inbox split-pane open: mark read + resolve the task beside the list (no view switch). */
 export async function openInboxNotification(n: Notification): Promise<void> {
-	if (!n.read) await markRead([n.id]);
+	const seq = ++inboxOpenSeq;
+	// Non-blocking: the selection must not wait on — or die with — mark-read.
+	// Its own optimistic update + rollback handles the row state independently,
+	// and awaiting it would let a slower A-click finish after (and clobber) a
+	// faster B-click.
+	if (!n.read) markRead([n.id]).catch(() => {});
 	highlightCommentId.set(n.comment_id ?? null);
 	inboxTask.set(null);
 	inboxTaskError.set(false);
@@ -815,7 +888,7 @@ export async function openInboxNotification(n: Notification): Promise<void> {
 	if (!n.task_id) return;
 	void loadTaskDetail(n.task_id);
 	const t = await api.getTask(token(), n.task_id).catch(() => null);
-	if (get(selectedTaskId) !== n.task_id) return; // user moved on
+	if (seq !== inboxOpenSeq || get(selectedTaskId) !== n.task_id) return; // user moved on
 	if (t) inboxTask.set(t);
 	else inboxTaskError.set(true);
 }
@@ -833,8 +906,9 @@ export async function markRead(ids: string[]): Promise<void> {
 		const r = await api.markNotificationsRead(token(), { ids });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		notifications.set(before);
+		notifications.update((cur) => restoreKeepingFresh(before, cur));
 		notificationCounts.set(beforeCounts);
+		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
 		throw e;
 	}
 }
@@ -848,8 +922,9 @@ export async function markAllRead(): Promise<void> {
 		const r = await api.markNotificationsRead(token(), { all: true });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		notifications.set(before);
+		notifications.update((cur) => restoreKeepingFresh(before, cur));
 		notificationCounts.set(beforeCounts);
+		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
 		throw e;
 	}
 }
@@ -892,7 +967,10 @@ export function applyTaskEvent(event: string, payload: any): void {
 		tasks.update((list) => list.map((t) => (t.id === payload.id ? payload : t)));
 	} else if (event === 'workos:task.deleted') {
 		tasks.update((list) => list.filter((t) => t.id !== payload.id));
-		if (get(selectedTaskId) === payload.id) selectedTaskId.set(null);
+		// If the inbox pane owns the selection, inboxTaskError was just set above —
+		// keep the id so the pane shows "Task no longer available" instead of
+		// snapping to "Select a notification". Board flow (no inbox error) clears.
+		if (get(selectedTaskId) === payload.id && !get(inboxTaskError)) selectedTaskId.set(null);
 	}
 }
 ```
@@ -904,7 +982,7 @@ Leave the existing `openNotification` untouched — the My Work rail and mobile 
 ```
 npm run test:frontend -- --run src/lib/components/workos/lib/store.test.ts
 ```
-Expected: all pass (existing + 6 new).
+Expected: all pass (existing + 8 new).
 
 - [ ] **Step 7: Type-check**
 
@@ -1254,6 +1332,7 @@ git commit -m "refactor(workos): extract container-responsive TaskDetailBody + c
 - Produces (Task 7 mounts these):
   - `TypeGlyph` props: `type: NotificationType`, `variant?: 'bubble' | 'inline'` (default `bubble`)
   - `NeedsYouCard` props: `n: Notification`, `selected: boolean`, `onopen: () => void`, `onread: () => void`, `onarchive: () => void`
+  - A11y shape for both row components: the container is a plain `div`; the open action is a **stretched sibling button** (`absolute inset-0 z-0`), and the hover action buttons / stack pill sit above it (`relative z-10`) — real buttons are never nested inside an interactive element.
   - `FeedRow` props: `entry: FeedEntry`, `selectedId?: string | null` (the selected *notification* id — selection is per-notification, not per-task, so multiple rows for one task never all highlight), `archivedView?: boolean` (default false), `onopen: (n: Notification) => void`, `onread: (n: Notification) => void`, `onarchive: (n: Notification) => void` (in archived view `onarchive` unarchives)
 
 - [ ] **Step 1: Add the two missing icons**
@@ -1335,17 +1414,17 @@ In `src/lib/components/workos/ui/Icon.svelte`'s glyph map add (lucide paths, sam
 </script>
 
 <div
-	class="group mx-4 mb-2 flex cursor-pointer gap-2.5 rounded-lg border bg-white p-2.5 pl-3
-		shadow-[inset_2px_0_0_var(--primary)] transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:bg-gray-900
+	class="group relative mx-4 mb-2 flex gap-2.5 rounded-lg border bg-white p-2.5 pl-3
+		shadow-[inset_2px_0_0_var(--primary)] transition-colors duration-150 dark:bg-gray-900
 		{selected ? 'border-primary' : 'border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-850'}"
-	role="button"
-	tabindex="0"
-	onclick={onopen}
-	onkeydown={(e) => {
-		if (e.target !== e.currentTarget) return; // inner action buttons handle their own keys
-		if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onopen(); }
-	}}
 >
+	<!-- Stretched primary action: a real sibling button (valid a11y tree) — the
+	     hover actions below are z-raised siblings, never nested interactives. -->
+	<button
+		class="absolute inset-0 z-0 cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+		aria-label="Open: {who} {verb} {n.data?.task_title ?? ''}"
+		onclick={onopen}
+	></button>
 	<Avatar class="size-7 flex-none">
 		<AvatarFallback class="text-[10px] font-semibold text-white" style="background:{avatarColors(who).background}">
 			{initialsOf}
@@ -1367,16 +1446,16 @@ In `src/lib/components/workos/ui/Icon.svelte`'s glyph map add (lucide paths, sam
 	</div>
 	<div class="flex flex-none flex-col items-end gap-1">
 		<span class="wos-caption tabular-nums text-gray-400 dark:text-gray-500">{agoShort(n.created_at)}</span>
-		<div class="flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+		<div class="relative z-10 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
 			<button
-				class="flex size-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+				class="flex size-6 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
 				title="Mark read" aria-label="Mark read"
-				onclick={(e) => { e.stopPropagation(); onread(); }}
+				onclick={onread}
 			><Icon name="check" size={13} /></button>
 			<button
-				class="flex size-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+				class="flex size-6 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
 				title="Archive" aria-label="Archive"
-				onclick={(e) => { e.stopPropagation(); onarchive(); }}
+				onclick={onarchive}
 			><Icon name="archive" size={13} /></button>
 		</div>
 	</div>
@@ -1420,7 +1499,6 @@ export function agoShort(ms: number, now = Date.now()): string {
 	export let onarchive: (n: Notification) => void;
 
 	let expanded = false;
-	$: n = entry.latest;
 	$: rows = expanded ? entry.stack : [entry.latest];
 
 	const VERB: Record<string, string> = {
@@ -1432,17 +1510,16 @@ export function agoShort(ms: number, now = Date.now()): string {
 
 {#each rows as item, i (item.id)}
 	<div
-		class="group flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none dark:hover:bg-gray-850
+		class="group relative flex items-start gap-2.5 px-4 py-2.5 transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-gray-850
 			{selectedId === item.id ? 'bg-primary/5 shadow-[inset_2px_0_0_var(--primary)]' : ''}
 			{i > 0 ? 'pl-10' : ''}"
-		role="button"
-		tabindex="0"
-		onclick={() => onopen(item)}
-		onkeydown={(e) => {
-			if (e.target !== e.currentTarget) return; // inner action buttons handle their own keys
-			if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onopen(item); }
-		}}
 	>
+		<!-- Stretched primary action (valid a11y tree: actions are siblings, not nested). -->
+		<button
+			class="absolute inset-0 z-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+			aria-label="Open: {who(item)} {VERB[item.type] ?? 'updated'} {item.data?.task_title ?? ''}"
+			onclick={() => onopen(item)}
+		></button>
 		{#if !item.read}
 			<span class="mt-[11px] size-2 flex-none rounded-full bg-primary"></span>
 		{:else}
@@ -1459,8 +1536,8 @@ export function agoShort(ms: number, now = Date.now()): string {
 				<span class={item.read ? '' : 'font-semibold'}>{item.data?.task_title ?? ''}</span>
 				{#if i === 0 && entry.stack.length > 1}
 					<button
-						class="ml-1 rounded-full bg-gray-100 px-2 py-px text-[11px] font-semibold text-gray-600 transition-colors duration-150 hover:bg-gray-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:bg-gray-850 dark:text-gray-300 dark:hover:bg-gray-800"
-						onclick={(e) => { e.stopPropagation(); expanded = !expanded; }}
+						class="relative z-10 ml-1 rounded-full bg-gray-100 px-2 py-px text-[11px] font-semibold text-gray-600 transition-colors duration-150 hover:bg-gray-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:bg-gray-850 dark:text-gray-300 dark:hover:bg-gray-800"
+						onclick={() => (expanded = !expanded)}
 					>{expanded ? 'Collapse' : `${entry.stack.length} updates`}</button>
 				{/if}
 			</div>
@@ -1475,18 +1552,18 @@ export function agoShort(ms: number, now = Date.now()): string {
 			{/if}
 		</div>
 		<span class="wos-caption mt-1 flex-none tabular-nums text-gray-400 dark:text-gray-500">{agoShort(item.created_at)}</span>
-		<div class="mt-0.5 flex flex-none gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+		<div class="relative z-10 mt-0.5 flex flex-none gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
 			{#if !archivedView && !item.read}
 				<button
-					class="flex size-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+					class="flex size-6 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400 dark:hover:text-gray-100"
 					title="Mark read" aria-label="Mark read"
-					onclick={(e) => { e.stopPropagation(); onread(item); }}
+					onclick={() => onread(item)}
 				><Icon name="check" size={13} /></button>
 			{/if}
 			<button
-				class="flex size-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+				class="flex size-6 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors duration-150 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400 dark:hover:text-gray-100"
 				title={archivedView ? 'Unarchive' : 'Archive'} aria-label={archivedView ? 'Unarchive' : 'Archive'}
-				onclick={(e) => { e.stopPropagation(); onarchive(item); }}
+				onclick={() => onarchive(item)}
 			><Icon name="archive" size={13} /></button>
 		</div>
 	</div>
@@ -1518,7 +1595,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 - Modify: `src/lib/components/workos/chrome/NavDrawer.svelte` (line 42: same badge fix) and `src/lib/components/workos/chrome/MobileHeader.svelte` (line 29: same dot fix)
 
 **Interfaces:**
-- Consumes: everything produced by Tasks 3–6 (`groupInbox`, `notificationCounts`, `archiveNotificationsAction`, `archiveAllRead`, `openInboxNotification`, `loadMoreNotifications`, `loadArchivedNotifications`, `NeedsYouCard`, `FeedRow`, `TaskDetailBody`, `inboxTaskError`), plus `mobile` from `$lib/stores` and `EmptyState`.
+- Consumes: everything produced by Tasks 3–6 (`groupInbox`, `notificationCounts`, `archiveNotificationsAction`, `archiveAllRead`, `openInboxNotification`, `loadMoreNotifications`, `loadArchivedNotifications`, `loadMoreArchivedNotifications`, `inboxSplit`, `NeedsYouCard`, `FeedRow`, `TaskDetailBody`, `inboxTaskError`), plus `mobile` from `$lib/stores` and `EmptyState`.
 - Produces: the finished view.
 
 - [ ] **Step 1: Rewrite `InboxView.svelte`**
@@ -1537,7 +1614,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 	import type { Notification, NotificationType } from '../lib/types';
 	import {
 		notifications, archivedNotifications, notificationCounts, notificationsHasMore, archivedHasMore,
-		selectedTaskId, selectedTask, inboxTaskError,
+		selectedTaskId, selectedTask, inboxTaskError, inboxSplit,
 		loadNotifications, loadMoreNotifications, loadArchivedNotifications, loadMoreArchivedNotifications,
 		markRead, markAllRead, archiveNotificationsAction, archiveAllRead,
 		openInboxNotification, openNotification, closeTask
@@ -1593,7 +1670,9 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 	let selectedNotifId: string | null = null;
 	$: if (!$selectedTaskId) selectedNotifId = null;
 
-	// Desktop opens in the split pane; mobile keeps the full-screen dialog flow.
+	// ≥1280px: split pane. 768–1279px: same selection flow, but WorkOSApp renders
+	// the task dialog over the inbox (no view switch — highlight + realtime intact).
+	// Mobile: old navigate-away flow.
 	function open(n: Notification): void {
 		if ($mobile) {
 			void openNotification(n);
@@ -1608,10 +1687,11 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 
 <div class="flex h-full min-h-0">
 	<!-- ─────────── left: list pane ───────────
-	     Fixed width on desktop so the detail pane gets every remaining pixel
-	     (TaskDetailBody stacks below an 880px container width, so the pane must
-	     be as wide as possible, not a ~50% split). Full-width on mobile. -->
-	<div class="flex w-full min-w-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 md:w-[400px] md:flex-none xl:w-[440px]">
+	     Full-width below xl (no split pane — selection opens the dialog instead;
+	     sidebar 256px + list would leave a useless sliver). At ≥xl the list is
+	     fixed-width so the detail pane gets every remaining pixel
+	     (TaskDetailBody stacks below an 880px container width). -->
+	<div class="flex w-full min-w-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 xl:w-[400px] xl:flex-none 2xl:w-[440px]">
 		<!-- header -->
 		<div class="px-4 pt-4">
 			<h1 class="text-[22px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">
@@ -1633,10 +1713,10 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 		</div>
 		<!-- controls -->
 		<div class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-900">
-			<div class="flex gap-0.5 rounded-full bg-gray-100 p-[3px] dark:bg-gray-900">
+			<div class="flex min-w-0 max-w-full shrink gap-0.5 overflow-x-auto rounded-full bg-gray-100 p-[3px] dark:bg-gray-900">
 				{#each TABS as t (t.k)}
 					<button
-						class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
+						class="flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
 							{tab === t.k
 								? 'bg-white font-semibold text-gray-900 shadow-sm dark:bg-gray-850 dark:text-gray-100'
 								: 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'}"
@@ -1713,7 +1793,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 					{#each groups.needsYou as n (n.id)}
 						<NeedsYouCard
 							{n}
-							selected={!$mobile && selectedNotifId === n.id}
+							selected={$inboxSplit && selectedNotifId === n.id}
 							onopen={() => open(n)}
 							onread={() => read(n)}
 							onarchive={() => archive(n)}
@@ -1729,7 +1809,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 						<FeedRow
 							{entry}
 							archivedView={showArchived}
-							selectedId={$mobile ? null : selectedNotifId}
+							selectedId={$inboxSplit ? selectedNotifId : null}
 							onopen={open}
 							onread={read}
 							onarchive={archive}
@@ -1747,13 +1827,15 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 			{/if}
 		</div>
 	</div>
-	<!-- ─────────── right: detail pane (desktop only) ─────────── -->
-	{#if !$mobile}
+	<!-- ─────────── right: detail pane (≥1280px only) ───────────
+	     Error checked BEFORE the body: a deleted/404 task can still resolve a
+	     stale copy from `myTasks`, which must not render over the error state. -->
+	{#if $inboxSplit}
 		<div class="flex min-w-0 flex-1 flex-col bg-white dark:bg-gray-950">
-			{#if $selectedTask}
-				<TaskDetailBody />
-			{:else if $selectedTaskId && $inboxTaskError}
+			{#if $selectedTaskId && $inboxTaskError}
 				<EmptyState icon="inbox" title="Task no longer available" sub="It may have been deleted, or you no longer have access to it." />
+			{:else if $selectedTask}
+				<TaskDetailBody />
 			{:else if $selectedTaskId}
 				<div class="flex h-full items-center justify-center text-sm text-gray-400">Loading…</div>
 			{:else}
@@ -1764,7 +1846,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 </div>
 ```
 
-- [ ] **Step 2: Suppress the global drawer for the desktop inbox**
+- [ ] **Step 2: Suppress the global drawer only when the split pane is active**
 
 In `src/lib/components/workos/WorkOSApp.svelte` line 83, change:
 
@@ -1777,10 +1859,12 @@ In `src/lib/components/workos/WorkOSApp.svelte` line 83, change:
 to:
 
 ```svelte
-{#if $selectedTask && !($view === 'inbox' && !$mobile)}
+{#if $selectedTask && !($view === 'inbox' && $inboxSplit)}
 	<TaskDetail />
 {/if}
 ```
+
+Add `inboxSplit` to WorkOSApp's `./lib/store` import. Effect: ≥1280px the pane owns the detail; 768–1279px an inbox selection opens the normal task dialog **over** the inbox (no view switch, highlight + inbox room join intact); mobile is unchanged.
 
 - [ ] **Step 3: Unread badges → primary token, all chrome (design-system D1 fix)**
 
@@ -1860,11 +1944,12 @@ Smoke checklist (user's Vite hot-reload server; seed by acting as a second user 
 8. Mobile width (<768px): full-width list, tap opens full-screen detail (old flow).
 9. Dark mode pass over all of the above.
 10. Board view task drawer still works exactly as before (TaskDetailBody extraction regression check — the ≥880px dialog container must render the converted variants identically).
-11. Filter dead-end fix: pick a tab whose matches aren't in the loaded page (or toggle "Unread only" with everything read) — the list may be empty, but "Load more" stays visible and fetches older rows. Archived view paginates past 50 the same way.
-12. Cross-team notification (task from a team that is not the current team): breadcrumb shows the task's workstream, delete affordances follow the task team's role, label editing is hidden.
-13. Narrow window (~1100px viewport): the detail pane stacks single-column (container query) instead of crushing the comments column.
-14. Keyboard: Tab to a row → Enter opens; Tab into a row's hover action button → Enter triggers only that action, not the row open.
-15. Rapidly click two notifications for different tasks: the second task's pane never shows the first task's comments/activity (stale-store clear).
+11. Filter dead-end fix: pick a tab whose matches aren't in the loaded page (or toggle "Unread only" with everything read) — the list may be empty, but "Load more" stays visible and fetches older rows. Archived view paginates past 50 the same way. After "Sweep read" empties the loaded page, "Load more" refills from page 1 instead of no-opping.
+12. Cross-team notification (task from a team that is not the current team): breadcrumb shows the task's workstream, delete affordances follow the task team's role, label editing is hidden. If the same task also sits in a stale My Work list, the pane still shows the freshly fetched data (inboxTask wins the lookup).
+13. Breakpoints: ≥1280px shows the split pane; at ~1000–1200px the inbox stays full-width and selecting opens the task dialog over it (no view switch; highlight + realtime intact). In a narrow-ish ≥1280px window the detail pane stacks single-column (container query). The tab row scrolls horizontally when cramped.
+14. Keyboard/a11y: Tab reaches the row's stretched open button (Enter opens), then the hover action buttons as siblings — action Enter never also opens the row; the accessibility tree has no nested interactive elements.
+15. Rapidly click two unread notifications A then B: the pane lands on B and stays there (non-blocking mark-read + open-generation guard), and B's pane never shows A's comments/activity (stale-store clear).
+16. Second user deletes the task open in the pane: it flips to "Task no longer available" — both when the task is in the current workstream and when it is foreign.
 
 - [ ] **Step 5: Update memory + report**
 
