@@ -33,7 +33,7 @@
 - Consumes: existing `Notifications` DAO singleton, `get_async_db_context`, `WorkosNotification` table.
 - Produces (Task 2 relies on these exact signatures):
   - `Notifications.set_archived(user_id: str, ids: Optional[list] = None, all_read: bool = False, archived: bool = True, db=None) -> int`
-  - `Notifications.list_for_user(user_id, unread_only=False, limit=50, before=None, archived=False, db=None) -> list`
+  - `Notifications.list_for_user(user_id, unread_only=False, limit=50, before=None, before_id=None, archived=False, db=None) -> list` — compound `(created_at, id)` cursor so rows sharing the boundary millisecond are never skipped
   - `Notifications.counts_for_user(user_id: str, db=None) -> dict` returning `{'unread': int, 'by_type': {'assigned': int, 'mentioned': int, 'commented': int, 'status_changed': int}}`
   - `NotificationModel.archived: bool`
 
@@ -102,6 +102,20 @@ async def test_counts_for_user_by_type_unread_nonarchived_only():
         'unread': 2,
         'by_type': {'assigned': 0, 'mentioned': 2, 'commented': 0, 'status_changed': 0},
     }
+
+
+@pytest.mark.asyncio
+async def test_pagination_compound_cursor_covers_shared_millisecond(monkeypatch):
+    import open_webui.models.workos as mw
+    monkeypatch.setattr(mw, '_now', lambda: 12345)  # 3 rows share one millisecond
+    ids = {(await Notifications.insert('u1', 'u2', 'commented', {}, task_id='t1')).id for _ in range(3)}
+    page1 = await Notifications.list_for_user('u1', limit=2)
+    assert len(page1) == 2
+    page2 = await Notifications.list_for_user(
+        'u1', limit=2, before=page1[-1].created_at, before_id=page1[-1].id
+    )
+    assert len(page2) == 1
+    assert {x.id for x in page1} | {x.id for x in page2} == ids
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -176,7 +190,8 @@ In `backend/open_webui/models/workos.py`:
 ```python
     async def list_for_user(
         self, user_id: str, unread_only: bool = False, limit: int = 50,
-        before: Optional[int] = None, archived: bool = False, db: Optional[AsyncSession] = None,
+        before: Optional[int] = None, before_id: Optional[str] = None,
+        archived: bool = False, db: Optional[AsyncSession] = None,
     ) -> list:
         async with get_async_db_context(db) as db:
             q = select(WorkosNotification).filter_by(user_id=user_id)
@@ -184,8 +199,19 @@ In `backend/open_webui/models/workos.py`:
             if unread_only:
                 q = q.filter(WorkosNotification.read == False)  # noqa: E712
             if before is not None:
-                q = q.filter(WorkosNotification.created_at < before)
-            q = q.order_by(WorkosNotification.created_at.desc()).limit(limit)
+                if before_id is not None:
+                    # Compound cursor: strictly-older ms, or same ms with a smaller
+                    # id — rows sharing the boundary millisecond are never skipped.
+                    q = q.filter(
+                        (WorkosNotification.created_at < before)
+                        | ((WorkosNotification.created_at == before)
+                           & (WorkosNotification.id < before_id))
+                    )
+                else:
+                    q = q.filter(WorkosNotification.created_at < before)
+            q = q.order_by(
+                WorkosNotification.created_at.desc(), WorkosNotification.id.desc()
+            ).limit(limit)
             res = await db.execute(q)
             return [NotificationModel.model_validate(r) for r in res.scalars().all()]
 ```
@@ -238,7 +264,7 @@ Add to `NotificationsDao` (after `mark_read`):
 cd backend
 .venv\Scripts\python.exe -m pytest open_webui/test/workos/test_models_notifications.py -q
 ```
-Expected: 5 passed. (Test DB is created from metadata, so the new column exists without running the migration.)
+Expected: 6 passed. (Test DB is created from metadata, so the new column exists without running the migration.)
 
 - [ ] **Step 6: Run the full workos model/router suite for regressions**
 
@@ -267,7 +293,7 @@ git commit -m "feat(workos): notification archived flag - migration, model, DAO"
 - Consumes: Task 1's `Notifications.set_archived` / `counts_for_user` / `list_for_user(archived=)`.
 - Produces (Task 3's api.ts relies on these):
   - `POST /api/v1/workos/notifications/archive` body `{ids?: [...], all_read?: bool, archived?: bool}` → `{'unread': int}`
-  - `GET /api/v1/workos/notifications?archived=true|false` (default false)
+  - `GET /api/v1/workos/notifications?archived=true|false` (default false) + `before_id` compound-cursor param beside `before`
   - `GET /api/v1/workos/notifications/counts` → `{'unread': int, 'by_type': {...}}`
 
 - [ ] **Step 1: Write the failing router tests**
@@ -350,13 +376,14 @@ Change `list_notifications` signature and DAO call (add `archived`):
 @router.get('/notifications')
 async def list_notifications(
     request: Request, unread_only: bool = False, limit: int = 50, before: Optional[int] = None,
-    archived: bool = False,
+    before_id: Optional[str] = None, archived: bool = False,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await require_workos(request, user, db)
     limit = max(1, min(limit, 200))
     return await Notifications.list_for_user(
-        user.id, unread_only=unread_only, limit=limit, before=before, archived=archived, db=db
+        user.id, unread_only=unread_only, limit=limit, before=before, before_id=before_id,
+        archived=archived, db=db
     )
 ```
 
@@ -430,8 +457,8 @@ git commit -m "feat(workos): notification archive + counts endpoints"
 - Consumes: Task 2's endpoints.
 - Produces (Tasks 6–7 rely on these exact names):
   - types: `Notification.archived?: boolean`; `interface NotificationCounts { unread: number; by_type: Record<NotificationType, number> }`
-  - api: `listNotifications(token, opts?: { unreadOnly?: boolean; archived?: boolean; before?: number; limit?: number })`; `archiveNotifications(token, body: { ids?: string[]; all_read?: boolean; archived?: boolean })`; `getNotificationCounts(token)`
-  - store: `notificationCounts: Writable<NotificationCounts>`, `archivedNotifications: Writable<Notification[]>`, `notificationsHasMore: Writable<boolean>`, `inboxTask: Writable<Task | null>`, `inboxTaskError: Writable<boolean>`, `highlightCommentId: Writable<string | null>`, `loadMoreNotifications()`, `loadArchivedNotifications()`, `archiveNotificationsAction(ids: string[], archived?: boolean)`, `archiveAllRead()`, `openInboxNotification(n: Notification)`
+  - api: `listNotifications(token, opts?: { unreadOnly?: boolean; archived?: boolean; before?: number; beforeId?: string; limit?: number })`; `archiveNotifications(token, body: { ids?: string[]; all_read?: boolean; archived?: boolean })`; `getNotificationCounts(token)`
+  - store: `notificationCounts: Writable<NotificationCounts>`, `archivedNotifications: Writable<Notification[]>`, `notificationsHasMore: Writable<boolean>`, `archivedHasMore: Writable<boolean>`, `inboxTask: Writable<Task | null>`, `inboxTaskError: Writable<boolean>`, `highlightCommentId: Writable<string | null>`, `loadMoreNotifications()`, `loadArchivedNotifications()`, `loadMoreArchivedNotifications()`, `archiveNotificationsAction(ids: string[], archived?: boolean)`, `archiveAllRead()`, `openInboxNotification(n: Notification)`
 
 - [ ] **Step 1: Write the failing store tests**
 
@@ -449,10 +476,14 @@ Append to `src/lib/components/workos/lib/store.test.ts`. First extend the `vi.mo
 Then append the suite:
 
 ```ts
+// CAREFUL: `notifications`, `unreadCount`, `applyNotificationEvent` are ALREADY
+// imported by the mid-file import block (~line 89) — re-importing them is a
+// duplicate-binding SyntaxError. Import ONLY the new names:
 import {
-	notifications, notificationCounts, archivedNotifications, unreadCount, inboxTask,
-	applyNotificationEvent, archiveNotificationsAction, markRead
+	notificationCounts, archivedNotifications, inboxTask,
+	archiveNotificationsAction, markRead
 } from './store';
+import * as apiMock from './api';
 import type { Notification } from './types';
 
 const mkN = (over: Partial<Notification>): Notification => ({
@@ -495,6 +526,18 @@ describe('inbox notification store', () => {
 		expect(get(archivedNotifications).map((n) => n.id)).toEqual(['a']);
 		expect(get(archivedNotifications)[0].read).toBe(true);
 		expect(get(notificationCounts).unread).toBe(1);
+	});
+
+	it('archive failure rolls lists and counts back', async () => {
+		vi.mocked(apiMock.archiveNotifications).mockRejectedValueOnce(new Error('nope'));
+		notifications.set([mkN({ id: 'a' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		await expect(archiveNotificationsAction(['a'])).rejects.toThrow();
+		expect(get(notifications).map((n) => n.id)).toEqual(['a']);
+		expect(get(archivedNotifications)).toHaveLength(0);
+		expect(get(notificationCounts)).toEqual({
+			unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
+		});
 	});
 
 	it('unarchive moves the row back sorted by created_at', async () => {
@@ -549,12 +592,13 @@ Replace the notifications block:
 // Notifications
 export const listNotifications = (
 	token: string,
-	opts: { unreadOnly?: boolean; archived?: boolean; before?: number; limit?: number } = {}
+	opts: { unreadOnly?: boolean; archived?: boolean; before?: number; beforeId?: string; limit?: number } = {}
 ) => {
 	const p = new URLSearchParams();
 	if (opts.unreadOnly) p.set('unread_only', 'true');
 	if (opts.archived) p.set('archived', 'true');
 	if (opts.before != null) p.set('before', String(opts.before));
+	if (opts.beforeId != null) p.set('before_id', opts.beforeId);
 	if (opts.limit != null) p.set('limit', String(opts.limit));
 	const qs = p.toString();
 	return request<Notification[]>(token, `/notifications${qs ? `?${qs}` : ''}`);
@@ -581,6 +625,7 @@ const EMPTY_COUNTS = (): NotificationCounts => ({
 export const notificationCounts: Writable<NotificationCounts> = writable(EMPTY_COUNTS());
 export const archivedNotifications: Writable<Notification[]> = writable([]);
 export const notificationsHasMore: Writable<boolean> = writable(false);
+export const archivedHasMore: Writable<boolean> = writable(false);
 const NOTIF_PAGE = 50;
 // Split-pane inbox: the opened notification's task may be in neither `tasks` nor
 // `myTasks`, so it is fetched into this third `selectedTask` fallback.
@@ -661,18 +706,33 @@ export async function loadNotifications(): Promise<void> {
 export async function loadMoreNotifications(): Promise<void> {
 	const cur = get(notifications);
 	if (!cur.length) return;
-	const oldest = cur[cur.length - 1].created_at;
+	const oldest = cur[cur.length - 1];
 	const more = await api
-		.listNotifications(token(), { limit: NOTIF_PAGE, before: oldest })
+		.listNotifications(token(), { limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id })
 		.catch(() => [] as Notification[]);
 	notifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
 	notificationsHasMore.set(more.length === NOTIF_PAGE);
 }
 
 export async function loadArchivedNotifications(): Promise<void> {
-	archivedNotifications.set(
-		await api.listNotifications(token(), { archived: true, limit: 200 }).catch(() => [] as Notification[])
-	);
+	const list = await api
+		.listNotifications(token(), { archived: true, limit: NOTIF_PAGE })
+		.catch(() => [] as Notification[]);
+	archivedNotifications.set(list);
+	archivedHasMore.set(list.length === NOTIF_PAGE);
+}
+
+export async function loadMoreArchivedNotifications(): Promise<void> {
+	const cur = get(archivedNotifications);
+	if (!cur.length) return;
+	const oldest = cur[cur.length - 1];
+	const more = await api
+		.listNotifications(token(), {
+			archived: true, limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id
+		})
+		.catch(() => [] as Notification[]);
+	archivedNotifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
+	archivedHasMore.set(more.length === NOTIF_PAGE);
 }
 
 /** Decrement unread + per-type counts for rows that were unread until now. */
@@ -689,6 +749,7 @@ function decrementCounts(rows: Notification[]): void {
 export async function archiveNotificationsAction(ids: string[], archived = true): Promise<void> {
 	const before = get(notifications);
 	const beforeArch = get(archivedNotifications);
+	const beforeCounts = get(notificationCounts);
 	if (archived) {
 		const moving = before.filter((n) => ids.includes(n.id));
 		decrementCounts(moving);
@@ -709,6 +770,7 @@ export async function archiveNotificationsAction(ids: string[], archived = true)
 	} catch (e) {
 		notifications.set(before);
 		archivedNotifications.set(beforeArch);
+		notificationCounts.set(beforeCounts);
 		throw e;
 	}
 }
@@ -743,6 +805,12 @@ export async function openInboxNotification(n: Notification): Promise<void> {
 		inboxRoomKey = streamKey(ws);
 		enterRoom(inboxRoomKey);
 	}
+	// Clear the shared detail stores BEFORE switching — otherwise the previous
+	// task's comments/activity render under the new task until its fetches land.
+	comments.set([]);
+	activity.set([]);
+	attachments.set([]);
+	subtasks.set([]);
 	selectedTaskId.set(n.task_id ?? null);
 	if (!n.task_id) return;
 	void loadTaskDetail(n.task_id);
@@ -757,17 +825,33 @@ Update `markRead` / `markAllRead` (~line 527) to keep counts in sync:
 
 ```ts
 export async function markRead(ids: string[]): Promise<void> {
-	decrementCounts(get(notifications).filter((n) => ids.includes(n.id)));
+	const before = get(notifications);
+	const beforeCounts = get(notificationCounts);
+	decrementCounts(before.filter((n) => ids.includes(n.id)));
 	notifications.update((list) => list.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
-	const r = await api.markNotificationsRead(token(), { ids });
-	unreadCount.set(r.unread);
+	try {
+		const r = await api.markNotificationsRead(token(), { ids });
+		unreadCount.set(r.unread);
+	} catch (e) {
+		notifications.set(before);
+		notificationCounts.set(beforeCounts);
+		throw e;
+	}
 }
 
 export async function markAllRead(): Promise<void> {
+	const before = get(notifications);
+	const beforeCounts = get(notificationCounts);
 	notifications.update((list) => list.map((n) => ({ ...n, read: true })));
 	notificationCounts.set(EMPTY_COUNTS());
-	const r = await api.markNotificationsRead(token(), { all: true });
-	unreadCount.set(r.unread);
+	try {
+		const r = await api.markNotificationsRead(token(), { all: true });
+		unreadCount.set(r.unread);
+	} catch (e) {
+		notifications.set(before);
+		notificationCounts.set(beforeCounts);
+		throw e;
+	}
 }
 ```
 
@@ -820,7 +904,7 @@ Leave the existing `openNotification` untouched — the My Work rail and mobile 
 ```
 npm run test:frontend -- --run src/lib/components/workos/lib/store.test.ts
 ```
-Expected: all pass (existing + 5 new).
+Expected: all pass (existing + 6 new).
 
 - [ ] **Step 7: Type-check**
 
@@ -1019,15 +1103,17 @@ git commit -m "feat(workos): inbox grouping - needs-you split, day buckets, task
 ### Task 5: TaskDetail split — extract `TaskDetailBody` + comment highlight
 
 **Files:**
-- Create: `src/lib/components/workos/views/detail/TaskDetailBody.svelte` (content moved from TaskDetail)
+- Create: `src/lib/components/workos/views/detail/TaskDetailBody.svelte` (content moved from TaskDetail, `md:` → container variants)
 - Modify: `src/lib/components/workos/views/TaskDetail.svelte` (becomes a thin Dialog wrapper)
-- Modify: `src/lib/components/workos/views/detail/CommentItem.svelte` (highlight prop + scroll-into-view)
+- Modify: `src/lib/components/workos/views/detail/CommentItem.svelte` (highlight prop + scroll-into-view + `teamId` prop)
+- Modify: `src/lib/components/workos/views/detail/DetailHeader.svelte` (task-derived role + breadcrumb)
+- Modify: `src/lib/components/workos/views/detail/AttachmentsPanel.svelte` + `src/lib/components/workos/views/detail/AttachmentList.svelte` (`teamId` prop for role)
 
 **Interfaces:**
 - Consumes: all detail stores (`selectedTask`, `comments`, …) — unchanged; `highlightCommentId` from Task 3.
 - Produces: `TaskDetailBody` — no props, reads stores, renders the full detail surface with its own root container. `CommentItem` gains `export let highlight = false`.
 
-**This is a mechanical extraction — behavior must not change.** TaskDetail.svelte is ~560 lines: a `<script>` block, a `<svelte:window onpointerdown={onWindowPointerDown} />` line, and a template of the shape `{#if t} <Dialog.Root …> <Dialog.Content …> [INNER CONTENT] </Dialog.Content> </Dialog.Root> {/if}` (Dialog.Root at ~line 221, Dialog.Content ~222–225, closing tags ~558–559).
+**This is a mostly mechanical extraction — dialog behavior must not change.** TaskDetail.svelte is ~560 lines: a `<script>` block, a `<svelte:window onpointerdown={onWindowPointerDown} />` line, and a template of the shape `{#if t} <Dialog.Root …> <Dialog.Content …> [INNER CONTENT] </Dialog.Content> </Dialog.Root> {/if}` (Dialog.Root at ~line 221, Dialog.Content ~222–225, closing tags ~558–559). Two deliberate non-mechanical parts: (a) the internal two-column split is viewport-based (`md:` = 768px viewport, with a fixed `md:w-[440px]` left column at line 233) — inside a ~50%-width inbox pane that leaves no room for comments, so those variants become **container queries**; (b) the detail components derive role/breadcrumb/labels from the *current* team, which is wrong for cross-team tasks (a pre-existing My Work defect the inbox makes prominent) — Step 4 fixes the cheap parts.
 
 - [ ] **Step 1: Create `TaskDetailBody.svelte`**
 
@@ -1038,11 +1124,24 @@ Move into it, unchanged:
 
 ```svelte
 {#if t}
-	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-gray-950">
-		<!-- [INNER CONTENT moved verbatim] -->
+	<div class="@container flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-gray-950">
+		<!-- [INNER CONTENT moved here] -->
 	</div>
 {/if}
 ```
+
+Then convert the moved template's internal-split breakpoints from viewport to **container** variants (the `@container` class on the wrapper above enables them). Exactly 6 lines carry them (source line numbers from TaskDetail.svelte):
+
+| Source line | Change |
+|---|---|
+| 231 | `md:flex-row` → `@[880px]:flex-row`, `md:overflow-hidden` → `@[880px]:overflow-hidden` |
+| 233 | every `md:` prefix (`md:w-[440px] md:flex-none md:min-h-0 md:overflow-y-auto md:px-7 md:py-5 md:border-b-0 md:border-r`) → `@[880px]:` |
+| 255 | `md:hidden` → `@[880px]:hidden` |
+| 263 | `md:block` → `@[880px]:block` |
+| 524 | every `md:` prefix (`md:flex-1 md:min-w-0 md:min-h-0 md:overflow-y-auto md:px-7 md:py-5`) → `@[880px]:` |
+| 543 | every `max-md:` prefix → `@max-[880px]:` |
+
+Effect: the 1100px dialog container is ≥880px, so the dialog renders pixel-identically; a narrower inbox pane (or a narrow window's dialog) falls back to the stacked single-column layout, which is the desired compact behavior. Child components (DetailHeader etc.) keep their own viewport variants — fine in both contexts.
 
 Add to its script imports: `import { highlightCommentId } from '../../lib/store';`
 
@@ -1099,7 +1198,29 @@ In `src/lib/components/workos/views/detail/CommentItem.svelte`:
 
 (Adapt to the root's existing class= form — if it is a plain string, convert to a template `class="existing {highlight ? '…' : ''}"`.)
 
-- [ ] **Step 4: Type-check + test sweep**
+- [ ] **Step 4: Cross-team detail correctness (task-derived role, breadcrumb, labels)**
+
+The detail surface currently derives everything from the *current* team/workstream — wrong when the inbox opens a task from another team (and already wrong for My Work cross-team opens). The `roles` store is keyed by team id and `workstreams` holds every visible workstream, so:
+
+- `DetailHeader.svelte` (~lines 14–15): derive from the task, not the globals —
+
+```ts
+	$: myRole = $roles[task.team_id];
+	$: crumb =
+		$workstreams.find((w) => w.id === task.workstream_id)?.name ?? $currentWorkstream?.name ?? 'Tasks';
+```
+
+(add `workstreams` to the store import; keep `currentWorkstream` as the fallback).
+- `CommentItem.svelte` (~line 13), `AttachmentsPanel.svelte` (~line 19), `AttachmentList.svelte` (~line 8): add `export let teamId: string | null = null;` and change the role line to
+
+```ts
+	$: myRole = teamId ? $roles[teamId] : $currentTeam ? $roles[$currentTeam.id] : undefined;
+```
+
+TaskDetailBody passes `teamId={t.team_id}` to CommentItem and AttachmentsPanel; AttachmentsPanel forwards `{teamId}` to AttachmentList. (The fallback keeps every other call site behaving exactly as today.)
+- **Labels stay team-scoped:** the `labels` store and `createLabel` target the *current* team, so on a foreign-team task the picker would show and create the wrong team's tags. In TaskDetailBody add `currentTeam` to the store import, then `$: foreignTeam = !!t && t.team_id !== ($currentTeam?.id ?? t.team_id);` and wrap the label add/edit UI (the tag picker around source line ~386) in `{#if !foreignTeam}`. Displayed chips resolve through the current-team label map and simply won't render for foreign tasks — acceptable; per-team label fetch is a follow-up if it ever matters.
+
+- [ ] **Step 5: Type-check + test sweep**
 
 ```
 npm run check
@@ -1107,15 +1228,15 @@ npm run test:frontend -- --run
 ```
 Expected: no new svelte-check errors; all vitest suites pass.
 
-- [ ] **Step 5: Manual sanity (hot reload, no rebuild)**
+- [ ] **Step 6: Manual sanity (hot reload, no rebuild)**
 
-With the user's Vite server running and the app open: open a task from the Board — the detail dialog must look and behave exactly as before (tabs, comment composer, progress bar drag, subtasks). This is the no-behavior-change gate for the extraction.
+With the user's Vite server running and the app open: open a task from the Board — the detail dialog must look and behave exactly as before (tabs, comment composer, progress bar drag, subtasks; the ≥880px dialog container renders the converted variants identically). This is the no-behavior-change gate for the extraction.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/lib/components/workos/views/TaskDetail.svelte src/lib/components/workos/views/detail/TaskDetailBody.svelte src/lib/components/workos/views/detail/CommentItem.svelte
-git commit -m "refactor(workos): extract TaskDetailBody from the dialog wrapper + comment highlight"
+git add src/lib/components/workos/views/TaskDetail.svelte src/lib/components/workos/views/detail/TaskDetailBody.svelte src/lib/components/workos/views/detail/CommentItem.svelte src/lib/components/workos/views/detail/DetailHeader.svelte src/lib/components/workos/views/detail/AttachmentsPanel.svelte src/lib/components/workos/views/detail/AttachmentList.svelte
+git commit -m "refactor(workos): extract container-responsive TaskDetailBody + cross-team detail context"
 ```
 
 ---
@@ -1133,7 +1254,7 @@ git commit -m "refactor(workos): extract TaskDetailBody from the dialog wrapper 
 - Produces (Task 7 mounts these):
   - `TypeGlyph` props: `type: NotificationType`, `variant?: 'bubble' | 'inline'` (default `bubble`)
   - `NeedsYouCard` props: `n: Notification`, `selected: boolean`, `onopen: () => void`, `onread: () => void`, `onarchive: () => void`
-  - `FeedRow` props: `entry: FeedEntry`, `selected: boolean`, `archivedView?: boolean` (default false), `onopen: (n: Notification) => void`, `onread: (n: Notification) => void`, `onarchive: (n: Notification) => void` (in archived view `onarchive` unarchives)
+  - `FeedRow` props: `entry: FeedEntry`, `selectedId?: string | null` (the selected *notification* id — selection is per-notification, not per-task, so multiple rows for one task never all highlight), `archivedView?: boolean` (default false), `onopen: (n: Notification) => void`, `onread: (n: Notification) => void`, `onarchive: (n: Notification) => void` (in archived view `onarchive` unarchives)
 
 - [ ] **Step 1: Add the two missing icons**
 
@@ -1220,7 +1341,10 @@ In `src/lib/components/workos/ui/Icon.svelte`'s glyph map add (lucide paths, sam
 	role="button"
 	tabindex="0"
 	onclick={onopen}
-	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onopen(); } }}
+	onkeydown={(e) => {
+		if (e.target !== e.currentTarget) return; // inner action buttons handle their own keys
+		if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onopen(); }
+	}}
 >
 	<Avatar class="size-7 flex-none">
 		<AvatarFallback class="text-[10px] font-semibold text-white" style="background:{avatarColors(who).background}">
@@ -1289,7 +1413,7 @@ export function agoShort(ms: number, now = Date.now()): string {
 	import type { Notification, TaskStatus } from '../../lib/types';
 
 	export let entry: FeedEntry;
-	export let selected = false;
+	export let selectedId: string | null = null;
 	export let archivedView = false;
 	export let onopen: (n: Notification) => void;
 	export let onread: (n: Notification) => void;
@@ -1309,12 +1433,15 @@ export function agoShort(ms: number, now = Date.now()): string {
 {#each rows as item, i (item.id)}
 	<div
 		class="group flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none dark:hover:bg-gray-850
-			{selected && item.id === n.id ? 'bg-primary/5 shadow-[inset_2px_0_0_var(--primary)]' : ''}
+			{selectedId === item.id ? 'bg-primary/5 shadow-[inset_2px_0_0_var(--primary)]' : ''}
 			{i > 0 ? 'pl-10' : ''}"
 		role="button"
 		tabindex="0"
 		onclick={() => onopen(item)}
-		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onopen(item); } }}
+		onkeydown={(e) => {
+			if (e.target !== e.currentTarget) return; // inner action buttons handle their own keys
+			if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onopen(item); }
+		}}
 	>
 		{#if !item.read}
 			<span class="mt-[11px] size-2 flex-none rounded-full bg-primary"></span>
@@ -1409,9 +1536,9 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 	import { agoShort } from '../lib/inboxFormat';
 	import type { Notification, NotificationType } from '../lib/types';
 	import {
-		notifications, archivedNotifications, notificationCounts, notificationsHasMore,
+		notifications, archivedNotifications, notificationCounts, notificationsHasMore, archivedHasMore,
 		selectedTaskId, selectedTask, inboxTaskError,
-		loadNotifications, loadMoreNotifications, loadArchivedNotifications,
+		loadNotifications, loadMoreNotifications, loadArchivedNotifications, loadMoreArchivedNotifications,
 		markRead, markAllRead, archiveNotificationsAction, archiveAllRead,
 		openInboxNotification, openNotification, closeTask
 	} from '../lib/store';
@@ -1461,18 +1588,30 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 	$: updatesCount = Math.max(0, counts.unread - needsCount);
 	$: oldestUnread = [...$notifications].reverse().find((n) => !n.read);
 
+	// Selection is per-notification (not per-task): several rows can share a task
+	// and must not all light up. Cleared when the pane selection closes.
+	let selectedNotifId: string | null = null;
+	$: if (!$selectedTaskId) selectedNotifId = null;
+
 	// Desktop opens in the split pane; mobile keeps the full-screen dialog flow.
 	function open(n: Notification): void {
-		if ($mobile) void openNotification(n);
-		else void openInboxNotification(n);
+		if ($mobile) {
+			void openNotification(n);
+		} else {
+			selectedNotifId = n.id;
+			void openInboxNotification(n);
+		}
 	}
 	const read = (n: Notification) => void markRead([n.id]);
 	const archive = (n: Notification) => void archiveNotificationsAction([n.id], !showArchived);
 </script>
 
 <div class="flex h-full min-h-0">
-	<!-- ─────────── left: list pane ─────────── -->
-	<div class="flex min-w-0 flex-[1.15] flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+	<!-- ─────────── left: list pane ───────────
+	     Fixed width on desktop so the detail pane gets every remaining pixel
+	     (TaskDetailBody stacks below an 880px container width, so the pane must
+	     be as wide as possible, not a ~50% split). Full-width on mobile. -->
+	<div class="flex w-full min-w-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 md:w-[400px] md:flex-none xl:w-[440px]">
 		<!-- header -->
 		<div class="px-4 pt-4">
 			<h1 class="text-[22px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">
@@ -1574,7 +1713,7 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 					{#each groups.needsYou as n (n.id)}
 						<NeedsYouCard
 							{n}
-							selected={!$mobile && $selectedTaskId != null && n.task_id === $selectedTaskId}
+							selected={!$mobile && selectedNotifId === n.id}
 							onopen={() => open(n)}
 							onread={() => read(n)}
 							onarchive={() => archive(n)}
@@ -1590,19 +1729,21 @@ git commit -m "feat(workos): inbox row primitives - TypeGlyph, NeedsYouCard, Fee
 						<FeedRow
 							{entry}
 							archivedView={showArchived}
-							selected={!$mobile && $selectedTaskId != null && entry.latest.task_id === $selectedTaskId}
+							selectedId={$mobile ? null : selectedNotifId}
 							onopen={open}
 							onread={read}
 							onarchive={archive}
 						/>
 					{/each}
 				{/each}
-				{#if !showArchived && $notificationsHasMore}
-					<button
-						class="mx-4 mt-3 flex h-8 w-[calc(100%-2rem)] items-center justify-center rounded-lg border border-gray-200 text-xs font-medium text-gray-500 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-850"
-						onclick={() => void loadMoreNotifications()}
-					>Load more</button>
-				{/if}
+			{/if}
+			<!-- Outside the empty-check: a filter can empty the LOADED page while older
+			     matches exist on the server — pagination must stay reachable. -->
+			{#if showArchived ? $archivedHasMore : $notificationsHasMore}
+				<button
+					class="mx-4 mt-3 flex h-8 w-[calc(100%-2rem)] items-center justify-center rounded-lg border border-gray-200 text-xs font-medium text-gray-500 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-850"
+					onclick={() => void (showArchived ? loadMoreArchivedNotifications() : loadMoreNotifications())}
+				>Load more</button>
 			{/if}
 		</div>
 	</div>
@@ -1718,7 +1859,12 @@ Smoke checklist (user's Vite hot-reload server; seed by acting as a second user 
 7. Realtime: new notification while the inbox is open prepends + bumps counts + unread badges (primary teal in the sidebar, nav drawer, and mobile header — not sky blue). With a task from a *different* workstream open in the split pane, a comment posted by the second user appears live in the right pane (inbox room join), and a status change made by them updates the pane header.
 8. Mobile width (<768px): full-width list, tap opens full-screen detail (old flow).
 9. Dark mode pass over all of the above.
-10. Board view task drawer still works exactly as before (TaskDetailBody extraction regression check).
+10. Board view task drawer still works exactly as before (TaskDetailBody extraction regression check — the ≥880px dialog container must render the converted variants identically).
+11. Filter dead-end fix: pick a tab whose matches aren't in the loaded page (or toggle "Unread only" with everything read) — the list may be empty, but "Load more" stays visible and fetches older rows. Archived view paginates past 50 the same way.
+12. Cross-team notification (task from a team that is not the current team): breadcrumb shows the task's workstream, delete affordances follow the task team's role, label editing is hidden.
+13. Narrow window (~1100px viewport): the detail pane stacks single-column (container query) instead of crushing the comments column.
+14. Keyboard: Tab to a row → Enter opens; Tab into a row's hover action button → Enter triggers only that action, not the row open.
+15. Rapidly click two notifications for different tasks: the second task's pane never shows the first task's comments/activity (stale-store clear).
 
 - [ ] **Step 5: Update memory + report**
 

@@ -59,16 +59,28 @@ audit bug (Mark-all-read shown on empty inbox).
   clamped snippet with left rule (comments) or sm `StatusBadge` from → to transition
   chips (status). Time right, hover actions right. Read rows dim (secondary ink, normal
   weight); unread bold names/titles.
-- **Load more:** ghost row at feed end when a full page (limit) was returned; fetches
-  with `before=<oldest created_at>`.
+- **Load more:** ghost row when a full page (limit) was returned; fetches with the
+  compound cursor `before=<oldest created_at>&before_id=<oldest id>` (same-millisecond
+  rows are never skipped). Rendered **outside** the empty-state branch: a client-side
+  filter (tab / unread-only) can empty the loaded page while older matches exist, so
+  pagination must stay reachable. The archived view paginates the same way (50/page).
 - **Empty states:** existing `EmptyState` block variant — inbox icon, "You're all caught
   up" (+ per-filter variants: e.g. no mentions); archived view its own empty state.
 
 ## 4. Right pane (desktop ≥768px)
 
 - Existing `TaskDetail` rendered **inline** (not the drawer overlay) in a `flex:1` pane
-  with left border. Selecting a notification: mark read → `openTask(task_id)` (reuses all
-  loading: comments/subtasks/attachments/activity) → detail renders beside the list.
+  with left border. The list pane is fixed-width (400px, 440px ≥xl) so the detail pane
+  gets every remaining pixel; the extracted `TaskDetailBody` is **container-responsive**
+  (`@container`, two-column ≥880px container width, stacked below) so a narrow pane or
+  window degrades to the compact single-column layout instead of crushing comments.
+- Selecting a notification: mark read → resolve the task (clearing the shared
+  comments/activity/attachments/subtasks stores first, so the previous task's data never
+  renders under the new one) → detail renders beside the list. Selection highlight is
+  per-notification, not per-task.
+- Cross-team tasks render correctly: role affordances derive from `task.team_id`,
+  breadcrumb from the task's workstream; label editing is hidden for foreign-team tasks
+  (the labels store and `createLabel` are current-team-scoped).
 - `WorkOSApp` suppresses the drawer overlay when `view === 'inbox'` on desktop; mobile
   (<768px) keeps today's full-screen detail behavior, list is full-width.
 - `TaskDetail` gains optional `highlightCommentId` prop: for `mentioned`/`commented`
@@ -92,13 +104,14 @@ as mark-read; access doc §4 gets these rows)
 | Route | Behavior |
 |---|---|
 | `POST /notifications/archive` | Body `{ids?: [...], all_read?: bool, archived: bool}`. `ids` → set `archived` on caller-owned rows only; `all_read: true` + `archived: true` → archive every read, non-archived row. Returns `{unread}` like mark-read. |
-| `GET /notifications` | New `archived: bool = false` query param. Default excludes archived; `archived=true` returns only archived. `unread_only`/`limit≤200`/`before` unchanged. |
+| `GET /notifications` | New `archived: bool = false` query param. Default excludes archived; `archived=true` returns only archived. New `before_id` param: with `before`, forms a compound `(created_at, id)` cursor (ordering adds `id DESC` tiebreak). `unread_only`/`limit≤200`/`before` unchanged. |
 | `GET /notifications/counts` | `{unread, by_type: {mentioned, assigned, commented, status_changed}}` — unread AND non-archived only. |
 
 ### 5.3 DAO
 
 `Notifications.set_archived(user_id, ids=None, all_read=False, archived=True)`,
-`list_for_user(..., archived=False)`, `counts_for_user(user_id)`. `mark_read` unchanged.
+`list_for_user(..., before_id=None, archived=False)` (compound `(created_at, id)`
+cursor), `counts_for_user(user_id)`. `mark_read` unchanged.
 Bootstrap `notifications_unread` unchanged (archived rows are read, so already excluded).
 
 ### 5.4 Realtime
@@ -126,8 +139,10 @@ Store (`lib/store.ts`):
 - `notificationCounts` writable, set by `loadNotifications()` (list + `/counts` in
   parallel) and adjusted client-side on read/receive events.
 - `archiveNotifications(ids, archived)` — optimistic removal/restore + server sync;
-  `archiveAllRead()`.
-- Archived list lazy-loads on first Archived-view open (separate store or param refetch).
+  failure rolls back lists **and** `notificationCounts`; `markRead`/`markAllRead` roll
+  back the same way. `archiveAllRead()`.
+- Archived list lazy-loads on first Archived-view open, paginated 50/page with the
+  same compound cursor (`archivedHasMore` + load-more).
 - `openInboxNotification` (desktop split-pane): mark read + resolve the task + set
   `highlightCommentId` + join the task's workstream room (ref-counted); **no**
   `view.set('board')`. The old navigate-away `openNotification` remains for other
@@ -148,12 +163,13 @@ Store (`lib/store.ts`):
 
 - **Vitest:** `lib/inbox.ts` grouping (day buckets incl. Today/Yesterday boundaries,
   stacking merges consecutive same-task only, needs-you extraction = unread
-  mentioned/assigned only); store tests — optimistic archive + rollback, counts
-  decrement on read, realtime prepend + count bump, split-pane `inboxTask`
-  reconcile on cross-workstream `task.updated` (extend `store.test.ts`).
+  mentioned/assigned only); store tests — optimistic archive + failure rollback of
+  lists and counts, counts decrement on read, realtime prepend + count bump,
+  split-pane `inboxTask` reconcile on cross-workstream `task.updated`
+  (extend `store.test.ts`).
 - **Pytest:** archive endpoint scoping (cannot archive another user's rows), archive
-  implies read, `all_read` sweep, `archived` list filter, counts correctness, limit
-  clamp regression.
+  implies read, `all_read` sweep, `archived` list filter, counts correctness,
+  compound-cursor pagination across a shared millisecond, limit clamp regression.
 - **Static:** `svelte-check` clean; design-system greps (no `sky-500`, no bare
   `rounded`, `focus-visible` present on new interactive elements).
 - **Browser smoke** (Docker container + Vite hot reload per runbook): seed
