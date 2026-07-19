@@ -9,8 +9,13 @@
 	import type { Comment } from '../../lib/types';
 
 	export let comment: Comment;
+	export let highlight = false;
+	export let teamId: string | null = null;
 
-	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
+	let rootEl: HTMLElement | null = null;
+	$: if (highlight && rootEl) rootEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+	$: myRole = teamId ? $roles[teamId] : $currentTeam ? $roles[$currentTeam.id] : undefined;
 	$: rendered = renderMentions(comment.body, displayName);
 	$: mine = comment.user_id === ($user?.id ?? '');
 
@@ -20,7 +25,7 @@
 	function save() { editComment(comment.id, draft); editing = false; }
 </script>
 
-<div class="py-2 group">
+<div bind:this={rootEl} class="py-2 group {highlight ? 'bg-primary/5 border-l-2 border-primary' : ''}">
 	<div class="flex items-center gap-2 mb-1">
 		<span class="text-sm font-medium">{displayName(comment.user_id)}</span>
 		{#if comment.edited_at}<span class="text-[11px] text-gray-400">(edited)</span>{/if}

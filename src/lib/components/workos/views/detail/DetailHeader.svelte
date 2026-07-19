@@ -4,15 +4,16 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { cn } from '$lib/components/ui/utils.js';
 	import { STATUS_LABEL, type Task } from '../../lib/types';
-	import { currentWorkstream, closeTask, removeTask, roles, currentTeam } from '../../lib/store';
+	import { currentWorkstream, closeTask, removeTask, roles, workstreams } from '../../lib/store';
 	import { user } from '$lib/stores';
 	import { canDeleteTask } from '../../lib/roles';
 
 	export let task: Task;
 	export let onEditTitle: () => void;
 
-	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
-	$: crumb = $currentWorkstream?.name ?? 'Tasks';
+	$: myRole = $roles[task.team_id];
+	$: crumb =
+		$workstreams.find((w) => w.id === task.workstream_id)?.name ?? $currentWorkstream?.name ?? 'Tasks';
 
 	let copied = false;
 	async function copyLink() {

@@ -16,7 +16,9 @@
 	import { canDeleteAttachment, canToggleAttachmentRequired } from '../../lib/roles';
 	import * as api from '../../lib/api';
 
-	$: myRole = $currentTeam ? $roles[$currentTeam.id] : undefined;
+	export let teamId: string | null = null;
+
+	$: myRole = teamId ? $roles[teamId] : $currentTeam ? $roles[$currentTeam.id] : undefined;
 	$: files = $attachments.filter((a) => !a.comment_id);
 	$: t = $selectedTask;
 	$: canToggleRequired = !!t && canToggleAttachmentRequired(t, $user);
