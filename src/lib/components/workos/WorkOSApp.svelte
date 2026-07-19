@@ -25,6 +25,7 @@
 		loadBootstrap, connectRealtime, disconnectRealtime,
 		view, selectedTask, teams, loading, mobileNavOpen, inboxSplit
 	} from './lib/store';
+	import { hydrateFromUrl, initUrlSync, destroyUrlSync, urlHasWorkstream } from './lib/urlSync';
 
 	// Guard: snap non-admins away from the admin view.
 	$: if ($view === 'admin' && !canUseAdmin($user)) view.set('board');
@@ -33,10 +34,17 @@
 	$: if (!$mobile) mobileNavOpen.set(false);
 
 	onMount(async () => {
-		await loadBootstrap();
+		// Deep link present → hydrateFromUrl performs the one workstream
+		// selection; otherwise bootstrap picks its default as before.
+		await loadBootstrap({ selectDefaultWorkstream: !urlHasWorkstream() });
+		await hydrateFromUrl();
+		initUrlSync();
 		connectRealtime();
 	});
-	onDestroy(() => disconnectRealtime());
+	onDestroy(() => {
+		destroyUrlSync();
+		disconnectRealtime();
+	});
 </script>
 
 <div class="workos-root text-gray-800 dark:text-gray-100">
