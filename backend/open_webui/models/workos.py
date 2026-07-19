@@ -1043,6 +1043,7 @@ class WorkosNotification(Base):
     type = Column(Text)
     data = Column(JSON, default=dict)
     read = Column(Boolean, default=False)
+    archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(BigInteger)
 
 
@@ -1069,6 +1070,7 @@ class NotificationModel(BaseModel):
     type: str
     data: dict = {}
     read: bool
+    archived: bool = False
     created_at: int
 
 
@@ -1151,15 +1153,28 @@ class NotificationsDao:
 
     async def list_for_user(
         self, user_id: str, unread_only: bool = False, limit: int = 50,
-        before: Optional[int] = None, db: Optional[AsyncSession] = None,
+        before: Optional[int] = None, before_id: Optional[str] = None,
+        archived: bool = False, db: Optional[AsyncSession] = None,
     ) -> list:
         async with get_async_db_context(db) as db:
             q = select(WorkosNotification).filter_by(user_id=user_id)
+            q = q.filter(WorkosNotification.archived == archived)  # noqa: E712
             if unread_only:
                 q = q.filter(WorkosNotification.read == False)  # noqa: E712
             if before is not None:
-                q = q.filter(WorkosNotification.created_at < before)
-            q = q.order_by(WorkosNotification.created_at.desc()).limit(limit)
+                if before_id is not None:
+                    # Compound cursor: strictly-older ms, or same ms with a smaller
+                    # id — rows sharing the boundary millisecond are never skipped.
+                    q = q.filter(
+                        (WorkosNotification.created_at < before)
+                        | ((WorkosNotification.created_at == before)
+                           & (WorkosNotification.id < before_id))
+                    )
+                else:
+                    q = q.filter(WorkosNotification.created_at < before)
+            q = q.order_by(
+                WorkosNotification.created_at.desc(), WorkosNotification.id.desc()
+            ).limit(limit)
             res = await db.execute(q)
             return [NotificationModel.model_validate(r) for r in res.scalars().all()]
 
@@ -1184,6 +1199,42 @@ class NotificationsDao:
                 row.read = True
             await db.commit()
             return len(rows)
+
+    async def set_archived(
+        self, user_id: str, ids: Optional[list] = None, all_read: bool = False,
+        archived: bool = True, db: Optional[AsyncSession] = None,
+    ) -> int:
+        """Archive implies read; unarchive never un-reads."""
+        async with get_async_db_context(db) as db:
+            q = select(WorkosNotification).filter_by(user_id=user_id)
+            if all_read:
+                q = q.filter(WorkosNotification.read == True,      # noqa: E712
+                             WorkosNotification.archived == False)  # noqa: E712
+            else:
+                q = q.filter(WorkosNotification.id.in_(ids or []))
+            res = await db.execute(q)
+            rows = res.scalars().all()
+            for row in rows:
+                row.archived = archived
+                if archived:
+                    row.read = True
+            await db.commit()
+            return len(rows)
+
+    async def counts_for_user(self, user_id: str, db: Optional[AsyncSession] = None) -> dict:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosNotification.type, func.count())
+                .where(
+                    WorkosNotification.user_id == user_id,
+                    WorkosNotification.read == False,      # noqa: E712
+                    WorkosNotification.archived == False,  # noqa: E712
+                )
+                .group_by(WorkosNotification.type)
+            )
+            by_type = {'assigned': 0, 'mentioned': 0, 'commented': 0, 'status_changed': 0}
+            by_type.update({t: c for t, c in res.all()})
+            return {'unread': sum(by_type.values()), 'by_type': by_type}
 
     async def get_by_id(self, id: str, db: Optional[AsyncSession] = None) -> Optional[NotificationModel]:
         async with get_async_db_context(db) as db:
