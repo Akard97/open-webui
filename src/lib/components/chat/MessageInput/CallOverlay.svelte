@@ -320,7 +320,7 @@
 					return;
 				}
 
-				if (muted || (assistantSpeaking && !($settings?.voiceInterruption ?? false))) {
+				if (muted || (assistantSpeaking && !(true))) {
 					// Suppress mic input when muted or when assistant is speaking without interruption enabled
 					analyser.maxDecibels = 0;
 					analyser.minDecibels = -1;
@@ -335,7 +335,7 @@
 				// Calculate RMS level from time domain data
 				rmsLevel = calculateRMS(timeDomainData);
 
-				if (muted || (assistantSpeaking && !($settings?.voiceInterruption ?? false))) {
+				if (muted || (assistantSpeaking && !(true))) {
 					rmsLevel = 0;
 				}
 

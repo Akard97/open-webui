@@ -51,7 +51,7 @@
 	let insertPromptAsRichText = false;
 	let promptAutocomplete = false;
 
-	let largeTextAsFile = false;
+	let largeTextAsFile = true;
 
 	let insertSuggestionPrompt = false;
 	let keepFollowUpPrompts = false;
@@ -92,7 +92,7 @@
 	let showUpdateToast = true;
 	let showChangelog = true;
 
-	let showEmojiInCall = false;
+	let showEmojiInCall = true;
 	let voiceInterruption = false;
 	let hapticFeedback = false;
 
@@ -212,7 +212,7 @@
 		showUpdateToast = $settings?.showUpdateToast ?? true;
 		showChangelog = $settings?.showChangelog ?? true;
 
-		showEmojiInCall = $settings?.showEmojiInCall ?? false;
+		showEmojiInCall = $settings?.showEmojiInCall ?? true;
 		voiceInterruption = $settings?.voiceInterruption ?? false;
 
 		displayMultiModelResponsesInTabs = $settings?.displayMultiModelResponsesInTabs ?? false;
@@ -230,7 +230,7 @@
 		regenerateMenu = $settings?.regenerateMenu ?? true;
 		enableMessageQueue = $settings?.enableMessageQueue ?? true;
 
-		largeTextAsFile = $settings?.largeTextAsFile ?? false;
+		largeTextAsFile = $settings?.largeTextAsFile ?? true;
 		copyFormatted = $settings?.copyFormatted ?? false;
 
 		collapseCodeBlocks = $settings?.collapseCodeBlocks ?? false;
@@ -417,6 +417,7 @@
 				{/if}
 			</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="high-contrast-mode-label" class=" self-center text-xs">
@@ -435,7 +436,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="use-chat-title-as-tab-title-label" class=" self-center text-xs">
@@ -454,6 +457,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<div>
 				<div class="py-0.5 flex w-full justify-between">
@@ -495,6 +499,7 @@
 				</div>
 			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div id="allow-user-location-label" class=" py-0.5 flex w-full justify-between">
 					<div class=" self-center text-xs">{$i18n.t('Allow User Location')}</div>
@@ -511,7 +516,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="haptic-feedback-label" class=" self-center text-xs">
@@ -530,6 +537,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
@@ -592,6 +600,7 @@
 
 			<div class=" my-2 text-sm font-medium">{$i18n.t('Chat')}</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="enable-message-queue-label" class=" self-center text-xs">
@@ -610,6 +619,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
@@ -634,6 +644,7 @@
 				</div>
 			</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="landing-page-mode-label" class=" self-center text-xs">
@@ -654,6 +665,7 @@
 					</button>
 				</div>
 			</div>
+			{/if}
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
@@ -780,6 +792,7 @@
 				</div>
 			</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="render-markdown-user-label" class=" self-center text-xs">
@@ -798,7 +811,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="render-markdown-assistant-label" class=" self-center text-xs">
@@ -817,7 +832,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="auto-generation-label" class=" self-center text-xs">
@@ -836,7 +853,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div class=" self-center text-xs" id="follow-up-auto-generation-label">
@@ -855,7 +874,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="chat-tags-label" class=" self-center text-xs">
@@ -874,7 +895,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="auto-copy-label" class=" self-center text-xs">
@@ -893,7 +916,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="insert-suggestion-prompt-label" class=" self-center text-xs">
@@ -912,7 +937,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="keep-follow-up-prompts-label" class=" self-center text-xs">
@@ -931,7 +958,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="insert-follow-up-prompt-label" class=" self-center text-xs">
@@ -950,7 +979,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="regenerate-menu-label" class=" self-center text-xs">
@@ -969,7 +1000,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="always-collapse-label" class=" self-center text-xs">
@@ -988,6 +1021,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
@@ -1008,6 +1042,7 @@
 				</div>
 			</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="render-markdown-in-previews-label" class=" self-center text-xs">
@@ -1026,7 +1061,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="keep-followup-prompts-label" class=" self-center text-xs">
@@ -1045,7 +1082,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="scroll-on-branch-change-label" class=" self-center text-xs">
@@ -1064,7 +1103,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="stylized-pdf-export-label" class=" self-center text-xs">
@@ -1083,7 +1124,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<label id="floating-action-buttons-label" class=" self-center text-xs">
@@ -1115,7 +1158,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="web-search-in-chat-label" class=" self-center text-xs">
@@ -1136,6 +1181,7 @@
 					</button>
 				</div>
 			</div>
+			{/if}
 
 			<div class=" my-2 text-sm font-medium">{$i18n.t('Input')}</div>
 
@@ -1162,6 +1208,7 @@
 				</div>
 			</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="rich-input-label" class=" self-center text-xs">
@@ -1180,8 +1227,10 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			{#if $config?.features?.enable_autocomplete_generation}
+				{#if $user?.role === 'admin'}
 				<div>
 					<div class=" py-0.5 flex w-full justify-between">
 						<div id="prompt-autocompletion-label" class=" self-center text-xs">
@@ -1200,6 +1249,7 @@
 						</div>
 					</div>
 				</div>
+				{/if}
 			{/if}
 
 			{#if richTextInput}
@@ -1263,6 +1313,7 @@
 
 			<div class=" my-2 text-sm font-medium">{$i18n.t('Artifacts')}</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="detect-artifacts-label" class=" self-center text-xs">
@@ -1281,7 +1332,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="iframe-sandbox-allow-same-origin-label" class=" self-center text-xs">
@@ -1300,7 +1353,9 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div id="iframe-sandbox-allow-forms-label" class=" self-center text-xs">
@@ -1319,9 +1374,11 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<div class=" my-2 text-sm font-medium">{$i18n.t('Voice')}</div>
 
+			{#if $user?.role === 'admin'}
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div class=" self-center text-xs" id="allow-voice-interruption-in-call-label">
@@ -1340,6 +1397,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
@@ -1395,6 +1453,7 @@
 			</div>
 
 			{#if imageCompression}
+				{#if $user?.role === 'admin'}
 				<div>
 					<div class=" py-0.5 flex w-full justify-between">
 						<div id="image-compression-in-channels-label" class=" self-center text-xs">
@@ -1413,6 +1472,7 @@
 						</div>
 					</div>
 				</div>
+				{/if}
 			{/if}
 		</div>
 	</div>

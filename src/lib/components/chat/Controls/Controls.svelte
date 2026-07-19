@@ -46,7 +46,7 @@
 		</div>
 	{/if}
 
-	{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
+	{#if $user?.role === 'admin'}
 		<div class=" dark:text-gray-200 text-sm py-0.5 px-0.5">
 			{#if chatFiles.length > 0}
 				<Collapsible

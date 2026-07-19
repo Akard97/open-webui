@@ -70,7 +70,7 @@
 
 	$: hasMessages = history?.messages && Object.keys(history.messages).length > 0;
 
-	$: showControlsTab = $user?.role === 'admin' || ($user?.permissions?.chat?.controls ?? true);
+	$: showControlsTab = $user?.role === 'admin';
 	$: showFilesTab =
 		($selectedTerminalId &&
 			(($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId) ||

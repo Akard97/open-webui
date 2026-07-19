@@ -93,7 +93,6 @@
 	import Dropdown from '../common/Dropdown.svelte';
 
 	import CommandSuggestionList from './MessageInput/CommandSuggestionList.svelte';
-	import Knobs from '../icons/Knobs.svelte';
 	import ValvesModal from '../workspace/common/ValvesModal.svelte';
 	import Note from '../icons/Note.svelte';
 	import { goto } from '$app/navigation';
@@ -1711,25 +1710,6 @@
 
 									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
 										<EffortMenu modelId={selectedModelIds[0]} />
-									{/if}
-
-									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
-										<div class="ml-1 flex gap-1.5">
-											<Tooltip content={$i18n.t('Valves')} placement="top">
-												<button
-													type="button"
-													id="model-valves-button"
-													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
-													on:click={() => {
-														selectedValvesType = 'function';
-														selectedValvesItemId = selectedModelIds[0]?.split('.')[0];
-														showValvesModal = true;
-													}}
-												>
-													<Knobs className="size-4" strokeWidth="1.5" />
-												</button>
-											</Tooltip>
-										</div>
 									{/if}
 
 									<div class="ml-1 flex gap-1.5">

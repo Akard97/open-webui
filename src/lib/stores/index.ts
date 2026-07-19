@@ -136,6 +136,7 @@ type BaseModel = {
 	name: string;
 	info?: ModelConfig;
 	owned_by: 'ollama' | 'openai' | 'arena';
+	has_user_valves?: boolean;
 };
 
 export interface OpenAIModel extends BaseModel {

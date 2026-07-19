@@ -5,6 +5,7 @@
 	import { WEBUI_NAME, config, showArchivedChats, user } from '$lib/stores';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import osoolLogo from '$lib/assets/osool-logo.png';
+	import osoolLogoDark from '$lib/assets/favicon-dark.png';
 
 	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
@@ -35,14 +36,20 @@
 	<!-- Logo -->
 	<a
 		href="/home"
-		class="flex items-center h-14 shrink-0 px-3 text-gray-900 dark:text-white"
+		class="flex items-center h-14 shrink-0 px-2 text-gray-900 dark:text-white"
 		aria-label={$WEBUI_NAME}
 	>
 		<span class="w-10 shrink-0 flex items-center justify-center">
 			<img
 				src={osoolLogo}
 				alt={$WEBUI_NAME}
-				class="size-6 rounded object-contain"
+				class="size-6 rounded object-contain dark:hidden"
+				draggable="false"
+			/>
+			<img
+				src={osoolLogoDark}
+				alt={$WEBUI_NAME}
+				class="size-6 rounded object-contain hidden dark:block"
 				draggable="false"
 			/>
 		</span>
