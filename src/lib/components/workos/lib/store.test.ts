@@ -638,3 +638,115 @@ describe('inbox task load-error classification', () => {
 		expect(get(inboxTaskLoadError)).toBe(false);
 	});
 });
+
+import {
+	notificationsHasMore, archivedHasMore, loadArchivedNotifications, loadMoreArchivedNotifications
+} from './store';
+
+describe('load-more failure is not an empty page', () => {
+	beforeEach(() => {
+		notifications.set([]);
+		archivedNotifications.set([]);
+		notificationsHasMore.set(false);
+		archivedHasMore.set(false);
+	});
+
+	it('failed loadMoreNotifications keeps rows, hasMore, and the cursor', async () => {
+		const page = [mkN({ id: 'p0', created_at: 1000 }), mkN({ id: 'p1', created_at: 999 })];
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce(page);
+		await loadNotifications();
+		notificationsHasMore.set(true); // page < NOTIF_PAGE in the fixture; force the real precondition
+		vi.mocked(apiMock.listNotifications).mockRejectedValueOnce(new Error('network'));
+		await loadMoreNotifications(); // must not throw
+		expect(get(notifications).map((n) => n.id)).toEqual(['p0', 'p1']); // rows intact
+		expect(get(notificationsHasMore)).toBe(true); // Load more stays available
+		// Retry must reuse the same server-owned cursor, not a corrupted one.
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce([]);
+		await loadMoreNotifications();
+		expect(vi.mocked(apiMock.listNotifications).mock.calls.at(-1)?.[1])
+			.toMatchObject({ before: 999, beforeId: 'p1' });
+	});
+
+	it('failed loadMoreArchivedNotifications keeps rows, hasMore, and the cursor', async () => {
+		const page = [
+			mkN({ id: 'a0', created_at: 1000, archived: true }),
+			mkN({ id: 'a1', created_at: 999, archived: true })
+		];
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce(page);
+		await loadArchivedNotifications();
+		archivedHasMore.set(true);
+		vi.mocked(apiMock.listNotifications).mockRejectedValueOnce(new Error('network'));
+		await loadMoreArchivedNotifications(); // must not throw
+		expect(get(archivedNotifications).map((n) => n.id)).toEqual(['a0', 'a1']);
+		expect(get(archivedHasMore)).toBe(true);
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce([]);
+		await loadMoreArchivedNotifications();
+		expect(vi.mocked(apiMock.listNotifications).mock.calls.at(-1)?.[1])
+			.toMatchObject({ archived: true, before: 999, beforeId: 'a1' });
+	});
+});
+
+describe('stale list fetches must not clobber committed mutations', () => {
+	beforeEach(() => {
+		notifications.set([]);
+		archivedNotifications.set([]);
+		notificationsHasMore.set(false);
+		archivedHasMore.set(false);
+		unreadCount.set(0);
+		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
+	});
+
+	it('a loadNotifications snapshot resolving after an archive is discarded', async () => {
+		notifications.set([mkN({ id: 'a', read: true })]);
+		let resolveList: ((v: unknown) => void) | undefined;
+		vi.mocked(apiMock.listNotifications)
+			.mockImplementationOnce(() => new Promise((res) => { resolveList = res; }) as any);
+		const p = loadNotifications();
+		await archiveNotificationsAction(['a']); // commits while the fetch is in flight
+		resolveList!([mkN({ id: 'a', read: true })]); // server snapshot taken pre-archive
+		await p;
+		expect(get(notifications)).toHaveLength(0); // archived row must not resurrect
+		expect(get(archivedNotifications).map((n) => n.id)).toEqual(['a']);
+	});
+
+	it('a loadMoreNotifications page resolving after an archive is discarded (rows + cursor)', async () => {
+		const page = [mkN({ id: 'p0', created_at: 1000 }), mkN({ id: 'p1', created_at: 999 })];
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce(page);
+		await loadNotifications();
+		let resolveMore: ((v: unknown) => void) | undefined;
+		vi.mocked(apiMock.listNotifications)
+			.mockImplementationOnce(() => new Promise((res) => { resolveMore = res; }) as any);
+		const p = loadMoreNotifications();
+		await archiveNotificationsAction(['p1']); // commits mid-flight
+		resolveMore!([mkN({ id: 'p1', created_at: 999 }), mkN({ id: 'p2', created_at: 998 })]); // stale window
+		await p;
+		expect(get(notifications).map((n) => n.id)).toEqual(['p0']); // stale page dropped entirely
+		// The discarded page must not have advanced the server-owned cursor.
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce([]);
+		await loadMoreNotifications();
+		expect(vi.mocked(apiMock.listNotifications).mock.calls.at(-1)?.[1])
+			.toMatchObject({ before: 999, beforeId: 'p1' });
+	});
+});
+
+describe('editTask myTasks mirror', () => {
+	beforeEach(() => {
+		tasks.set([]); // task lives outside the current workstream's list
+		inboxTask.set(null);
+	});
+
+	it('mirrors optimistic + confirmed edits into the myTasks fallback copy', async () => {
+		const { editTask } = await import('./store');
+		myTasks.set([mk({ id: 'm1', title: 'old' })]);
+		await editTask('m1', { title: 'new' });
+		expect(get(myTasks)[0].title).toBe('new');
+	});
+
+	it('rolls the myTasks copy back when the update fails', async () => {
+		const { editTask } = await import('./store');
+		myTasks.set([mk({ id: 'm1', title: 'old' })]);
+		vi.mocked(apiMock.updateTask).mockRejectedValueOnce({ detail: 'boom', status: 500 });
+		await expect(editTask('m1', { title: 'new' })).rejects.toMatchObject({ detail: 'boom' });
+		expect(get(myTasks)[0].title).toBe('old');
+	});
+});

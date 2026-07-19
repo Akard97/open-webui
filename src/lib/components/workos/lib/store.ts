@@ -334,15 +334,22 @@ export async function editTask(id: string, fields: Partial<Task>): Promise<void>
 	tasks.update((list) => list.map((t) => (t.id === id ? { ...t, ...fields } : t)));
 	const beforeInbox = get(inboxTask);
 	inboxTask.update((t) => (t && t.id === id ? { ...t, ...fields } : t));
+	// `selectedTask` may be serving the `myTasks` fallback copy (My Work detail,
+	// or an inbox open whose getTask failed) — mirror the edit there too, or a
+	// successful save renders as a rollback on screen.
+	const beforeMy = get(myTasks).find((t) => t.id === id);
+	myTasks.update((list) => list.map((t) => (t.id === id ? { ...t, ...fields } : t)));
 	try {
 		const saved = await api.updateTask(token(), id, fields as any);
 		const { deleted_label_ids, ...task } = saved;
 		dropLabels(deleted_label_ids);
 		tasks.update((list) => list.map((t) => (t.id === id ? (task as Task) : t)));
 		inboxTask.update((t) => (t && t.id === id ? { ...t, ...(task as Task) } : t));
+		myTasks.update((list) => list.map((t) => (t.id === id ? { ...t, ...(task as Task) } : t)));
 	} catch (e) {
 		if (before) tasks.update((list) => list.map((t) => (t.id === id ? before : t)));
 		if (beforeInbox) inboxTask.update((t) => (t && t.id === id ? beforeInbox : t));
+		if (beforeMy) myTasks.update((list) => list.map((t) => (t.id === id ? beforeMy : t)));
 		// request() rejects with { detail, status }; tolerate a bare string too
 		// (same defensive idiom as the dialog error handlers).
 		const detail = typeof e === 'string' ? e : (e as any)?.detail;
@@ -481,11 +488,20 @@ let archCursor: NotifCursor = null;
 const cursorOf = (page: Notification[]): NotifCursor =>
 	page.length ? { before: page[page.length - 1].created_at, beforeId: page[page.length - 1].id } : null;
 
+// Every inbox mutation bumps this at its optimistic apply; list fetches capture
+// it at request start and DISCARD their response if it advanced mid-flight. A
+// list snapshotted server-side before a mutation committed would otherwise
+// resurrect rows the mutation already moved (an archived row back in the active
+// list, read flags reverted) — the mutation's own optimistic state is correct.
+let notifMutSeq = 0;
+
 export async function loadNotifications(): Promise<void> {
+	const seq = notifMutSeq;
 	const [list, counts] = await Promise.all([
 		api.listNotifications(token(), { limit: NOTIF_PAGE }).catch(() => [] as Notification[]),
 		api.getNotificationCounts(token()).catch(() => null)
 	]);
+	if (seq !== notifMutSeq) return; // stale snapshot — a mutation won the race
 	notifications.set(list);
 	notifCursor = cursorOf(list);
 	notificationsHasMore.set(list.length === NOTIF_PAGE);
@@ -502,18 +518,30 @@ export async function loadMoreNotifications(): Promise<void> {
 	if (!cur.length) return loadNotifications();
 	const oldest = cur[cur.length - 1];
 	const c = notifCursor ?? { before: oldest.created_at, beforeId: oldest.id };
-	const more = await api
-		.listNotifications(token(), { limit: NOTIF_PAGE, before: c.before, beforeId: c.beforeId })
-		.catch(() => [] as Notification[]);
+	const seq = notifMutSeq;
+	let more: Notification[];
+	try {
+		more = await api.listNotifications(token(), {
+			limit: NOTIF_PAGE, before: c.before, beforeId: c.beforeId
+		});
+	} catch {
+		// Failure is NOT an empty page: leave cursor + hasMore untouched so the
+		// Load more control survives and a retry re-requests the same window.
+		toast.error('Failed to load more notifications');
+		return;
+	}
+	if (seq !== notifMutSeq) return; // stale page — discard before it moves the cursor
 	if (more.length) notifCursor = cursorOf(more);
 	notifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
 	notificationsHasMore.set(more.length === NOTIF_PAGE);
 }
 
 export async function loadArchivedNotifications(): Promise<void> {
+	const seq = notifMutSeq;
 	const list = await api
 		.listNotifications(token(), { archived: true, limit: NOTIF_PAGE })
 		.catch(() => [] as Notification[]);
+	if (seq !== notifMutSeq) return; // stale snapshot — a mutation won the race
 	archivedNotifications.set(list);
 	archCursor = cursorOf(list);
 	archivedHasMore.set(list.length === NOTIF_PAGE);
@@ -524,11 +552,17 @@ export async function loadMoreArchivedNotifications(): Promise<void> {
 	if (!cur.length) return loadArchivedNotifications(); // emptied by bulk unarchive → refill
 	const oldest = cur[cur.length - 1];
 	const c = archCursor ?? { before: oldest.created_at, beforeId: oldest.id };
-	const more = await api
-		.listNotifications(token(), {
+	const seq = notifMutSeq;
+	let more: Notification[];
+	try {
+		more = await api.listNotifications(token(), {
 			archived: true, limit: NOTIF_PAGE, before: c.before, beforeId: c.beforeId
-		})
-		.catch(() => [] as Notification[]);
+		});
+	} catch {
+		toast.error('Failed to load more notifications');
+		return;
+	}
+	if (seq !== notifMutSeq) return; // stale page — discard before it moves the cursor
 	if (more.length) archCursor = cursorOf(more);
 	archivedNotifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
 	archivedHasMore.set(more.length === NOTIF_PAGE);
@@ -575,6 +609,7 @@ function reinsertRows(store: Writable<Notification[]>, rows: Notification[]): vo
 }
 
 export async function archiveNotificationsAction(ids: string[], archived = true): Promise<void> {
+	notifMutSeq++; // invalidate in-flight list snapshots (see notifMutSeq)
 	const moving = archived
 		? get(notifications).filter((n) => ids.includes(n.id))
 		: get(archivedNotifications).filter((n) => ids.includes(n.id));
@@ -610,6 +645,7 @@ export async function archiveNotificationsAction(ids: string[], archived = true)
 }
 
 export async function archiveAllRead(): Promise<void> {
+	notifMutSeq++; // invalidate in-flight list snapshots (see notifMutSeq)
 	const removed = get(notifications).filter((n) => n.read);
 	notifications.update((l) => l.filter((n) => !n.read));
 	try {
@@ -777,6 +813,7 @@ export async function foldInMyWorkFromNotification(payload: any): Promise<void> 
 }
 
 export async function markRead(ids: string[]): Promise<void> {
+	notifMutSeq++; // invalidate in-flight list snapshots (see notifMutSeq)
 	// Only rows this op actually flips (already-read rows are untouched by both
 	// the optimistic update and the rollback).
 	const touched = get(notifications).filter((n) => ids.includes(n.id) && !n.read);
@@ -806,6 +843,7 @@ export async function markRead(ids: string[]): Promise<void> {
 }
 
 export async function markAllRead(): Promise<void> {
+	notifMutSeq++; // invalidate in-flight list snapshots (see notifMutSeq)
 	const touched = get(notifications).filter((n) => !n.read);
 	const beforeCounts = get(notificationCounts);
 	notifications.update((list) => list.map((n) => ({ ...n, read: true })));
