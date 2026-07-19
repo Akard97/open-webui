@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import { mobile } from '$lib/stores';
 	import Icon from '../ui/Icon.svelte';
 	import EmptyState from '../ui/EmptyState.svelte';
@@ -67,6 +68,17 @@
 	let selectedNotifId: string | null = null;
 	$: if (!$selectedTaskId) selectedNotifId = null;
 
+	// 768–1279px: no split pane, so a 404'd/deleted task (inboxTaskError) has no
+	// EmptyState to render into — WorkOSApp's dialog either stays closed (silent
+	// dead-end click) or would resolve a stale `myTasks` copy. Surface it with a
+	// toast and close the (possibly stale) dialog. closeTask() resets
+	// inboxTaskError, so this disarms itself — runs once per error. Desktop
+	// (inboxSplit) keeps its own EmptyState untouched.
+	$: if ($inboxTaskError && !$inboxSplit) {
+		toast.error('Task no longer available');
+		closeTask();
+	}
+
 	// ≥1280px: split pane. 768–1279px: same selection flow, but WorkOSApp renders
 	// the task dialog over the inbox (no view switch — highlight + realtime intact).
 	// Mobile: old navigate-away flow.
@@ -78,8 +90,12 @@
 			void openInboxNotification(n);
 		}
 	}
-	const read = (n: Notification) => void markRead([n.id]);
-	const archive = (n: Notification) => void archiveNotificationsAction([n.id], !showArchived);
+	const read = (n: Notification) =>
+		void markRead([n.id]).catch(() => toast.error("Couldn't update — try again"));
+	const archive = (n: Notification) =>
+		void archiveNotificationsAction([n.id], !showArchived).catch(() =>
+			toast.error("Couldn't update — try again")
+		);
 </script>
 
 <div class="flex h-full min-h-0">
@@ -157,7 +173,7 @@
 			{#if !showArchived && counts.unread > 0}
 				<button
 					class="flex h-7 items-center gap-1.5 rounded-[10px] border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-850"
-					onclick={() => void markAllRead()}
+					onclick={() => void markAllRead().catch(() => toast.error("Couldn't update — try again"))}
 				>
 					<Icon name="check" size={13} /> Mark all read
 				</button>
@@ -166,7 +182,7 @@
 				<button
 					class="flex h-7 items-center gap-1.5 rounded-[10px] border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-850"
 					title="Archive all read"
-					onclick={() => void archiveAllRead()}
+					onclick={() => void archiveAllRead().catch(() => toast.error("Couldn't update — try again"))}
 				>
 					<Icon name="archive" size={13} /> Sweep read
 				</button>

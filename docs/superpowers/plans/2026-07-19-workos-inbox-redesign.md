@@ -1950,6 +1950,7 @@ Smoke checklist (user's Vite hot-reload server; seed by acting as a second user 
 14. Keyboard/a11y: Tab reaches the row's stretched open button (Enter opens), then the hover action buttons as siblings — action Enter never also opens the row; the accessibility tree has no nested interactive elements.
 15. Rapidly click two unread notifications A then B: the pane lands on B and stays there (non-blocking mark-read + open-generation guard), and B's pane never shows A's comments/activity (stale-store clear).
 16. Second user deletes the task open in the pane: it flips to "Task no longer available" — both when the task is in the current workstream and when it is foreign.
+17. Mid-width (~1100px): repeat item 16 — deleting the open task must toast "Task no longer available" and close the dialog (no silent no-op, no stale dialog). Archiving a Needs-you card drops the pill, tab count and sidebar badge together. "Sweep read" then "Load more" refills from page 1. Dark mode: card inset `var(--primary)` shadow renders. Note: the header "N need your attention" uses server-wide counts while the Needs-you pill counts loaded rows — divergence on paginated inboxes is expected, not a bug.
 
 - [ ] **Step 5: Update memory + report**
 
