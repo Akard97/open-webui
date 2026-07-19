@@ -332,8 +332,8 @@ async def test_archive_all_read_sweep_and_unarchive(monkeypatch):
 @pytest.mark.asyncio
 async def test_archive_cannot_touch_other_users_rows(monkeypatch):
     from open_webui.models.workos import Notifications
-    other = await Notifications.insert('u2', 'u1', 'assigned', {}, task_id='t1')
     async with _client(monkeypatch, user=U1) as c:
+        other = await Notifications.insert('u2', 'u1', 'assigned', {}, task_id='t1')
         await c.post('/api/v1/workos/notifications/archive', json={'ids': [other.id]})
     rows = await Notifications.list_for_user('u2')
     assert [x.id for x in rows] == [other.id]  # untouched
@@ -1185,7 +1185,7 @@ git commit -m "feat(workos): inbox grouping - needs-you split, day buckets, task
 - Modify: `src/lib/components/workos/views/TaskDetail.svelte` (becomes a thin Dialog wrapper)
 - Modify: `src/lib/components/workos/views/detail/CommentItem.svelte` (highlight prop + scroll-into-view + `teamId` prop)
 - Modify: `src/lib/components/workos/views/detail/DetailHeader.svelte` (task-derived role + breadcrumb)
-- Modify: `src/lib/components/workos/views/detail/AttachmentsPanel.svelte` + `src/lib/components/workos/views/detail/AttachmentList.svelte` (`teamId` prop for role)
+- Modify: `src/lib/components/workos/views/detail/AttachmentsPanel.svelte` (`teamId` prop for role; `AttachmentList.svelte` is dead code — imported nowhere, not rendered by AttachmentsPanel — leave it untouched)
 
 **Interfaces:**
 - Consumes: all detail stores (`selectedTask`, `comments`, …) — unchanged; `highlightCommentId` from Task 3.
@@ -1223,10 +1223,10 @@ Effect: the 1100px dialog container is ≥880px, so the dialog renders pixel-ide
 
 Add to its script imports: `import { highlightCommentId } from '../../lib/store';`
 
-In the Comments `Tabs.Content`, change the comment loop to pass the highlight:
+In the Comments `Tabs.Content`, change the comment loop to pass the highlight AND the task's team (the `teamId` prop is added to CommentItem in Step 4 — this is the canonical final form of the loop, write it once):
 
 ```svelte
-{#each sortedComments as c (c.id)}<CommentItem comment={c} highlight={c.id === $highlightCommentId} />{/each}
+{#each sortedComments as c (c.id)}<CommentItem comment={c} highlight={c.id === $highlightCommentId} teamId={t.team_id} />{/each}
 ```
 
 - [ ] **Step 2: Rewrite `TaskDetail.svelte` as the thin wrapper**
@@ -1289,13 +1289,13 @@ The detail surface currently derives everything from the *current* team/workstre
 ```
 
 (add `workstreams` to the store import; keep `currentWorkstream` as the fallback).
-- `CommentItem.svelte` (~line 13), `AttachmentsPanel.svelte` (~line 19), `AttachmentList.svelte` (~line 8): add `export let teamId: string | null = null;` and change the role line to
+- `CommentItem.svelte` (~line 13) and `AttachmentsPanel.svelte` (~line 19): add `export let teamId: string | null = null;` and change the role line to
 
 ```ts
 	$: myRole = teamId ? $roles[teamId] : $currentTeam ? $roles[$currentTeam.id] : undefined;
 ```
 
-TaskDetailBody passes `teamId={t.team_id}` to CommentItem and AttachmentsPanel; AttachmentsPanel forwards `{teamId}` to AttachmentList. (The fallback keeps every other call site behaving exactly as today.)
+TaskDetailBody passes `teamId={t.team_id}` to CommentItem (already done by Step 1's canonical loop) and to AttachmentsPanel. Do NOT touch `AttachmentList.svelte` — it is imported nowhere in src (dead file). (The fallback keeps every other call site behaving exactly as today.)
 - **Labels stay team-scoped:** the `labels` store and `createLabel` target the *current* team, so on a foreign-team task the picker would show and create the wrong team's tags. In TaskDetailBody add `currentTeam` to the store import, then `$: foreignTeam = !!t && t.team_id !== ($currentTeam?.id ?? t.team_id);` and wrap the label add/edit UI (the tag picker around source line ~386) in `{#if !foreignTeam}`. Displayed chips resolve through the current-team label map and simply won't render for foreign tasks — acceptable; per-team label fetch is a follow-up if it ever matters.
 
 - [ ] **Step 5: Type-check + test sweep**
@@ -1308,12 +1308,12 @@ Expected: no new svelte-check errors; all vitest suites pass.
 
 - [ ] **Step 6: Manual sanity (hot reload, no rebuild)**
 
-With the user's Vite server running and the app open: open a task from the Board — the detail dialog must look and behave exactly as before (tabs, comment composer, progress bar drag, subtasks; the ≥880px dialog container renders the converted variants identically). This is the no-behavior-change gate for the extraction.
+With the user's Vite server running and the app open: open a task from the Board — the detail dialog must look and behave exactly as before (tabs, comment composer, progress bar drag, subtasks; the ≥880px dialog container renders the converted variants identically). This is the no-behavior-change gate for the extraction. ALSO shrink the window below ~900px viewport (dialog container drops under 880px) and confirm the detail actually stacks single-column — this proves the arbitrary `@[880px]:`/`@max-[880px]:` container variants compile in this Tailwind v4 + legacy container-queries-plugin setup (no repo precedent for arbitrary sizes; a silent no-op variant must be caught here, not in Task 8 smoke).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/lib/components/workos/views/TaskDetail.svelte src/lib/components/workos/views/detail/TaskDetailBody.svelte src/lib/components/workos/views/detail/CommentItem.svelte src/lib/components/workos/views/detail/DetailHeader.svelte src/lib/components/workos/views/detail/AttachmentsPanel.svelte src/lib/components/workos/views/detail/AttachmentList.svelte
+git add src/lib/components/workos/views/TaskDetail.svelte src/lib/components/workos/views/detail/TaskDetailBody.svelte src/lib/components/workos/views/detail/CommentItem.svelte src/lib/components/workos/views/detail/DetailHeader.svelte src/lib/components/workos/views/detail/AttachmentsPanel.svelte
 git commit -m "refactor(workos): extract container-responsive TaskDetailBody + cross-team detail context"
 ```
 
@@ -1426,7 +1426,7 @@ In `src/lib/components/workos/ui/Icon.svelte`'s glyph map add (lucide paths, sam
 		onclick={onopen}
 	></button>
 	<Avatar class="size-7 flex-none">
-		<AvatarFallback class="text-[10px] font-semibold text-white" style="background:{avatarColors(who).background}">
+		<AvatarFallback class="text-[10px] font-semibold text-white" style="background:{avatarColors(n.actor_id ?? who).background}">
 			{initialsOf}
 		</AvatarFallback>
 	</Avatar>
