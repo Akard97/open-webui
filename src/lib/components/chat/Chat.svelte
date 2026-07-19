@@ -2004,8 +2004,9 @@
 		const isGenerating = lastMessage && lastMessage.role === 'assistant' && !lastMessage.done;
 
 		if (isGenerating) {
-			// Message queue force-disabled for all users (row hidden in Interface settings).
-			if (false) {
+			// Queue is admin-only (its Interface-settings row is admin-gated);
+			// non-admins always interrupt the in-flight response.
+			if ($user?.role === 'admin' && ($settings?.enableMessageQueue ?? true)) {
 				// Enqueue the request
 				const _files = structuredClone(files);
 				chatRequestQueues.update((q) => ({

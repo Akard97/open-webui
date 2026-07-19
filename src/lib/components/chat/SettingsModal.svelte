@@ -498,6 +498,12 @@
 				return $user?.role === 'admin' || ($user?.permissions?.settings?.interface ?? true);
 			}
 
+			if (tab.id === 'audio') {
+				// Admin-only (matches the nav button gate) — keeps search from
+				// auto-selecting the tab for non-admins.
+				return $user?.role === 'admin';
+			}
+
 			if (tab.id === 'personalization') {
 				return (
 					$config?.features?.enable_memories &&
@@ -918,7 +924,7 @@
 							toast.success($i18n.t('Settings saved successfully!'));
 						}}
 					/>
-				{:else if selectedTab === 'audio'}
+				{:else if selectedTab === 'audio' && $user?.role === 'admin'}
 					<Audio
 						{saveSettings}
 						on:save={() => {
