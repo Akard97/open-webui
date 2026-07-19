@@ -787,6 +787,20 @@ describe('openTaskById (URL deep-link open)', () => {
 		expect(get(selectedTaskId)).toBeNull();
 		expect(get(inboxTask)).toBeNull();
 	});
+
+	it('discards a stale fetch result when the selection changed while it was in flight', async () => {
+		const api = await import('./api');
+		let release!: (t: unknown) => void;
+		const hang = new Promise((r) => { release = r; });
+		(api.getTask as any).mockImplementationOnce(() => hang); // 'slow' -> fetch fallback
+		const p = openTaskById('slow');
+		selectedTaskId.set('user-clicked'); // user clicks a different task mid-fetch
+		release(mk({ id: 'slow', title: 'Slow' }));
+		const ok = await p;
+		expect(ok).toBe(true); // treated as handled, not a failure
+		expect(get(selectedTaskId)).toBe('user-clicked'); // the click wins, untouched by the stale fetch
+		expect(get(inboxTask)).toBeNull(); // no store write from the discarded result
+	});
 });
 
 describe('loadBootstrap selectDefaultWorkstream option', () => {

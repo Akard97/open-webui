@@ -717,8 +717,14 @@ export async function openInboxNotification(n: Notification): Promise<void> {
  * the drawer fresh (same mechanics as the inbox split-pane; closeTask()
  * undoes all of it). Returns false when the task is gone or unreadable —
  * 404 and 403 are indistinguishable by design (see the access reference).
+ * If the selection changed while the fetch was in flight (a manual click
+ * elsewhere, or a newer URL apply), the fetch's result is discarded — no
+ * store writes, no room join — and this reports true, since something IS
+ * open; the caller must not toast "Task not available" for a task the user
+ * simply navigated away from.
  */
 export async function openTaskById(id: string): Promise<boolean> {
+	const before = get(selectedTaskId);
 	if (get(tasks).some((t) => t.id === id) || get(myTasks).some((t) => t.id === id)) {
 		openTask(id);
 		return true;
@@ -729,6 +735,7 @@ export async function openTaskById(id: string): Promise<boolean> {
 	} catch {
 		t = null; // transient failures also report false: a deep link has no retry UI
 	}
+	if (get(selectedTaskId) !== before) return true; // moved on while the fetch was in flight
 	if (!t) return false;
 	if (inboxRoomKey) {
 		leaveRoom(inboxRoomKey);

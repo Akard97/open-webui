@@ -146,6 +146,29 @@ describe('hydrateFromUrl', () => {
 		expect(get(selectedTaskId)).toBeNull();
 		expect(replaceState).toHaveBeenCalledWith('/workos?view=list&ws=w1', {});
 	});
+
+	it('drops a hand-edited ?view=admin at parse time for a non-admin user', async () => {
+		// $lib/stores is mocked above with a role:'user' user -- canUseAdmin is false.
+		await hydrate('?view=admin');
+		expect(get(view)).toBe('mywork');
+		expect(replaceState).toHaveBeenCalledWith('/workos', {});
+	});
+});
+
+describe('view/workstream apply ordering (no My Work flash)', () => {
+	it('applies the parsed view before awaiting the workstream switch', async () => {
+		const api = await import('./api');
+		let release!: (rows: unknown[]) => void;
+		const hang = new Promise<unknown[]>((r) => { release = r; });
+		(api.listTasks as any).mockImplementationOnce(() => hang);
+		const p = hydrate('?view=board&ws=w1'); // not awaited yet
+		await Promise.resolve(); // let applyUrl run up to the still-pending listTasks call
+		// view flips immediately -- MyWorkView never mounts for this window.
+		expect(get(view)).toBe('board');
+		release([]);
+		await p;
+		expect(get(currentWorkstreamId)).toBe('w1'); // final state unchanged from before
+	});
 });
 
 describe('store → URL writes', () => {
@@ -253,5 +276,32 @@ describe('concurrent URL application (queue-latest)', () => {
 		await flush();
 		expect(get(view)).toBe('inbox'); // latest navigation wins
 		expect(get(selectedTaskId)).toBeNull(); // reconciled by the second apply (no task param)
+	});
+});
+
+describe('destroyUrlSync during an in-flight applyUrl (route left mid-fetch)', () => {
+	it('does not rewrite the address bar or the store once the fetch resolves', async () => {
+		await hydrate('?view=board&ws=w1');
+		initUrlSync();
+		const api = await import('./api');
+		let release!: (t: unknown) => void;
+		const hang = new Promise((r) => { release = r; });
+		// 'slow-task' is in neither `tasks` nor `myTasks`, so openTaskById takes
+		// the fetch-fallback branch -- this is where applyUrl gets stuck.
+		(api.getTask as any).mockImplementationOnce(() => hang);
+		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1&task=slow-task') });
+		await Promise.resolve(); // let applyUrl start and reach its await
+		destroyUrlSync(); // simulates leaving /workos mid-flight
+		vi.mocked(pushState).mockClear();
+		vi.mocked(replaceState).mockClear();
+		release({
+			id: 'slow-task', workstream_id: 'w-other', team_id: 'tm', number: 9, key: 'OSL-9', title: 'fetched',
+			status: 'todo', priority: null, assignee_ids: ['u1'], progress: 0, labels: [], sort_key: 1,
+			created_by_id: 'u1', created_at: 0, updated_at: 0
+		});
+		await flush();
+		expect(pushState).not.toHaveBeenCalled();
+		expect(replaceState).not.toHaveBeenCalled();
+		expect(get(selectedTaskId)).toBeNull(); // the stale open was undone, not left half-applied
 	});
 });

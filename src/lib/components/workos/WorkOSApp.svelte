@@ -33,15 +33,24 @@
 	// Crossing back to desktop must not leave a phantom drawer overlay.
 	$: if (!$mobile) mobileNavOpen.set(false);
 
+	// Guards the onMount chain below: if the user navigates away from /workos
+	// while loadBootstrap/hydrateFromUrl is still in flight, the orphaned
+	// continuation must not call initUrlSync()/connectRealtime() on a route
+	// nobody is looking at anymore.
+	let destroyed = false;
+
 	onMount(async () => {
 		// Deep link present → hydrateFromUrl performs the one workstream
 		// selection; otherwise bootstrap picks its default as before.
 		await loadBootstrap({ selectDefaultWorkstream: !urlHasWorkstream() });
+		if (destroyed) return;
 		await hydrateFromUrl();
+		if (destroyed) return;
 		initUrlSync();
 		connectRealtime();
 	});
 	onDestroy(() => {
+		destroyed = true;
 		destroyUrlSync();
 		disconnectRealtime();
 	});
