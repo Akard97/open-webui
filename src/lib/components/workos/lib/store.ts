@@ -118,7 +118,12 @@ const NOTIF_PAGE = 50;
 // Split-pane inbox: the opened notification's task may be in neither `tasks` nor
 // `myTasks`, so it is fetched into this third `selectedTask` fallback.
 export const inboxTask: Writable<Task | null> = writable(null);
+// "Gone" (404/403 — deleted or access revoked): permanent, the pane shows
+// "Task no longer available".
 export const inboxTaskError: Writable<boolean> = writable(false);
+// Transient load failure (network/5xx): the task still exists — retryable,
+// must never present as loss.
+export const inboxTaskLoadError: Writable<boolean> = writable(false);
 // Comment to scroll-to + highlight in the detail pane (mentioned/commented opens).
 export const highlightCommentId: Writable<string | null> = writable(null);
 // Workstream room joined for the split-pane task (ref-counted, so overlap with
@@ -280,6 +285,7 @@ export function closeTask(): void {
 	subtasks.set([]);
 	inboxTask.set(null);
 	inboxTaskError.set(false);
+	inboxTaskLoadError.set(false);
 	highlightCommentId.set(null);
 	if (inboxRoomKey) {
 		leaveRoom(inboxRoomKey);
@@ -462,12 +468,23 @@ export async function removeSubtask(id: string): Promise<void> {
 	}
 }
 
+// Pagination cursors are SERVER-owned: derived only from the tail of a server
+// page, never from the rendered list — a locally inserted row (e.g. an unarchived
+// old notification sorting to the list's tail) would otherwise become the cursor
+// and permanently skip every row between the real page boundary and itself.
+type NotifCursor = { before: number; beforeId: string } | null;
+let notifCursor: NotifCursor = null;
+let archCursor: NotifCursor = null;
+const cursorOf = (page: Notification[]): NotifCursor =>
+	page.length ? { before: page[page.length - 1].created_at, beforeId: page[page.length - 1].id } : null;
+
 export async function loadNotifications(): Promise<void> {
 	const [list, counts] = await Promise.all([
 		api.listNotifications(token(), { limit: NOTIF_PAGE }).catch(() => [] as Notification[]),
 		api.getNotificationCounts(token()).catch(() => null)
 	]);
 	notifications.set(list);
+	notifCursor = cursorOf(list);
 	notificationsHasMore.set(list.length === NOTIF_PAGE);
 	if (counts) {
 		notificationCounts.set(counts);
@@ -481,9 +498,11 @@ export async function loadMoreNotifications(): Promise<void> {
 	// the server — with no row to derive a cursor from, refill from page 1.
 	if (!cur.length) return loadNotifications();
 	const oldest = cur[cur.length - 1];
+	const c = notifCursor ?? { before: oldest.created_at, beforeId: oldest.id };
 	const more = await api
-		.listNotifications(token(), { limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id })
+		.listNotifications(token(), { limit: NOTIF_PAGE, before: c.before, beforeId: c.beforeId })
 		.catch(() => [] as Notification[]);
+	if (more.length) notifCursor = cursorOf(more);
 	notifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
 	notificationsHasMore.set(more.length === NOTIF_PAGE);
 }
@@ -493,6 +512,7 @@ export async function loadArchivedNotifications(): Promise<void> {
 		.listNotifications(token(), { archived: true, limit: NOTIF_PAGE })
 		.catch(() => [] as Notification[]);
 	archivedNotifications.set(list);
+	archCursor = cursorOf(list);
 	archivedHasMore.set(list.length === NOTIF_PAGE);
 }
 
@@ -500,11 +520,13 @@ export async function loadMoreArchivedNotifications(): Promise<void> {
 	const cur = get(archivedNotifications);
 	if (!cur.length) return loadArchivedNotifications(); // emptied by bulk unarchive → refill
 	const oldest = cur[cur.length - 1];
+	const c = archCursor ?? { before: oldest.created_at, beforeId: oldest.id };
 	const more = await api
 		.listNotifications(token(), {
-			archived: true, limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id
+			archived: true, limit: NOTIF_PAGE, before: c.before, beforeId: c.beforeId
 		})
 		.catch(() => [] as Notification[]);
+	if (more.length) archCursor = cursorOf(more);
 	archivedNotifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
 	archivedHasMore.set(more.length === NOTIF_PAGE);
 }
@@ -531,26 +553,35 @@ function incrementCounts(rows: Notification[]): void {
 	});
 }
 
-/** Restore a snapshot but keep rows that arrived (realtime) after it was taken —
- * a plain snapshot restore would silently delete them. */
-function restoreKeepingFresh(snapshot: Notification[], cur: Notification[]): Notification[] {
-	const fresh = cur.filter((c) => !snapshot.some((s) => s.id === c.id));
-	return fresh.length ? [...fresh, ...snapshot].sort((a, b) => b.created_at - a.created_at) : snapshot;
+/** Failure-rollback primitive: restore ONLY the rows the failed operation itself
+ * changed, in place. Rows it never touched — realtime arrivals and concurrent
+ * mutations (which may have committed server-side) — are left alone; a whole-list
+ * snapshot restore would locally revert a neighbour's committed success. */
+function revertOwnRows(store: Writable<Notification[]>, rows: Notification[]): void {
+	store.update((list) => list.map((n) => rows.find((r) => r.id === n.id) ?? n));
+}
+
+/** Failure-rollback primitive for rows the failed operation REMOVED from a list:
+ * re-insert the originals (deduped — a concurrent mutation may have already
+ * brought one back) and restore newest-first order. */
+function reinsertRows(store: Writable<Notification[]>, rows: Notification[]): void {
+	store.update((list) =>
+		[...rows.filter((r) => !list.some((n) => n.id === r.id)), ...list]
+			.sort((a, b) => b.created_at - a.created_at)
+	);
 }
 
 export async function archiveNotificationsAction(ids: string[], archived = true): Promise<void> {
-	const before = get(notifications);
-	const beforeArch = get(archivedNotifications);
-	const beforeCounts = get(notificationCounts);
+	const moving = archived
+		? get(notifications).filter((n) => ids.includes(n.id))
+		: get(archivedNotifications).filter((n) => ids.includes(n.id));
 	if (archived) {
-		const moving = before.filter((n) => ids.includes(n.id));
 		decrementCounts(moving);
 		notifications.update((l) => l.filter((n) => !ids.includes(n.id)));
 		archivedNotifications.update((l) => [
 			...moving.map((n) => ({ ...n, read: true, archived: true })), ...l
 		]);
 	} else {
-		const moving = beforeArch.filter((n) => ids.includes(n.id));
 		archivedNotifications.update((l) => l.filter((n) => !ids.includes(n.id)));
 		notifications.update((l) =>
 			[...moving.map((n) => ({ ...n, archived: false })), ...l].sort((a, b) => b.created_at - a.created_at)
@@ -560,24 +591,28 @@ export async function archiveNotificationsAction(ids: string[], archived = true)
 		const r = await api.archiveNotifications(token(), { ids, archived });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		// Drop this action's own optimistic copies, restore the snapshots while
-		// keeping realtime rows that arrived mid-request, then re-add those fresh
-		// rows' count contributions (the counts snapshot predates them).
-		notifications.update((cur) => restoreKeepingFresh(before, cur.filter((n) => !ids.includes(n.id))));
-		archivedNotifications.update((cur) => restoreKeepingFresh(beforeArch, cur.filter((n) => !ids.includes(n.id))));
-		notificationCounts.set(beforeCounts);
-		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
+		// Per-op rollback: pull this action's optimistic copies back out of the
+		// destination list and restore its original rows in the source list. Rows
+		// owned by concurrent mutations stay untouched (see revert helpers).
+		if (archived) {
+			archivedNotifications.update((l) => l.filter((n) => !ids.includes(n.id)));
+			reinsertRows(notifications, moving);
+			incrementCounts(moving);
+		} else {
+			notifications.update((l) => l.filter((n) => !ids.includes(n.id)));
+			reinsertRows(archivedNotifications, moving);
+		}
 		throw e;
 	}
 }
 
 export async function archiveAllRead(): Promise<void> {
-	const before = get(notifications);
+	const removed = get(notifications).filter((n) => n.read);
 	notifications.update((l) => l.filter((n) => !n.read));
 	try {
 		await api.archiveNotifications(token(), { all_read: true, archived: true });
 	} catch (e) {
-		notifications.update((cur) => restoreKeepingFresh(before, cur));
+		reinsertRows(notifications, removed);
 		throw e;
 	}
 	void loadArchivedNotifications().catch(() => {});
@@ -594,6 +629,7 @@ export async function openInboxNotification(n: Notification): Promise<void> {
 	highlightCommentId.set(n.comment_id ?? null);
 	inboxTask.set(null);
 	inboxTaskError.set(false);
+	inboxTaskLoadError.set(false);
 	// Join the task's workstream room so comment/activity/task events stream into
 	// the pane even when the task lives outside the current workstream. Rooms are
 	// ref-counted, so overlapping the current workstream's own room is safe.
@@ -615,10 +651,19 @@ export async function openInboxNotification(n: Notification): Promise<void> {
 	selectedTaskId.set(n.task_id ?? null);
 	if (!n.task_id) return;
 	void loadTaskDetail(n.task_id);
-	const t = await api.getTask(token(), n.task_id).catch(() => null);
+	let t: Task | null = null;
+	let gone = false;
+	try {
+		t = await api.getTask(token(), n.task_id);
+	} catch (e: any) {
+		// Only a confirmed 404/403 means the task is really gone. Anything else
+		// (network, 5xx, parse) is transient and must not present as loss.
+		gone = e?.status === 404 || e?.status === 403;
+	}
 	if (seq !== inboxOpenSeq || get(selectedTaskId) !== n.task_id) return; // user moved on
 	if (t) inboxTask.set(t);
-	else inboxTaskError.set(true);
+	else if (gone) inboxTaskError.set(true);
+	else inboxTaskLoadError.set(true);
 }
 
 export async function loadWorkstreamActivity(id: string): Promise<void> {
@@ -729,23 +774,23 @@ export async function foldInMyWorkFromNotification(payload: any): Promise<void> 
 }
 
 export async function markRead(ids: string[]): Promise<void> {
-	const before = get(notifications);
-	const beforeCounts = get(notificationCounts);
-	decrementCounts(before.filter((n) => ids.includes(n.id)));
+	// Only rows this op actually flips (already-read rows are untouched by both
+	// the optimistic update and the rollback).
+	const touched = get(notifications).filter((n) => ids.includes(n.id) && !n.read);
+	decrementCounts(touched);
 	notifications.update((list) => list.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
 	try {
 		const r = await api.markNotificationsRead(token(), { ids });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		notifications.update((cur) => restoreKeepingFresh(before, cur));
-		notificationCounts.set(beforeCounts);
-		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
+		revertOwnRows(notifications, touched);
+		incrementCounts(touched);
 		throw e;
 	}
 }
 
 export async function markAllRead(): Promise<void> {
-	const before = get(notifications);
+	const touched = get(notifications).filter((n) => !n.read);
 	const beforeCounts = get(notificationCounts);
 	notifications.update((list) => list.map((n) => ({ ...n, read: true })));
 	notificationCounts.set(EMPTY_COUNTS());
@@ -753,9 +798,17 @@ export async function markAllRead(): Promise<void> {
 		const r = await api.markNotificationsRead(token(), { all: true });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		notifications.update((cur) => restoreKeepingFresh(before, cur));
-		notificationCounts.set(beforeCounts);
-		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
+		revertOwnRows(notifications, touched);
+		// The optimistic EMPTY_COUNTS wipe also covered rows beyond the loaded page,
+		// so it can't be reverted per-row — refetch server truth; fall back to the
+		// pre-op snapshot when even that request fails (offline).
+		const counts = await api.getNotificationCounts(token()).catch(() => null);
+		if (counts) {
+			notificationCounts.set(counts);
+			unreadCount.set(counts.unread);
+		} else {
+			notificationCounts.set(beforeCounts);
+		}
 		throw e;
 	}
 }

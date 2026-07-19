@@ -19,6 +19,9 @@ vi.mock('./api', () => ({
 		created_by_id: 'u2', created_at: 0, updated_at: 0
 	})),
 	listSubtasks: vi.fn(async () => []),
+	listComments: vi.fn(async () => []),
+	listActivity: vi.fn(async () => []),
+	listAttachments: vi.fn(async () => []),
 	createSubtask: vi.fn(async (t, taskId, body) => ({
 		id: 'sub-1', task_id: taskId, title: body.title, completed: false,
 		sort_key: 1, created_by_id: 'u1', completed_at: null, created_at: 1, updated_at: 1
@@ -498,5 +501,108 @@ describe('inbox notification store', () => {
 		inboxTask.set({ id: 't9', workstream_id: 'other', title: 'old' } as any);
 		applyTaskEvent('workos:task.updated', { id: 't9', workstream_id: 'other', title: 'new' });
 		expect(get(inboxTask)?.title).toBe('new');
+	});
+});
+
+import { markAllRead, loadNotifications, loadMoreNotifications } from './store';
+
+describe('inbox rollback isolation + pagination cursor', () => {
+	beforeEach(() => {
+		notifications.set([]);
+		archivedNotifications.set([]);
+		inboxTask.set(null);
+		inboxTaskError.set(false);
+		selectedTaskId.set(null);
+		unreadCount.set(0);
+		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
+	});
+
+	it('failed markRead rolls back only its own rows, keeping a concurrent success', async () => {
+		notifications.set([mkN({ id: 'a', created_at: 2000 }), mkN({ id: 'b', created_at: 1000 })]);
+		notificationCounts.set({ unread: 2, by_type: { assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
+		let rejectA: ((e: unknown) => void) | undefined;
+		vi.mocked(apiMock.markNotificationsRead)
+			.mockImplementationOnce(() => new Promise((_, rej) => { rejectA = rej; }))
+			.mockResolvedValueOnce({ unread: 1 });
+		const pa = markRead(['a']);
+		await markRead(['b']); // B commits while A is still in flight
+		rejectA!(new Error('nope'));
+		await expect(pa).rejects.toThrow();
+		const rows = get(notifications);
+		expect(rows.find((n) => n.id === 'b')?.read).toBe(true); // committed success must survive A's rollback
+		expect(rows.find((n) => n.id === 'a')?.read).toBe(false);
+		expect(get(notificationCounts).unread).toBe(1);
+	});
+
+	it('failed archive does not revert a concurrent markRead success', async () => {
+		notifications.set([mkN({ id: 'a', created_at: 2000 }), mkN({ id: 'b', created_at: 1000 })]);
+		notificationCounts.set({ unread: 2, by_type: { assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
+		let rejectArch: ((e: unknown) => void) | undefined;
+		vi.mocked(apiMock.archiveNotifications)
+			.mockImplementationOnce(() => new Promise((_, rej) => { rejectArch = rej; }));
+		const pa = archiveNotificationsAction(['a']);
+		await markRead(['b']); // commits mid-flight
+		rejectArch!(new Error('nope'));
+		await expect(pa).rejects.toThrow();
+		const rows = get(notifications);
+		expect(rows.map((n) => n.id).sort()).toEqual(['a', 'b']); // archive rolled back
+		expect(rows.find((n) => n.id === 'b')?.read).toBe(true); // markRead success survives
+		expect(get(notificationCounts).unread).toBe(1); // only 'a' restored as unread
+	});
+
+	it('markAllRead failure refetches authoritative counts instead of restoring a stale snapshot', async () => {
+		notifications.set([mkN({ id: 'a' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		vi.mocked(apiMock.markNotificationsRead).mockRejectedValueOnce(new Error('nope'));
+		vi.mocked(apiMock.getNotificationCounts).mockResolvedValueOnce({
+			unread: 3, by_type: { assigned: 2, mentioned: 0, commented: 1, status_changed: 0 }
+		});
+		await expect(markAllRead()).rejects.toThrow();
+		expect(get(notifications)[0].read).toBe(false); // own row restored
+		expect(get(notificationCounts).unread).toBe(3); // server truth, not the pre-op snapshot
+	});
+
+	it('load-more cursor is server-owned — a locally unarchived old row must not move it', async () => {
+		const page = [
+			mkN({ id: 'p0', created_at: 1000 }), mkN({ id: 'p1', created_at: 999 }), mkN({ id: 'p2', created_at: 998 })
+		];
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce(page);
+		await loadNotifications();
+		archivedNotifications.set([mkN({ id: 'old', created_at: 5, read: true, archived: true })]);
+		await archiveNotificationsAction(['old'], false); // unarchive → sorts to the active list's tail
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce([]);
+		await loadMoreNotifications();
+		expect(vi.mocked(apiMock.listNotifications).mock.calls.at(-1)?.[1])
+			.toMatchObject({ before: 998, beforeId: 'p2' }); // last SERVER row, not 'old'
+		// An empty page must not advance the cursor either.
+		vi.mocked(apiMock.listNotifications).mockResolvedValueOnce([]);
+		await loadMoreNotifications();
+		expect(vi.mocked(apiMock.listNotifications).mock.calls.at(-1)?.[1])
+			.toMatchObject({ before: 998, beforeId: 'p2' });
+	});
+});
+
+describe('inbox task load-error classification', () => {
+	beforeEach(() => {
+		notifications.set([]);
+		inboxTask.set(null);
+		inboxTaskError.set(false);
+		selectedTaskId.set(null);
+	});
+
+	it('transient getTask failure flags a load error, not task-gone', async () => {
+		const { openInboxNotification, inboxTaskLoadError } = await import('./store');
+		vi.mocked(apiMock.getTask).mockRejectedValueOnce({ detail: 'boom', status: 500 });
+		await openInboxNotification(mkN({ id: 'nx', task_id: 't1', read: true }));
+		expect(get(inboxTaskError)).toBe(false);
+		expect(get(inboxTaskLoadError)).toBe(true);
+	});
+
+	it('404 getTask failure flags task-gone, not a load error', async () => {
+		const { openInboxNotification, inboxTaskLoadError } = await import('./store');
+		vi.mocked(apiMock.getTask).mockRejectedValueOnce({ detail: 'Not found', status: 404 });
+		await openInboxNotification(mkN({ id: 'nx', task_id: 't1', read: true }));
+		expect(get(inboxTaskError)).toBe(true);
+		expect(get(inboxTaskLoadError)).toBe(false);
 	});
 });

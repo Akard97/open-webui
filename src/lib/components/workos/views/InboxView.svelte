@@ -12,7 +12,7 @@
 	import type { Notification, NotificationType } from '../lib/types';
 	import {
 		notifications, archivedNotifications, notificationCounts, notificationsHasMore, archivedHasMore,
-		selectedTaskId, selectedTask, inboxTaskError, inboxSplit,
+		selectedTaskId, selectedTask, inboxTaskError, inboxTaskLoadError, inboxSplit,
 		loadNotifications, loadMoreNotifications, loadArchivedNotifications, loadMoreArchivedNotifications,
 		markRead, markAllRead, archiveNotificationsAction, archiveAllRead,
 		openInboxNotification, openNotification, closeTask
@@ -77,6 +77,23 @@
 	$: if ($inboxTaskError && !$inboxSplit) {
 		toast.error('Task no longer available');
 		closeTask();
+	}
+
+	// Transient load failure at mid-width: if a local copy resolves, the dialog
+	// still works — stay quiet. Otherwise the click is a dead end: say it's
+	// retryable (unlike the "gone" toast above) and close so a re-click retries.
+	$: if ($inboxTaskLoadError && !$inboxSplit && !$selectedTask) {
+		toast.error("Couldn't load the task — try again");
+		closeTask();
+	}
+
+	// Split-pane retry for a transient load failure: re-open the selected
+	// notification (openInboxNotification resets both error flags itself).
+	function retryLoad(): void {
+		const n =
+			source.find((x) => x.id === selectedNotifId) ??
+			source.find((x) => x.task_id === $selectedTaskId);
+		if (n) void openInboxNotification(n);
 	}
 
 	// ≥1280px: split pane. 768–1279px: same selection flow, but WorkOSApp renders
@@ -249,6 +266,9 @@
 				<EmptyState icon="inbox" title="Task no longer available" sub="It may have been deleted, or you no longer have access to it." />
 			{:else if $selectedTask}
 				<TaskDetailBody />
+			{:else if $selectedTaskId && $inboxTaskLoadError}
+				<!-- After $selectedTask on purpose: a usable local copy beats the error. -->
+				<EmptyState icon="inbox" title="Couldn't load the task" sub="Something went wrong on the way — the task itself is still there." ctaLabel="Try again" onCta={retryLoad} />
 			{:else if $selectedTaskId}
 				<div class="flex h-full items-center justify-center text-sm text-gray-400">Loading…</div>
 			{:else}

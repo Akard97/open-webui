@@ -19,12 +19,18 @@ async function request<T>(token: string, path: string, method = 'GET', body?: un
 		...(body !== undefined ? { body: JSON.stringify(body) } : {})
 	})
 		.then(async (r) => {
-			if (!r.ok) throw await r.json();
+			if (!r.ok) {
+				// Keep the HTTP status on the thrown error — callers need it to tell
+				// "gone" (404/403) apart from transient failures. Network errors pass
+				// through the catch below with no status at all.
+				const body = await r.json().catch(() => null);
+				throw { detail: typeof body?.detail === 'string' ? body.detail : undefined, status: r.status };
+			}
 			return r.json();
 		})
 		.catch((err) => {
-			error = err?.detail ?? err;
-			console.error('[workos api]', error);
+			error = err;
+			console.error('[workos api]', err?.detail ?? err);
 			return null;
 		});
 	if (error) throw error;
