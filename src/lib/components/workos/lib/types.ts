@@ -159,7 +159,13 @@ export interface Notification {
 	type: NotificationType;
 	data: Record<string, any>;
 	read: boolean;
+	archived?: boolean;
 	created_at: number;
+}
+
+export interface NotificationCounts {
+	unread: number;
+	by_type: Record<NotificationType, number>;
 }
 
 export type FeedItem =

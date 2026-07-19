@@ -1,4 +1,4 @@
-import { writable, derived, get, type Writable } from 'svelte/store';
+import { writable, derived, readable, get, type Writable, type Readable } from 'svelte/store';
 import { toast } from 'svelte-sonner';
 import { browser } from '$app/environment';
 import { socket, user } from '$lib/stores';
@@ -9,7 +9,8 @@ import {
 	STATUS_ORDER,
 	type Team, type Workspace, type Workstream, type Label, type Task, type Member,
 	type TeamRole, type TaskStatus, type TaskPriority,
-	type Comment, type Activity, type Attachment, type Notification, type FeedItem, type Subtask,
+	type Comment, type Activity, type Attachment, type Notification, type NotificationCounts,
+	type FeedItem, type Subtask,
 	type TaskFilter, type WorkstreamFile
 } from './types';
 import { applyFilters, emptyFilter } from './filters';
@@ -106,6 +107,37 @@ const myWorkRooms = new Set<string>();
 export const notifications: Writable<Notification[]> = writable([]);
 export const unreadCount: Writable<number> = writable(0);
 
+const EMPTY_COUNTS = (): NotificationCounts => ({
+	unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+});
+export const notificationCounts: Writable<NotificationCounts> = writable(EMPTY_COUNTS());
+export const archivedNotifications: Writable<Notification[]> = writable([]);
+export const notificationsHasMore: Writable<boolean> = writable(false);
+export const archivedHasMore: Writable<boolean> = writable(false);
+const NOTIF_PAGE = 50;
+// Split-pane inbox: the opened notification's task may be in neither `tasks` nor
+// `myTasks`, so it is fetched into this third `selectedTask` fallback.
+export const inboxTask: Writable<Task | null> = writable(null);
+export const inboxTaskError: Writable<boolean> = writable(false);
+// Comment to scroll-to + highlight in the detail pane (mentioned/commented opens).
+export const highlightCommentId: Writable<string | null> = writable(null);
+// Workstream room joined for the split-pane task (ref-counted, so overlap with
+// the current-workstream / my-work rooms is safe). Left again on closeTask.
+let inboxRoomKey: string | null = null;
+// Monotonic open counter — a stale openInboxNotification resolution must not
+// clobber a newer selection (rapid A→B clicks).
+let inboxOpenSeq = 0;
+// Split-pane gate: the 256px sidebar + 400px list leave a usable detail pane
+// only at ≥1280px viewports; below that the inbox keeps the dialog flow.
+export const inboxSplit: Readable<boolean> = readable(false, (set) => {
+	if (!browser) return;
+	const mq = window.matchMedia('(min-width: 1280px)');
+	const update = () => set(mq.matches);
+	update();
+	mq.addEventListener('change', update);
+	return () => mq.removeEventListener('change', update);
+});
+
 export interface WsActivityItem extends Activity { task_key?: string; task_title?: string; workstream_id?: string }
 export interface WsActivityState {
 	items: WsActivityItem[]; daily: { day: string; n: number }[]; loaded: boolean; error: boolean;
@@ -142,10 +174,16 @@ export const currentWorkstream = derived(
 	([$s, $id]) => $s.find((x) => x.id === $id) ?? null
 );
 export const selectedTask = derived(
-	// Falls back to myTasks so opening a task from My Work (whose tasks aren't in the
-	// current workstream's `tasks` store) still resolves and renders the detail drawer.
-	[tasks, myTasks, selectedTaskId],
-	([$t, $my, $id]) => $t.find((x) => x.id === $id) ?? $my.find((x) => x.id === $id) ?? null
+	// inboxTask FIRST: it is freshly fetched and realtime-reconciled, while
+	// `myTasks` can be stale (it persists after leaving My Work and only
+	// reconciles while My Work is active) — a stale copy must not shadow it.
+	// Then the current workstream's live `tasks`; `myTasks` is the last resort.
+	[tasks, myTasks, inboxTask, selectedTaskId],
+	([$t, $my, $inbox, $id]) =>
+		($inbox && $inbox.id === $id ? $inbox : null) ??
+		$t.find((x) => x.id === $id) ??
+		$my.find((x) => x.id === $id) ??
+		null
 );
 export const tasksByStatus = derived([tasks, boardFilter], ([$tasks, $filter]) => {
 	const out: Record<TaskStatus, Task[]> = {
@@ -240,6 +278,13 @@ export function closeTask(): void {
 	activity.set([]);
 	attachments.set([]);
 	subtasks.set([]);
+	inboxTask.set(null);
+	inboxTaskError.set(false);
+	highlightCommentId.set(null);
+	if (inboxRoomKey) {
+		leaveRoom(inboxRoomKey);
+		inboxRoomKey = null;
+	}
 }
 
 export async function addTask(
@@ -281,13 +326,17 @@ export async function addTask(
 export async function editTask(id: string, fields: Partial<Task>): Promise<void> {
 	const before = get(tasks).find((t) => t.id === id);
 	tasks.update((list) => list.map((t) => (t.id === id ? { ...t, ...fields } : t)));
+	const beforeInbox = get(inboxTask);
+	inboxTask.update((t) => (t && t.id === id ? { ...t, ...fields } : t));
 	try {
 		const saved = await api.updateTask(token(), id, fields as any);
 		const { deleted_label_ids, ...task } = saved;
 		dropLabels(deleted_label_ids);
 		tasks.update((list) => list.map((t) => (t.id === id ? (task as Task) : t)));
+		inboxTask.update((t) => (t && t.id === id ? { ...t, ...(task as Task) } : t));
 	} catch (e) {
 		if (before) tasks.update((list) => list.map((t) => (t.id === id ? before : t)));
+		if (beforeInbox) inboxTask.update((t) => (t && t.id === id ? beforeInbox : t));
 		if (e === 'ATTACHMENT_REQUIRED') {
 			toast.error('Attach a file before completing this task');
 			return; // handled: rolled back + user informed
@@ -414,7 +463,162 @@ export async function removeSubtask(id: string): Promise<void> {
 }
 
 export async function loadNotifications(): Promise<void> {
-	notifications.set(await api.listNotifications(token()).catch(() => []));
+	const [list, counts] = await Promise.all([
+		api.listNotifications(token(), { limit: NOTIF_PAGE }).catch(() => [] as Notification[]),
+		api.getNotificationCounts(token()).catch(() => null)
+	]);
+	notifications.set(list);
+	notificationsHasMore.set(list.length === NOTIF_PAGE);
+	if (counts) {
+		notificationCounts.set(counts);
+		unreadCount.set(counts.unread);
+	}
+}
+
+export async function loadMoreNotifications(): Promise<void> {
+	const cur = get(notifications);
+	// Bulk mutations (sweep read) can empty the page while more rows exist on
+	// the server — with no row to derive a cursor from, refill from page 1.
+	if (!cur.length) return loadNotifications();
+	const oldest = cur[cur.length - 1];
+	const more = await api
+		.listNotifications(token(), { limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id })
+		.catch(() => [] as Notification[]);
+	notifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
+	notificationsHasMore.set(more.length === NOTIF_PAGE);
+}
+
+export async function loadArchivedNotifications(): Promise<void> {
+	const list = await api
+		.listNotifications(token(), { archived: true, limit: NOTIF_PAGE })
+		.catch(() => [] as Notification[]);
+	archivedNotifications.set(list);
+	archivedHasMore.set(list.length === NOTIF_PAGE);
+}
+
+export async function loadMoreArchivedNotifications(): Promise<void> {
+	const cur = get(archivedNotifications);
+	if (!cur.length) return loadArchivedNotifications(); // emptied by bulk unarchive → refill
+	const oldest = cur[cur.length - 1];
+	const more = await api
+		.listNotifications(token(), {
+			archived: true, limit: NOTIF_PAGE, before: oldest.created_at, beforeId: oldest.id
+		})
+		.catch(() => [] as Notification[]);
+	archivedNotifications.update((l) => [...l, ...more.filter((n) => !l.some((x) => x.id === n.id))]);
+	archivedHasMore.set(more.length === NOTIF_PAGE);
+}
+
+/** Decrement unread + per-type counts for rows that were unread until now. */
+function decrementCounts(rows: Notification[]): void {
+	const affected = rows.filter((n) => !n.read);
+	if (!affected.length) return;
+	notificationCounts.update((c) => {
+		const by = { ...c.by_type };
+		for (const n of affected) by[n.type] = Math.max(0, (by[n.type] ?? 0) - 1);
+		return { unread: Math.max(0, c.unread - affected.length), by_type: by };
+	});
+}
+
+/** Inverse of decrementCounts — re-add unread rows' count contributions. */
+function incrementCounts(rows: Notification[]): void {
+	const affected = rows.filter((n) => !n.read);
+	if (!affected.length) return;
+	notificationCounts.update((c) => {
+		const by = { ...c.by_type };
+		for (const n of affected) by[n.type] = (by[n.type] ?? 0) + 1;
+		return { unread: c.unread + affected.length, by_type: by };
+	});
+}
+
+/** Restore a snapshot but keep rows that arrived (realtime) after it was taken —
+ * a plain snapshot restore would silently delete them. */
+function restoreKeepingFresh(snapshot: Notification[], cur: Notification[]): Notification[] {
+	const fresh = cur.filter((c) => !snapshot.some((s) => s.id === c.id));
+	return fresh.length ? [...fresh, ...snapshot].sort((a, b) => b.created_at - a.created_at) : snapshot;
+}
+
+export async function archiveNotificationsAction(ids: string[], archived = true): Promise<void> {
+	const before = get(notifications);
+	const beforeArch = get(archivedNotifications);
+	const beforeCounts = get(notificationCounts);
+	if (archived) {
+		const moving = before.filter((n) => ids.includes(n.id));
+		decrementCounts(moving);
+		notifications.update((l) => l.filter((n) => !ids.includes(n.id)));
+		archivedNotifications.update((l) => [
+			...moving.map((n) => ({ ...n, read: true, archived: true })), ...l
+		]);
+	} else {
+		const moving = beforeArch.filter((n) => ids.includes(n.id));
+		archivedNotifications.update((l) => l.filter((n) => !ids.includes(n.id)));
+		notifications.update((l) =>
+			[...moving.map((n) => ({ ...n, archived: false })), ...l].sort((a, b) => b.created_at - a.created_at)
+		);
+	}
+	try {
+		const r = await api.archiveNotifications(token(), { ids, archived });
+		unreadCount.set(r.unread);
+	} catch (e) {
+		// Drop this action's own optimistic copies, restore the snapshots while
+		// keeping realtime rows that arrived mid-request, then re-add those fresh
+		// rows' count contributions (the counts snapshot predates them).
+		notifications.update((cur) => restoreKeepingFresh(before, cur.filter((n) => !ids.includes(n.id))));
+		archivedNotifications.update((cur) => restoreKeepingFresh(beforeArch, cur.filter((n) => !ids.includes(n.id))));
+		notificationCounts.set(beforeCounts);
+		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
+		throw e;
+	}
+}
+
+export async function archiveAllRead(): Promise<void> {
+	const before = get(notifications);
+	notifications.update((l) => l.filter((n) => !n.read));
+	try {
+		await api.archiveNotifications(token(), { all_read: true, archived: true });
+	} catch (e) {
+		notifications.update((cur) => restoreKeepingFresh(before, cur));
+		throw e;
+	}
+	void loadArchivedNotifications().catch(() => {});
+}
+
+/** Inbox split-pane open: mark read + resolve the task beside the list (no view switch). */
+export async function openInboxNotification(n: Notification): Promise<void> {
+	const seq = ++inboxOpenSeq;
+	// Non-blocking: the selection must not wait on — or die with — mark-read.
+	// Its own optimistic update + rollback handles the row state independently,
+	// and awaiting it would let a slower A-click finish after (and clobber) a
+	// faster B-click.
+	if (!n.read) markRead([n.id]).catch(() => {});
+	highlightCommentId.set(n.comment_id ?? null);
+	inboxTask.set(null);
+	inboxTaskError.set(false);
+	// Join the task's workstream room so comment/activity/task events stream into
+	// the pane even when the task lives outside the current workstream. Rooms are
+	// ref-counted, so overlapping the current workstream's own room is safe.
+	if (inboxRoomKey) {
+		leaveRoom(inboxRoomKey);
+		inboxRoomKey = null;
+	}
+	const ws = n.data?.workstream_id;
+	if (ws) {
+		inboxRoomKey = streamKey(ws);
+		enterRoom(inboxRoomKey);
+	}
+	// Clear the shared detail stores BEFORE switching — otherwise the previous
+	// task's comments/activity render under the new task until its fetches land.
+	comments.set([]);
+	activity.set([]);
+	attachments.set([]);
+	subtasks.set([]);
+	selectedTaskId.set(n.task_id ?? null);
+	if (!n.task_id) return;
+	void loadTaskDetail(n.task_id);
+	const t = await api.getTask(token(), n.task_id).catch(() => null);
+	if (seq !== inboxOpenSeq || get(selectedTaskId) !== n.task_id) return; // user moved on
+	if (t) inboxTask.set(t);
+	else inboxTaskError.set(true);
 }
 
 export async function loadWorkstreamActivity(id: string): Promise<void> {
@@ -525,15 +729,35 @@ export async function foldInMyWorkFromNotification(payload: any): Promise<void> 
 }
 
 export async function markRead(ids: string[]): Promise<void> {
+	const before = get(notifications);
+	const beforeCounts = get(notificationCounts);
+	decrementCounts(before.filter((n) => ids.includes(n.id)));
 	notifications.update((list) => list.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
-	const r = await api.markNotificationsRead(token(), { ids });
-	unreadCount.set(r.unread);
+	try {
+		const r = await api.markNotificationsRead(token(), { ids });
+		unreadCount.set(r.unread);
+	} catch (e) {
+		notifications.update((cur) => restoreKeepingFresh(before, cur));
+		notificationCounts.set(beforeCounts);
+		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
+		throw e;
+	}
 }
 
 export async function markAllRead(): Promise<void> {
+	const before = get(notifications);
+	const beforeCounts = get(notificationCounts);
 	notifications.update((list) => list.map((n) => ({ ...n, read: true })));
-	const r = await api.markNotificationsRead(token(), { all: true });
-	unreadCount.set(r.unread);
+	notificationCounts.set(EMPTY_COUNTS());
+	try {
+		const r = await api.markNotificationsRead(token(), { all: true });
+		unreadCount.set(r.unread);
+	} catch (e) {
+		notifications.update((cur) => restoreKeepingFresh(before, cur));
+		notificationCounts.set(beforeCounts);
+		incrementCounts(get(notifications).filter((n) => !before.some((b) => b.id === n.id)));
+		throw e;
+	}
 }
 
 export async function openNotification(n: Notification): Promise<void> {
@@ -570,21 +794,39 @@ export function applyCollabEvent(event: string, payload: any): void {
 
 export function applyNotificationEvent(payload: any): void {
 	if (!payload || !payload.id) return;
-	notifications.update((l) => (l.some((n) => n.id === payload.id) ? l : [payload, ...l]));
-	if (!payload.read) unreadCount.update((n) => n + 1);
+	const exists = get(notifications).some((n) => n.id === payload.id);
+	if (!exists) notifications.update((l) => [payload, ...l]);
+	if (!payload.read && !exists) {
+		unreadCount.update((n) => n + 1);
+		notificationCounts.update((c) => ({
+			unread: c.unread + 1,
+			by_type: { ...c.by_type, [payload.type]: (c.by_type[payload.type] ?? 0) + 1 }
+		}));
+	}
 }
 
 /** Reconcile a realtime event into local state. Exported for tests + the socket wiring. */
 export function applyTaskEvent(event: string, payload: any): void {
+	if (!payload) return;
+	// Split-pane inbox: the inline task may belong to another workstream.
+	if (event === 'workos:task.updated') {
+		inboxTask.update((t) => (t && t.id === payload.id ? payload : t));
+	} else if (event === 'workos:task.deleted' && get(inboxTask)?.id === payload.id) {
+		inboxTask.set(null);
+		inboxTaskError.set(true); // pane flips to "Task no longer available"
+	}
 	const ws = get(currentWorkstreamId);
-	if (!payload || payload.workstream_id !== ws) return;
+	if (payload.workstream_id !== ws) return;
 	if (event === 'workos:task.created') {
 		tasks.update((list) => (list.some((t) => t.id === payload.id) ? list : [...list, payload]));
 	} else if (event === 'workos:task.updated') {
 		tasks.update((list) => list.map((t) => (t.id === payload.id ? payload : t)));
 	} else if (event === 'workos:task.deleted') {
 		tasks.update((list) => list.filter((t) => t.id !== payload.id));
-		if (get(selectedTaskId) === payload.id) selectedTaskId.set(null);
+		// If the inbox pane owns the selection, inboxTaskError was just set above —
+		// keep the id so the pane shows "Task no longer available" instead of
+		// snapping to "Select a notification". Board flow (no inbox error) clears.
+		if (get(selectedTaskId) === payload.id && !get(inboxTaskError)) selectedTaskId.set(null);
 	}
 }
 

@@ -2,7 +2,7 @@ import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type {
 	Bootstrap, Team, Workspace, Workstream, Label, Task, Member, WorkosRules,
 	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole,
-	Comment, Attachment, Activity, Notification, Subtask, WorkstreamFile
+	Comment, Attachment, Activity, Notification, NotificationCounts, Subtask, WorkstreamFile
 } from './types';
 
 const BASE = `${WEBUI_API_BASE_URL}/workos`;
@@ -187,7 +187,23 @@ export const deleteSubtask = (token: string, id: string) =>
 	request<{ deleted: boolean }>(token, `/subtasks/${id}`, 'DELETE');
 
 // Notifications
-export const listNotifications = (token: string, unreadOnly = false) =>
-	request<Notification[]>(token, `/notifications?unread_only=${unreadOnly}`);
+export const listNotifications = (
+	token: string,
+	opts: { unreadOnly?: boolean; archived?: boolean; before?: number; beforeId?: string; limit?: number } = {}
+) => {
+	const p = new URLSearchParams();
+	if (opts.unreadOnly) p.set('unread_only', 'true');
+	if (opts.archived) p.set('archived', 'true');
+	if (opts.before != null) p.set('before', String(opts.before));
+	if (opts.beforeId != null) p.set('before_id', opts.beforeId);
+	if (opts.limit != null) p.set('limit', String(opts.limit));
+	const qs = p.toString();
+	return request<Notification[]>(token, `/notifications${qs ? `?${qs}` : ''}`);
+};
 export const markNotificationsRead = (token: string, body: { ids?: string[]; all?: boolean }) =>
 	request<{ unread: number }>(token, '/notifications/read', 'POST', body);
+export const archiveNotifications = (
+	token: string, body: { ids?: string[]; all_read?: boolean; archived?: boolean }
+) => request<{ unread: number }>(token, '/notifications/archive', 'POST', body);
+export const getNotificationCounts = (token: string) =>
+	request<NotificationCounts>(token, '/notifications/counts');

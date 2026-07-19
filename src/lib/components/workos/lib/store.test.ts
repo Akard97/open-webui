@@ -27,6 +27,12 @@ vi.mock('./api', () => ({
 	deleteSubtask: vi.fn(async () => ({ deleted: true })),
 	getWorkstreamActivity: vi.fn(async () => ({ items: [], daily: [] })),
 	listWorkstreamAttachments: vi.fn(async () => []),
+	listNotifications: vi.fn(async () => []),
+	getNotificationCounts: vi.fn(async () => ({
+		unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+	})),
+	archiveNotifications: vi.fn(async () => ({ unread: 0 })),
+	markNotificationsRead: vi.fn(async () => ({ unread: 0 })),
 }));
 
 vi.mock('$lib/stores', () => {
@@ -387,5 +393,110 @@ describe('create dialog store plumbing', () => {
 		const { openTaskCreate, openModal } = await import('./store');
 		openTaskCreate('w1', { status: 'todo' });
 		expect(get(openModal)).toEqual({ kind: 'task', workstreamId: 'w1', prefill: { status: 'todo' } });
+	});
+});
+
+// CAREFUL: `notifications`, `unreadCount`, `applyNotificationEvent`, and
+// `selectedTaskId` are ALREADY imported by the mid-file import block (~line 89)
+// — re-importing them is a duplicate-binding SyntaxError. Import ONLY the new names:
+import {
+	notificationCounts, archivedNotifications, inboxTask, inboxTaskError,
+	archiveNotificationsAction, markRead
+} from './store';
+import * as apiMock from './api';
+import type { Notification } from './types';
+
+const mkN = (over: Partial<Notification>): Notification => ({
+	id: 'n1', user_id: 'u1', actor_id: 'u2', task_id: 't1', comment_id: null,
+	type: 'commented', data: {}, read: false, archived: false, created_at: 1000, ...over
+});
+
+describe('inbox notification store', () => {
+	beforeEach(() => {
+		notifications.set([]);
+		archivedNotifications.set([]);
+		inboxTask.set(null);
+		inboxTaskError.set(false);
+		selectedTaskId.set(null);
+		unreadCount.set(0);
+		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
+	});
+
+	it('applyNotificationEvent prepends and bumps per-type counts', () => {
+		applyNotificationEvent(mkN({ id: 'a', type: 'mentioned' }));
+		applyNotificationEvent(mkN({ id: 'a', type: 'mentioned' })); // dupe ignored
+		expect(get(notifications)).toHaveLength(1);
+		expect(get(notificationCounts)).toEqual({
+			unread: 1, by_type: { assigned: 0, mentioned: 1, commented: 0, status_changed: 0 }
+		});
+	});
+
+	it('markRead decrements the matching type count', async () => {
+		notifications.set([mkN({ id: 'a', type: 'assigned' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 1, mentioned: 0, commented: 0, status_changed: 0 } });
+		await markRead(['a']);
+		expect(get(notifications)[0].read).toBe(true); // row stays, flipped to read
+		expect(get(notificationCounts).by_type.assigned).toBe(0);
+		expect(get(notificationCounts).unread).toBe(0);
+	});
+
+	it('archiveNotificationsAction moves the row out optimistically and marks it read', async () => {
+		notifications.set([mkN({ id: 'a' }), mkN({ id: 'b' })]);
+		notificationCounts.set({ unread: 2, by_type: { assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
+		await archiveNotificationsAction(['a']);
+		expect(get(notifications).map((n) => n.id)).toEqual(['b']);
+		expect(get(archivedNotifications).map((n) => n.id)).toEqual(['a']);
+		expect(get(archivedNotifications)[0].read).toBe(true);
+		expect(get(notificationCounts).unread).toBe(1);
+	});
+
+	it('archive failure rolls lists and counts back', async () => {
+		vi.mocked(apiMock.archiveNotifications).mockRejectedValueOnce(new Error('nope'));
+		notifications.set([mkN({ id: 'a' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		await expect(archiveNotificationsAction(['a'])).rejects.toThrow();
+		expect(get(notifications).map((n) => n.id)).toEqual(['a']);
+		expect(get(archivedNotifications)).toHaveLength(0);
+		expect(get(notificationCounts)).toEqual({
+			unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
+		});
+	});
+
+	it('rollback keeps realtime rows that arrived during the failed request', async () => {
+		vi.mocked(apiMock.archiveNotifications).mockImplementationOnce(async () => {
+			applyNotificationEvent(mkN({ id: 'live', type: 'assigned', created_at: 5000 }));
+			throw new Error('nope');
+		});
+		notifications.set([mkN({ id: 'a' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		await expect(archiveNotificationsAction(['a'])).rejects.toThrow();
+		expect(get(notifications).map((n) => n.id)).toEqual(['live', 'a']); // snapshot restore must not eat 'live'
+		expect(get(archivedNotifications)).toHaveLength(0);
+		expect(get(notificationCounts)).toEqual({
+			unread: 2, by_type: { assigned: 1, mentioned: 0, commented: 1, status_changed: 0 }
+		});
+	});
+
+	it('task.deleted keeps the selection and flags the pane error', () => {
+		inboxTask.set({ id: 't9', workstream_id: 'other' } as any);
+		selectedTaskId.set('t9');
+		applyTaskEvent('workos:task.deleted', { id: 't9', workstream_id: 'other' });
+		expect(get(inboxTask)).toBeNull();
+		expect(get(inboxTaskError)).toBe(true);
+		expect(get(selectedTaskId)).toBe('t9'); // kept: the pane shows "Task no longer available"
+	});
+
+	it('unarchive moves the row back sorted by created_at', async () => {
+		notifications.set([mkN({ id: 'b', created_at: 2000 })]);
+		archivedNotifications.set([mkN({ id: 'a', created_at: 3000, read: true, archived: true })]);
+		await archiveNotificationsAction(['a'], false);
+		expect(get(notifications).map((n) => n.id)).toEqual(['a', 'b']);
+		expect(get(archivedNotifications)).toHaveLength(0);
+	});
+
+	it('task.updated reconciles the inbox split-pane task across workstreams', () => {
+		inboxTask.set({ id: 't9', workstream_id: 'other', title: 'old' } as any);
+		applyTaskEvent('workos:task.updated', { id: 't9', workstream_id: 'other', title: 'new' });
+		expect(get(inboxTask)?.title).toBe('new');
 	});
 });
