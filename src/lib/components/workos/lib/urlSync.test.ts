@@ -15,23 +15,41 @@ vi.hoisted(() => {
 
 vi.mock('$app/environment', () => ({ browser: true }));
 
-// Defined before the $app/navigation mock (source order == hoist order for
-// vi.hoisted/vi.mock) so that mock's factory can reference it.
-const pageStore = vi.hoisted(() => {
-	// Deferred require: vi.hoisted runs before ESM imports are evaluated.
-	const { writable } = require('svelte/store');
-	return writable({ url: new URL('http://localhost/workos') });
+// Node env has no window: stub the slice urlSync touches -- location (read by
+// hydrateFromUrl/urlHasWorkstream/the popstate handler) and popstate listener
+// registration. Browser semantics this stub preserves: programmatic
+// pushState/replaceState update location WITHOUT firing popstate; only real
+// history traversal (simulated via win.__go below) fires it.
+const win = vi.hoisted(() => {
+	const listeners = new Set<() => void>();
+	const w = {
+		location: { href: 'http://localhost/workos', pathname: '/workos', search: '' },
+		addEventListener: (type: string, fn: () => void) => { if (type === 'popstate') listeners.add(fn); },
+		removeEventListener: (type: string, fn: () => void) => { if (type === 'popstate') listeners.delete(fn); },
+		__setUrl(href: string) {
+			const u = new URL(href, 'http://localhost');
+			w.location.href = u.href;
+			w.location.pathname = u.pathname;
+			w.location.search = u.search;
+		},
+		// Simulate the browser Back/Forward: location updates FIRST, then
+		// popstate fires with it already in place.
+		__go(href: string) {
+			w.__setUrl(href);
+			for (const fn of [...listeners]) fn();
+		},
+		__listenerCount: () => listeners.size
+	};
+	(globalThis as any).window = w;
+	return w;
 });
 
 vi.mock('$app/navigation', () => ({
-	// Mirror real SvelteKit shallow routing: push/replaceState update the page
-	// store synchronously, just like a real navigation would. Without this the
-	// mocked address bar (pageStore) can drift from what urlSync just wrote,
-	// making its own writes look like external navigations.
-	pushState: vi.fn((url: string) => pageStore.set({ url: new URL(url, 'http://localhost') })),
-	replaceState: vi.fn((url: string) => pageStore.set({ url: new URL(url, 'http://localhost') }))
+	// Mirror the real browser: programmatic history writes update the address
+	// bar but never fire popstate.
+	pushState: vi.fn((url: string) => win.__setUrl(url)),
+	replaceState: vi.fn((url: string) => win.__setUrl(url))
 }));
-vi.mock('$app/stores', () => ({ page: pageStore }));
 vi.mock('svelte-sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('$lib/stores', () => {
 	const { writable } = require('svelte/store');
@@ -69,13 +87,10 @@ import { hydrateFromUrl, initUrlSync, destroyUrlSync, urlHasWorkstream } from '.
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-// In real SvelteKit, window.location (what hydrateFromUrl reads) and the page
-// store always describe the same URL. Tests must preserve that invariant --
-// otherwise the subscribe-time replay in initUrlSync legitimately looks like
-// an external navigation that needs applying, rather than the state
-// hydrateFromUrl just finished applying.
+// Keep the stubbed address bar consistent with what hydrateFromUrl is told to
+// read -- in a real browser they are the same thing.
 const hydrate = async (s: string) => {
-	pageStore.set({ url: new URL(`http://localhost/workos${s}`) });
+	win.__setUrl(`/workos${s}`);
 	await hydrateFromUrl(s);
 };
 
@@ -100,7 +115,7 @@ beforeEach(() => {
 	currentWorkstreamId.set(null);
 	closeTask();
 	tasks.set([]);
-	pageStore.set({ url: new URL('http://localhost/workos') });
+	win.__setUrl('/workos');
 });
 
 describe('hydrateFromUrl', () => {
@@ -212,11 +227,11 @@ describe('store → URL writes', () => {
 	});
 });
 
-describe('URL → store (Back/Forward via page store)', () => {
+describe('URL → store (Back/Forward via native popstate)', () => {
 	it('a popstate URL re-hydrates the stores', async () => {
 		await hydrate('?view=board&ws=w1');
 		initUrlSync();
-		pageStore.set({ url: new URL('http://localhost/workos?view=inbox') });
+		win.__go('/workos?view=inbox');
 		await flush();
 		expect(get(view)).toBe('inbox');
 	});
@@ -224,32 +239,57 @@ describe('URL → store (Back/Forward via page store)', () => {
 	it('closes the drawer when the restored URL has no task', async () => {
 		await hydrate('?view=board&ws=w1&task=t-in-list');
 		initUrlSync();
-		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1') });
+		win.__go('/workos?view=board&ws=w1');
 		await flush();
 		expect(get(selectedTaskId)).toBeNull();
 	});
 
-	it('reflected self-written URLs cause no extra history writes (loop guard)', async () => {
+	it('a nav click is never reverted by its own URL write (Kit 2.59 regression)', async () => {
+		// The original page-store echo detection failed here: $app/stores does
+		// not track shallow-routing pushState, so after a click its emission
+		// still carried the OLD url, applyUrl re-applied it, and the click was
+		// reverted (verified live). With popstate there is no emission at all
+		// for programmatic writes -- the clicked state must simply survive.
+		await hydrate('');
+		initUrlSync();
+		view.set('inbox'); // sidebar click
+		await flush();
+		expect(pushState).toHaveBeenCalledTimes(1);
+		expect(pushState).toHaveBeenCalledWith('/workos?view=inbox', {});
+		expect(get(view)).toBe('inbox'); // NOT snapped back to mywork
+		vi.mocked(replaceState).mockClear();
+		await flush();
+		expect(replaceState).not.toHaveBeenCalled(); // and no correcting rewrite either
+	});
+
+	it('a popstate matching our own last write is a no-op (safety net)', async () => {
 		await hydrate('');
 		initUrlSync();
 		view.set('inbox');
 		await flush();
-		expect(pushState).toHaveBeenCalledTimes(1);
+		vi.mocked(pushState).mockClear();
 		vi.mocked(replaceState).mockClear();
-		// simulate SvelteKit reflecting our own pushState back into the page store
-		pageStore.set({ url: new URL('http://localhost/workos?view=inbox') });
+		win.__go('/workos?view=inbox'); // traversal landing on the same URL we wrote
 		await flush();
-		expect(pushState).toHaveBeenCalledTimes(1); // no ping-pong
+		expect(pushState).not.toHaveBeenCalled();
 		expect(replaceState).not.toHaveBeenCalled();
 		expect(get(view)).toBe('inbox');
 	});
 
-	it('ignores URLs outside /workos', async () => {
+	it('ignores popstate outside /workos', async () => {
 		await hydrate('?view=board&ws=w1');
 		initUrlSync();
-		pageStore.set({ url: new URL('http://localhost/c/abc123?view=inbox') });
+		win.__go('/c/abc123?view=inbox');
 		await flush();
 		expect(get(view)).toBe('board');
+	});
+
+	it('destroyUrlSync removes the popstate listener', async () => {
+		await hydrate('');
+		initUrlSync();
+		expect(win.__listenerCount()).toBe(1);
+		destroyUrlSync();
+		expect(win.__listenerCount()).toBe(0);
 	});
 });
 
@@ -264,10 +304,10 @@ describe('concurrent URL application (queue-latest)', () => {
 		// the fetch-fallback branch -- this is where the first applyUrl call
 		// gets stuck awaiting.
 		(api.getTask as any).mockImplementationOnce(() => hang);
-		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1&task=slow-task') });
+		win.__go('/workos?view=board&ws=w1&task=slow-task');
 		await Promise.resolve(); // let the first applyUrl start and reach its await
 		// Second navigation arrives mid-flight -- must be queued, not dropped.
-		pageStore.set({ url: new URL('http://localhost/workos?view=inbox') });
+		win.__go('/workos?view=inbox');
 		release({
 			id: 'slow-task', workstream_id: 'w-other', team_id: 'tm', number: 9, key: 'OSL-9', title: 'fetched',
 			status: 'todo', priority: null, assignee_ids: ['u1'], progress: 0, labels: [], sort_key: 1,
@@ -289,7 +329,7 @@ describe('destroyUrlSync during an in-flight applyUrl (route left mid-fetch)', (
 		// 'slow-task' is in neither `tasks` nor `myTasks`, so openTaskById takes
 		// the fetch-fallback branch -- this is where applyUrl gets stuck.
 		(api.getTask as any).mockImplementationOnce(() => hang);
-		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1&task=slow-task') });
+		win.__go('/workos?view=board&ws=w1&task=slow-task');
 		await Promise.resolve(); // let applyUrl start and reach its await
 		destroyUrlSync(); // simulates leaving /workos mid-flight
 		vi.mocked(pushState).mockClear();
@@ -313,7 +353,7 @@ describe('destroyUrlSync during an in-flight applyUrl (route left mid-fetch)', (
 		let release!: (t: unknown) => void;
 		const hang = new Promise((r) => { release = r; });
 		(api.getTask as any).mockImplementationOnce(() => hang);
-		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1&task=slow-task') });
+		win.__go('/workos?view=board&ws=w1&task=slow-task');
 		await Promise.resolve(); // let applyUrl start and reach its await inside openTaskById
 		destroyUrlSync(); // route left -- this applyUrl call is now stale
 		// A competing open (a fresh session's own deep-link open, or a manual

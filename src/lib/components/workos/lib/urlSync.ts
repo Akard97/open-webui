@@ -4,11 +4,11 @@
 //
 // Two one-way flows with a loop guard between them:
 //   stores -> URL  (scheduleWrite: push on view/ws change, replace on task)
-//   URL -> stores  (applyUrl: initial hydrate + Back/Forward via page store)
+//   URL -> stores  (applyUrl: initial hydrate + Back/Forward via native popstate)
 import { get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { pushState, replaceState } from '$app/navigation';
-import { page } from '$app/stores';
+
 import { toast } from 'svelte-sonner';
 import { user } from '$lib/stores';
 import {
@@ -194,30 +194,32 @@ export function initUrlSync(): void {
 	unsubs.push(view.subscribe(scheduleWrite));
 	unsubs.push(currentWorkstreamId.subscribe(scheduleWrite));
 	unsubs.push(selectedTaskId.subscribe(scheduleWrite));
-	// Back/Forward (and any external URL change): SvelteKit reflects it into
-	// the page store; self-written URLs are recognized by string equality
-	// against the canonical form we always write. That check runs BEFORE the
-	// in-flight stash below so our own writes (including the subscribe-time
-	// replay of whatever hydrateFromUrl just wrote) never get queued as a
-	// pending navigation.
-	unsubs.push(
-		page.subscribe(($p) => {
-			if (!$p.url.pathname.endsWith(BASE)) return;
-			// URL.search is '' for no params and '?...' otherwise -- exactly
-			// buildQuery's output, so one string comparison recognizes our
-			// own writes.
-			if ($p.url.search === lastWritten) return;
-			if (applying) {
-				// A navigation arrived while a previous one is still being applied
-				// (e.g. Back/Forward mashed during a slow deep-link fetch). Don't
-				// drop it -- stash it and apply it once the current one settles;
-				// only the latest matters, so this overwrites any earlier stash.
-				pendingUrl = $p.url;
-				return;
-			}
-			void applyUrl($p.url.searchParams, $p.url.search);
-		})
-	);
+	// Back/Forward: native popstate, NOT the $app/stores page store. That
+	// legacy store does not track shallow-routing URLs (verified live on Kit
+	// 2.59: after our pushState it emits with the PREVIOUS url), so an echo
+	// comparison against it misreads every self-write as an external
+	// navigation and re-applies the stale URL -- reverting the user's click.
+	// popstate has neither problem: programmatic pushState/replaceState never
+	// fire it, so it only reports genuine history traversal, with
+	// window.location already updated.
+	const onPop = () => {
+		if (!window.location.pathname.endsWith(BASE)) return;
+		const search = window.location.search;
+		// Safety net (popstate should never echo our own writes): '' for no
+		// params and '?...' otherwise -- exactly buildQuery's output.
+		if (search === lastWritten) return;
+		if (applying) {
+			// A navigation arrived while a previous one is still being applied
+			// (e.g. Back/Forward mashed during a slow deep-link fetch). Don't
+			// drop it -- stash it and apply it once the current one settles;
+			// only the latest matters, so this overwrites any earlier stash.
+			pendingUrl = new URL(window.location.href);
+			return;
+		}
+		void applyUrl(new URLSearchParams(search), search);
+	};
+	window.addEventListener('popstate', onPop);
+	unsubs.push(() => window.removeEventListener('popstate', onPop));
 }
 
 export function destroyUrlSync(): void {

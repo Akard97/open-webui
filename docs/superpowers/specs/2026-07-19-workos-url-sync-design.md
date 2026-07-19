@@ -81,8 +81,15 @@ Two triggers:
 
 1. **Initial hydrate** — exactly once, after `loadBootstrap()` resolves (the
    bootstrap tree is required to validate `ws` and resolve the team).
-2. **popstate** (Back/Forward) — subscription on the SvelteKit page URL;
-   re-hydrate stores from params.
+2. **popstate** (Back/Forward) — native `window` popstate listener;
+   re-hydrate stores from `window.location`. (Correction 2026-07-20: the
+   original design subscribed to the `$app/stores` page store, but that
+   legacy store does not track shallow-routing pushState URLs — verified
+   live on Kit 2.59, its post-push emission still carries the previous
+   URL — so echo detection against it misread every self-write as an
+   external navigation and reverted the user's click. Native popstate
+   never fires for programmatic history writes, eliminating the echo
+   problem entirely.)
 
 ### Loop guard
 
