@@ -23,6 +23,7 @@ let prevState: NavState | null = null; // baseline for decideOp; null = not init
 let lastWritten: string | null = null; // canonical search we last put in the address bar
 let applying = false; // URL->store application in progress: suppress echo writes
 let writeQueued = false;
+let pendingUrl: URL | null = null; // navigation that arrived while applying was true; latest wins
 let unsubs: Array<() => void> = [];
 
 function currentNavState(): NavState {
@@ -102,6 +103,14 @@ async function applyUrl(params: URLSearchParams, rawSearch: string): Promise<voi
 		if (canonical !== rawSearch) replaceState(`${BASE}${canonical}`, {});
 	} finally {
 		applying = false;
+		// A navigation landed while this one was still in flight and got
+		// stashed below -- apply the latest one now. Skip it if it turns out to
+		// already match what we just wrote (a self-echo racing in as pending).
+		if (pendingUrl) {
+			const next = pendingUrl;
+			pendingUrl = null;
+			if (next.search !== lastWritten) void applyUrl(next.searchParams, next.search);
+		}
 	}
 }
 
@@ -137,25 +146,25 @@ export function initUrlSync(): void {
 	unsubs.push(selectedTaskId.subscribe(scheduleWrite));
 	// Back/Forward (and any external URL change): SvelteKit reflects it into
 	// the page store; self-written URLs are recognized by string equality
-	// against the canonical form we always write. Store subscriptions fire
-	// once, synchronously, with the CURRENT value as soon as we subscribe --
-	// that replay is the state hydrateFromUrl already applied, not a fresh
-	// navigation, so it must not race the reconciliation above (in a real
-	// browser page.url already matches after replaceState; only a mock page
-	// store that does not echo replaceState calls can disagree here).
-	let firstEmit = true;
+	// against the canonical form we always write. That check runs BEFORE the
+	// in-flight stash below so our own writes (including the subscribe-time
+	// replay of whatever hydrateFromUrl just wrote) never get queued as a
+	// pending navigation.
 	unsubs.push(
 		page.subscribe(($p) => {
-			if (firstEmit) {
-				firstEmit = false;
-				return;
-			}
 			if (!$p.url.pathname.endsWith(BASE)) return;
-			if (applying) return;
 			// URL.search is '' for no params and '?...' otherwise -- exactly
 			// buildQuery's output, so one string comparison recognizes our
 			// own writes.
 			if ($p.url.search === lastWritten) return;
+			if (applying) {
+				// A navigation arrived while a previous one is still being applied
+				// (e.g. Back/Forward mashed during a slow deep-link fetch). Don't
+				// drop it -- stash it and apply it once the current one settles;
+				// only the latest matters, so this overwrites any earlier stash.
+				pendingUrl = $p.url;
+				return;
+			}
 			void applyUrl($p.url.searchParams, $p.url.search);
 		})
 	);
@@ -168,4 +177,5 @@ export function destroyUrlSync(): void {
 	lastWritten = null;
 	applying = false;
 	writeQueued = false;
+	pendingUrl = null;
 }

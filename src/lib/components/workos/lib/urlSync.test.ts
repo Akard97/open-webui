@@ -14,15 +14,23 @@ vi.hoisted(() => {
 });
 
 vi.mock('$app/environment', () => ({ browser: true }));
-vi.mock('$app/navigation', () => ({
-	pushState: vi.fn(),
-	replaceState: vi.fn()
-}));
+
+// Defined before the $app/navigation mock (source order == hoist order for
+// vi.hoisted/vi.mock) so that mock's factory can reference it.
 const pageStore = vi.hoisted(() => {
 	// Deferred require: vi.hoisted runs before ESM imports are evaluated.
 	const { writable } = require('svelte/store');
 	return writable({ url: new URL('http://localhost/workos') });
 });
+
+vi.mock('$app/navigation', () => ({
+	// Mirror real SvelteKit shallow routing: push/replaceState update the page
+	// store synchronously, just like a real navigation would. Without this the
+	// mocked address bar (pageStore) can drift from what urlSync just wrote,
+	// making its own writes look like external navigations.
+	pushState: vi.fn((url: string) => pageStore.set({ url: new URL(url, 'http://localhost') })),
+	replaceState: vi.fn((url: string) => pageStore.set({ url: new URL(url, 'http://localhost') }))
+}));
 vi.mock('$app/stores', () => ({ page: pageStore }));
 vi.mock('svelte-sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('$lib/stores', () => {
@@ -61,6 +69,16 @@ import { hydrateFromUrl, initUrlSync, destroyUrlSync, urlHasWorkstream } from '.
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+// In real SvelteKit, window.location (what hydrateFromUrl reads) and the page
+// store always describe the same URL. Tests must preserve that invariant --
+// otherwise the subscribe-time replay in initUrlSync legitimately looks like
+// an external navigation that needs applying, rather than the state
+// hydrateFromUrl just finished applying.
+const hydrate = async (s: string) => {
+	pageStore.set({ url: new URL(`http://localhost/workos${s}`) });
+	await hydrateFromUrl(s);
+};
+
 const seedTree = () => {
 	teams.set([{ id: 'tm', name: 'Team' } as any, { id: 'tm2', name: 'Team 2' } as any]);
 	workspaces.set([
@@ -87,19 +105,19 @@ beforeEach(() => {
 
 describe('hydrateFromUrl', () => {
 	it('valid ws deep link selects the workstream and view', async () => {
-		await hydrateFromUrl('?view=list&ws=w1');
+		await hydrate('?view=list&ws=w1');
 		expect(get(currentWorkstreamId)).toBe('w1');
 		expect(get(view)).toBe('list');
 	});
 
 	it('ws in another team switches the team first', async () => {
-		await hydrateFromUrl('?view=board&ws=w2');
+		await hydrate('?view=board&ws=w2');
 		expect(get(currentTeamId)).toBe('tm2');
 		expect(get(currentWorkstreamId)).toBe('w2');
 	});
 
 	it('unknown ws falls back to My Work with a toast', async () => {
-		await hydrateFromUrl('?view=board&ws=ghost&task=t1');
+		await hydrate('?view=board&ws=ghost&task=t1');
 		expect(toast.error).toHaveBeenCalledWith('Workstream not available');
 		expect(get(view)).toBe('mywork');
 		expect(get(currentWorkstreamId)).toBeNull();
@@ -109,19 +127,19 @@ describe('hydrateFromUrl', () => {
 	});
 
 	it('task in the loaded list opens without a fetch fallback', async () => {
-		await hydrateFromUrl('?view=board&ws=w1&task=t-in-list');
+		await hydrate('?view=board&ws=w1&task=t-in-list');
 		expect(get(selectedTaskId)).toBe('t-in-list');
 	});
 
 	it('task outside all lists opens via direct fetch', async () => {
-		await hydrateFromUrl('?task=t-anywhere');
+		await hydrate('?task=t-anywhere');
 		expect(get(selectedTaskId)).toBe('t-anywhere');
 	});
 
 	it('dead task id drops the param with a toast, view survives', async () => {
 		const api = await import('./api');
 		(api.getTask as any).mockRejectedValueOnce(Object.assign(new Error('gone'), { status: 404 }));
-		await hydrateFromUrl('?view=list&ws=w1&task=dead');
+		await hydrate('?view=list&ws=w1&task=dead');
 		expect(toast.error).toHaveBeenCalledWith('Task not available');
 		expect(get(view)).toBe('list');
 		expect(get(currentWorkstreamId)).toBe('w1');
@@ -132,7 +150,7 @@ describe('hydrateFromUrl', () => {
 
 describe('store → URL writes', () => {
 	it('view change pushes one history entry', async () => {
-		await hydrateFromUrl('');
+		await hydrate('');
 		initUrlSync();
 		view.set('inbox');
 		await flush();
@@ -141,7 +159,7 @@ describe('store → URL writes', () => {
 	});
 
 	it('compound ws switch (ws set + task cleared) is one push', async () => {
-		await hydrateFromUrl('?view=board&ws=w1&task=t-in-list');
+		await hydrate('?view=board&ws=w1&task=t-in-list');
 		initUrlSync();
 		const { selectWorkstream } = await import('./store');
 		await selectWorkstream('w2'); // sets ws AND clears task
@@ -151,7 +169,7 @@ describe('store → URL writes', () => {
 	});
 
 	it('task-only change replaces, never pushes', async () => {
-		await hydrateFromUrl('?view=board&ws=w1');
+		await hydrate('?view=board&ws=w1');
 		initUrlSync();
 		vi.mocked(replaceState).mockClear(); // ignore hydrate canonicalization
 		selectedTaskId.set('t-in-list');
@@ -161,7 +179,7 @@ describe('store → URL writes', () => {
 	});
 
 	it('no-op transitions write nothing', async () => {
-		await hydrateFromUrl('?view=inbox');
+		await hydrate('?view=inbox');
 		initUrlSync();
 		vi.mocked(replaceState).mockClear();
 		view.set('inbox'); // same value
@@ -173,7 +191,7 @@ describe('store → URL writes', () => {
 
 describe('URL → store (Back/Forward via page store)', () => {
 	it('a popstate URL re-hydrates the stores', async () => {
-		await hydrateFromUrl('?view=board&ws=w1');
+		await hydrate('?view=board&ws=w1');
 		initUrlSync();
 		pageStore.set({ url: new URL('http://localhost/workos?view=inbox') });
 		await flush();
@@ -181,7 +199,7 @@ describe('URL → store (Back/Forward via page store)', () => {
 	});
 
 	it('closes the drawer when the restored URL has no task', async () => {
-		await hydrateFromUrl('?view=board&ws=w1&task=t-in-list');
+		await hydrate('?view=board&ws=w1&task=t-in-list');
 		initUrlSync();
 		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1') });
 		await flush();
@@ -189,7 +207,7 @@ describe('URL → store (Back/Forward via page store)', () => {
 	});
 
 	it('reflected self-written URLs cause no extra history writes (loop guard)', async () => {
-		await hydrateFromUrl('');
+		await hydrate('');
 		initUrlSync();
 		view.set('inbox');
 		await flush();
@@ -204,10 +222,36 @@ describe('URL → store (Back/Forward via page store)', () => {
 	});
 
 	it('ignores URLs outside /workos', async () => {
-		await hydrateFromUrl('?view=board&ws=w1');
+		await hydrate('?view=board&ws=w1');
 		initUrlSync();
 		pageStore.set({ url: new URL('http://localhost/c/abc123?view=inbox') });
 		await flush();
 		expect(get(view)).toBe('board');
+	});
+});
+
+describe('concurrent URL application (queue-latest)', () => {
+	it('a navigation that arrives while one is still applying is not dropped', async () => {
+		await hydrate('?view=board&ws=w1');
+		initUrlSync();
+		const api = await import('./api');
+		let release!: (t: unknown) => void;
+		const hang = new Promise((r) => { release = r; });
+		// 'slow-task' is in neither `tasks` nor `myTasks`, so openTaskById takes
+		// the fetch-fallback branch -- this is where the first applyUrl call
+		// gets stuck awaiting.
+		(api.getTask as any).mockImplementationOnce(() => hang);
+		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1&task=slow-task') });
+		await Promise.resolve(); // let the first applyUrl start and reach its await
+		// Second navigation arrives mid-flight -- must be queued, not dropped.
+		pageStore.set({ url: new URL('http://localhost/workos?view=inbox') });
+		release({
+			id: 'slow-task', workstream_id: 'w-other', team_id: 'tm', number: 9, key: 'OSL-9', title: 'fetched',
+			status: 'todo', priority: null, assignee_ids: ['u1'], progress: 0, labels: [], sort_key: 1,
+			created_by_id: 'u1', created_at: 0, updated_at: 0
+		});
+		await flush();
+		expect(get(view)).toBe('inbox'); // latest navigation wins
+		expect(get(selectedTaskId)).toBeNull(); // reconciled by the second apply (no task param)
 	});
 });
