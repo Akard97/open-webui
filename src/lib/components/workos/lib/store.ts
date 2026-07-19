@@ -343,11 +343,14 @@ export async function editTask(id: string, fields: Partial<Task>): Promise<void>
 	} catch (e) {
 		if (before) tasks.update((list) => list.map((t) => (t.id === id ? before : t)));
 		if (beforeInbox) inboxTask.update((t) => (t && t.id === id ? beforeInbox : t));
-		if (e === 'ATTACHMENT_REQUIRED') {
+		// request() rejects with { detail, status }; tolerate a bare string too
+		// (same defensive idiom as the dialog error handlers).
+		const detail = typeof e === 'string' ? e : (e as any)?.detail;
+		if (detail === 'ATTACHMENT_REQUIRED') {
 			toast.error('Attach a file before completing this task');
 			return; // handled: rolled back + user informed
 		}
-		if (e === 'Task needs at least one assignee.') {
+		if (detail === 'Task needs at least one assignee.') {
 			toast.error('A task needs at least one assignee');
 			return; // handled: rolled back + user informed
 		}
@@ -783,8 +786,21 @@ export async function markRead(ids: string[]): Promise<void> {
 		const r = await api.markNotificationsRead(token(), { ids });
 		unreadCount.set(r.unread);
 	} catch (e) {
-		revertOwnRows(notifications, touched);
-		incrementCounts(touched);
+		// Only rows still in the active list are ours to roll back — a concurrent
+		// archive may have moved a row out mid-flight (and now owns its state);
+		// restoring that row's count contribution would leave a phantom unread badge.
+		const present = new Set(get(notifications).map((n) => n.id));
+		const own = touched.filter((n) => present.has(n.id));
+		revertOwnRows(notifications, own);
+		incrementCounts(own);
+		if (own.length < touched.length) {
+			// Count ownership for the moved rows is ambiguous — refetch server truth.
+			const counts = await api.getNotificationCounts(token()).catch(() => null);
+			if (counts) {
+				notificationCounts.set(counts);
+				unreadCount.set(counts.unread);
+			}
+		}
 		throw e;
 	}
 }

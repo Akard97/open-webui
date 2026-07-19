@@ -355,11 +355,12 @@ describe('create dialog store plumbing', () => {
 		);
 	});
 
-	it('editTask rolls back and swallows ATTACHMENT_REQUIRED', async () => {
+	it('editTask rolls back and swallows ATTACHMENT_REQUIRED (real HTTP error shape)', async () => {
 		const api = await import('./api');
 		const { editTask } = await import('./store');
 		tasks.set([mk({ id: 'a', status: 'todo', attachment_required: true })]);
-		(api.updateTask as any).mockRejectedValueOnce('ATTACHMENT_REQUIRED');
+		// request() rejects with { detail, status } — mock the real shape, not a bare string.
+		(api.updateTask as any).mockRejectedValueOnce({ detail: 'ATTACHMENT_REQUIRED', status: 400 });
 		await editTask('a', { status: 'done' }); // must not throw
 		expect(get(tasks)[0].status).toBe('todo'); // rolled back
 	});
@@ -368,9 +369,20 @@ describe('create dialog store plumbing', () => {
 		const api = await import('./api');
 		const { editTask } = await import('./store');
 		tasks.set([mk({ id: 'a', assignee_ids: ['u2'] })]);
-		(api.updateTask as any).mockRejectedValueOnce('Task needs at least one assignee.');
+		(api.updateTask as any).mockRejectedValueOnce({
+			detail: 'Task needs at least one assignee.', status: 400
+		});
 		await editTask('a', { assignee_ids: [] }); // must not throw
 		expect(get(tasks)[0].assignee_ids).toEqual(['u2']); // rolled back
+	});
+
+	it('editTask still swallows bare-string sentinels (legacy error shape)', async () => {
+		const api = await import('./api');
+		const { editTask } = await import('./store');
+		tasks.set([mk({ id: 'a', status: 'todo', attachment_required: true })]);
+		(api.updateTask as any).mockRejectedValueOnce('ATTACHMENT_REQUIRED');
+		await editTask('a', { status: 'done' }); // must not throw
+		expect(get(tasks)[0].status).toBe('todo'); // rolled back
 	});
 
 	it('addTask drops the temp row instead of duplicating when a realtime event beats the create response', async () => {
@@ -548,6 +560,26 @@ describe('inbox rollback isolation + pagination cursor', () => {
 		expect(rows.map((n) => n.id).sort()).toEqual(['a', 'b']); // archive rolled back
 		expect(rows.find((n) => n.id === 'b')?.read).toBe(true); // markRead success survives
 		expect(get(notificationCounts).unread).toBe(1); // only 'a' restored as unread
+	});
+
+	it('markRead failure after a successful concurrent archive must not resurrect counts', async () => {
+		notifications.set([mkN({ id: 'a' })]);
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		let rejectRead: ((e: unknown) => void) | undefined;
+		vi.mocked(apiMock.markNotificationsRead)
+			.mockImplementationOnce(() => new Promise((_, rej) => { rejectRead = rej; }));
+		vi.mocked(apiMock.archiveNotifications).mockResolvedValueOnce({ unread: 0 });
+		vi.mocked(apiMock.getNotificationCounts).mockResolvedValueOnce({
+			unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+		});
+		const pr = markRead(['a']);
+		await archiveNotificationsAction(['a']); // archive commits while mark-read is in flight
+		rejectRead!(new Error('nope'));
+		await expect(pr).rejects.toThrow();
+		expect(get(notifications)).toHaveLength(0); // archive result intact
+		expect(get(archivedNotifications).map((n) => n.id)).toEqual(['a']);
+		expect(get(notificationCounts).unread).toBe(0); // no phantom unread badge
+		expect(get(notificationCounts).by_type.commented).toBe(0);
 	});
 
 	it('markAllRead failure refetches authoritative counts instead of restoring a stale snapshot', async () => {
