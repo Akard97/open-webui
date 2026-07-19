@@ -262,8 +262,10 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 ### Notifications
 | Route / Helper | Gate applied | Location |
 |---|---|---|
-| `GET /notifications` | `require_workos`; intrinsically scoped to `user.id`; `limit` clamped to ≤ 200 (closes G10) | [workos.py:1064](backend/open_webui/routers/workos.py:1064) |
+| `GET /notifications` | `require_workos`; intrinsically scoped to `user.id`; `limit` clamped to ≤ 200 (closes G10); `archived` query param filters archived vs inbox rows | [workos.py:1064](backend/open_webui/routers/workos.py:1064) |
 | `POST /notifications/read` | `require_workos`; `Notifications.mark_read` passed `user.id` | [workos.py:1073](backend/open_webui/routers/workos.py:1073) |
+| `GET /notifications/counts` | `require_workos`; intrinsically scoped to `user.id`; unread + non-archived per-type counts | [workos.py](backend/open_webui/routers/workos.py) `notification_counts` |
+| `POST /notifications/archive` | `require_workos`; `Notifications.set_archived` passed `user.id` (owner-scoped; archive implies read) | [workos.py](backend/open_webui/routers/workos.py) `archive_notifications` |
 
 ### Access console
 | Route / Helper | Gate applied | Location |

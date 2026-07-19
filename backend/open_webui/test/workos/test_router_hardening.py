@@ -56,7 +56,8 @@ async def test_notifications_limit_is_clamped(monkeypatch):
     from open_webui.models.workos import Notifications
     captured = {}
 
-    async def _fake_list(user_id, *, unread_only=False, limit=50, before=None, db=None):
+    async def _fake_list(user_id, *, unread_only=False, limit=50, before=None, before_id=None,
+                          archived=False, db=None):
         captured['limit'] = limit
         return []
 

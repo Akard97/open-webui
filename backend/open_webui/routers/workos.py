@@ -1227,14 +1227,24 @@ class MarkReadForm(BaseModel):
     all: bool = False
 
 
+class ArchiveForm(BaseModel):
+    ids: Optional[list] = None
+    all_read: bool = False
+    archived: bool = True
+
+
 @router.get('/notifications')
 async def list_notifications(
     request: Request, unread_only: bool = False, limit: int = 50, before: Optional[int] = None,
+    before_id: Optional[str] = None, archived: bool = False,
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await require_workos(request, user, db)
     limit = max(1, min(limit, 200))
-    return await Notifications.list_for_user(user.id, unread_only=unread_only, limit=limit, before=before, db=db)
+    return await Notifications.list_for_user(
+        user.id, unread_only=unread_only, limit=limit, before=before, before_id=before_id,
+        archived=archived, db=db
+    )
 
 
 @router.post('/notifications/read')
@@ -1244,6 +1254,27 @@ async def mark_notifications_read(
 ):
     await require_workos(request, user, db)
     await Notifications.mark_read(user.id, ids=form.ids, all=form.all, db=db)
+    return {'unread': await Notifications.unread_count(user.id, db=db)}
+
+
+@router.get('/notifications/counts')
+async def notification_counts(
+    request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    await require_workos(request, user, db)
+    return await Notifications.counts_for_user(user.id, db=db)
+
+
+@router.post('/notifications/archive')
+async def archive_notifications(
+    request: Request, form: ArchiveForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    """Archive implies read. Intrinsically scoped to the caller's rows."""
+    await require_workos(request, user, db)
+    await Notifications.set_archived(
+        user.id, ids=form.ids, all_read=form.all_read, archived=form.archived, db=db
+    )
     return {'unread': await Notifications.unread_count(user.id, db=db)}
 
 

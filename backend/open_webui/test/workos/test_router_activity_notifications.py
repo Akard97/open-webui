@@ -80,3 +80,53 @@ async def test_notifications_are_per_user(monkeypatch):
     await Notifications.insert('u2', 'u1', 'assigned', {}, task_id='t1')
     async with _client(monkeypatch, user=U1) as c:
         assert (await c.get('/api/v1/workos/notifications')).json() == []
+
+
+@pytest.mark.asyncio
+async def test_archive_endpoint_archives_and_returns_unread(monkeypatch):
+    from open_webui.models.workos import Notifications
+    async with _client(monkeypatch, user=U1) as c:
+        n = await Notifications.insert('u1', 'u2', 'assigned', {}, task_id='t1')
+        await Notifications.insert('u1', 'u2', 'mentioned', {}, task_id='t1')
+        r = (await c.post('/api/v1/workos/notifications/archive', json={'ids': [n.id]})).json()
+        assert r['unread'] == 1  # archive implied read on n
+        default = (await c.get('/api/v1/workos/notifications')).json()
+        assert len(default) == 1 and default[0]['type'] == 'mentioned'
+        archived = (await c.get('/api/v1/workos/notifications?archived=true')).json()
+        assert [x['id'] for x in archived] == [n.id]
+        assert archived[0]['archived'] is True and archived[0]['read'] is True
+
+
+@pytest.mark.asyncio
+async def test_archive_all_read_sweep_and_unarchive(monkeypatch):
+    from open_webui.models.workos import Notifications
+    async with _client(monkeypatch, user=U1) as c:
+        a = await Notifications.insert('u1', 'u2', 'assigned', {}, task_id='t1')
+        await Notifications.insert('u1', 'u2', 'commented', {}, task_id='t1')
+        await c.post('/api/v1/workos/notifications/read', json={'ids': [a.id]})
+        await c.post('/api/v1/workos/notifications/archive', json={'all_read': True})
+        assert len((await c.get('/api/v1/workos/notifications')).json()) == 1
+        await c.post('/api/v1/workos/notifications/archive', json={'ids': [a.id], 'archived': False})
+        assert len((await c.get('/api/v1/workos/notifications')).json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_archive_cannot_touch_other_users_rows(monkeypatch):
+    from open_webui.models.workos import Notifications
+    async with _client(monkeypatch, user=U1) as c:
+        other = await Notifications.insert('u2', 'u1', 'assigned', {}, task_id='t1')
+        await c.post('/api/v1/workos/notifications/archive', json={'ids': [other.id]})
+    rows = await Notifications.list_for_user('u2')
+    assert [x.id for x in rows] == [other.id]  # untouched
+
+
+@pytest.mark.asyncio
+async def test_counts_endpoint(monkeypatch):
+    from open_webui.models.workos import Notifications
+    async with _client(monkeypatch, user=U1) as c:
+        await Notifications.insert('u1', 'u2', 'mentioned', {}, task_id='t1')
+        n = await Notifications.insert('u1', 'u2', 'commented', {}, task_id='t1')
+        await c.post('/api/v1/workos/notifications/archive', json={'ids': [n.id]})
+        counts = (await c.get('/api/v1/workos/notifications/counts')).json()
+        assert counts['unread'] == 1
+        assert counts['by_type'] == {'assigned': 0, 'mentioned': 1, 'commented': 0, 'status_changed': 0}
