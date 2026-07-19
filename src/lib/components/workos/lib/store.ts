@@ -715,28 +715,36 @@ export async function openInboxNotification(n: Notification): Promise<void> {
  * row directly and park it in `inboxTask` — the first slot in the
  * `selectedTask` derivation — joining its workstream room so realtime keeps
  * the drawer fresh (same mechanics as the inbox split-pane; closeTask()
- * undoes all of it). Returns false when the task is gone or unreadable —
- * 404 and 403 are indistinguishable by design (see the access reference).
- * If the selection changed while the fetch was in flight (a manual click
- * elsewhere, or a newer URL apply), the fetch's result is discarded — no
- * store writes, no room join — and this reports true, since something IS
- * open; the caller must not toast "Task not available" for a task the user
- * simply navigated away from.
+ * undoes all of it).
+ *
+ * Returns a discriminated result rather than a boolean, because a caller
+ * (urlSync's applyUrl) needs to tell apart TWO different "didn't commit"
+ * reasons:
+ *  - 'gone': the task is deleted or unreadable (404/403 indistinguishable
+ *    by design; see the access reference) — worth telling the user.
+ *  - 'superseded': the selection changed while the fetch was in flight (a
+ *    manual click elsewhere, or a different call's/session's open) — no
+ *    store writes happened. Id equality with the id THIS call was fetching
+ *    is not proof of ownership: a different call can legitimately open the
+ *    very same id first, so a caller must not infer "I own this" just
+ *    because the current selection happens to match.
+ *  - 'opened': THIS call is the one that made the selection current, via
+ *    either the fast local-list path or a fetch that actually committed.
  */
-export async function openTaskById(id: string): Promise<boolean> {
+export async function openTaskById(id: string): Promise<'opened' | 'superseded' | 'gone'> {
 	const before = get(selectedTaskId);
 	if (get(tasks).some((t) => t.id === id) || get(myTasks).some((t) => t.id === id)) {
 		openTask(id);
-		return true;
+		return 'opened';
 	}
 	let t: Task | null = null;
 	try {
 		t = await api.getTask(token(), id);
 	} catch {
-		t = null; // transient failures also report false: a deep link has no retry UI
+		t = null; // transient failures also report 'gone': a deep link has no retry UI
 	}
-	if (get(selectedTaskId) !== before) return true; // moved on while the fetch was in flight
-	if (!t) return false;
+	if (get(selectedTaskId) !== before) return 'superseded'; // moved on while the fetch was in flight
+	if (!t) return 'gone';
 	if (inboxRoomKey) {
 		leaveRoom(inboxRoomKey);
 		inboxRoomKey = null;
@@ -747,7 +755,7 @@ export async function openTaskById(id: string): Promise<boolean> {
 	inboxTask.set(t);
 	selectedTaskId.set(id);
 	void loadTaskDetail(id);
-	return true;
+	return 'opened';
 }
 
 export async function loadWorkstreamActivity(id: string): Promise<void> {

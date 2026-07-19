@@ -766,29 +766,29 @@ describe('openTaskById (URL deep-link open)', () => {
 
 	it('opens directly when the task is already in the workstream list', async () => {
 		tasks.set([mk({ id: 'in-list' })]);
-		const ok = await openTaskById('in-list');
-		expect(ok).toBe(true);
+		const result = await openTaskById('in-list');
+		expect(result).toBe('opened');
 		expect(get(selectedTaskId)).toBe('in-list');
 		expect(get(inboxTask)).toBeNull(); // no fetch fallback needed
 	});
 
 	it('falls back to a direct fetch when the task is in no local list', async () => {
-		const ok = await openTaskById('folded'); // mocked getTask returns id 'folded'
-		expect(ok).toBe(true);
+		const result = await openTaskById('folded'); // mocked getTask returns id 'folded'
+		expect(result).toBe('opened');
 		expect(get(selectedTaskId)).toBe('folded');
 		expect(get(inboxTask)?.id).toBe('folded');
 	});
 
-	it('returns false when the fetch fails, leaving selection untouched', async () => {
+	it("reports 'gone' when the fetch fails, leaving selection untouched", async () => {
 		const api = await import('./api');
 		(api.getTask as any).mockRejectedValueOnce(Object.assign(new Error('nope'), { status: 404 }));
-		const ok = await openTaskById('ghost');
-		expect(ok).toBe(false);
+		const result = await openTaskById('ghost');
+		expect(result).toBe('gone');
 		expect(get(selectedTaskId)).toBeNull();
 		expect(get(inboxTask)).toBeNull();
 	});
 
-	it('discards a stale fetch result when the selection changed while it was in flight', async () => {
+	it("reports 'superseded' and discards a stale fetch when the selection changed while it was in flight", async () => {
 		const api = await import('./api');
 		let release!: (t: unknown) => void;
 		const hang = new Promise((r) => { release = r; });
@@ -796,10 +796,28 @@ describe('openTaskById (URL deep-link open)', () => {
 		const p = openTaskById('slow');
 		selectedTaskId.set('user-clicked'); // user clicks a different task mid-fetch
 		release(mk({ id: 'slow', title: 'Slow' }));
-		const ok = await p;
-		expect(ok).toBe(true); // treated as handled, not a failure
+		const result = await p;
+		expect(result).toBe('superseded'); // treated as handled, not a failure
 		expect(get(selectedTaskId)).toBe('user-clicked'); // the click wins, untouched by the stale fetch
 		expect(get(inboxTask)).toBeNull(); // no store write from the discarded result
+	});
+
+	it("reports 'superseded' (not 'opened') when a competing open claims the SAME id first", async () => {
+		// The reviewer's inversion case: id equality with what THIS call was
+		// fetching must not be read as "this call is the one that opened it" --
+		// a different call can legitimately land the very same id first.
+		const api = await import('./api');
+		let release!: (t: unknown) => void;
+		const hang = new Promise((r) => { release = r; });
+		(api.getTask as any).mockImplementationOnce(() => hang); // 'tX' -> fetch fallback for call A
+		const pA = openTaskById('tX');
+		// A competing open (a different call/session) commits the SAME id first.
+		selectedTaskId.set('tX');
+		inboxTask.set(mk({ id: 'tX', title: 'Competing' }));
+		release(mk({ id: 'tX', title: 'From A (stale)' }));
+		const resultA = await pA;
+		expect(resultA).toBe('superseded');
+		expect(get(inboxTask)?.title).toBe('Competing'); // A's stale fetch never overwrote the winner
 	});
 });
 

@@ -304,4 +304,30 @@ describe('destroyUrlSync during an in-flight applyUrl (route left mid-fetch)', (
 		expect(replaceState).not.toHaveBeenCalled();
 		expect(get(selectedTaskId)).toBeNull(); // the stale open was undone, not left half-applied
 	});
+
+	it('does not close a drawer a competing open now owns, even when it is the SAME id', async () => {
+		await hydrate('?view=board&ws=w1');
+		initUrlSync();
+		const api = await import('./api');
+		const { inboxTask } = await import('./store');
+		let release!: (t: unknown) => void;
+		const hang = new Promise((r) => { release = r; });
+		(api.getTask as any).mockImplementationOnce(() => hang);
+		pageStore.set({ url: new URL('http://localhost/workos?view=board&ws=w1&task=slow-task') });
+		await Promise.resolve(); // let applyUrl start and reach its await inside openTaskById
+		destroyUrlSync(); // route left -- this applyUrl call is now stale
+		// A competing open (a fresh session's own deep-link open, or a manual
+		// click) commits the SAME id first while the orphaned fetch is still
+		// hung -- id equality alone must not read as "the stale call owns it".
+		selectedTaskId.set('slow-task');
+		inboxTask.set({ id: 'slow-task', workstream_id: 'w-other', title: 'Competing' } as any);
+		release({
+			id: 'slow-task', workstream_id: 'w-other', team_id: 'tm', number: 9, key: 'OSL-9', title: 'fetched',
+			status: 'todo', priority: null, assignee_ids: ['u1'], progress: 0, labels: [], sort_key: 1,
+			created_by_id: 'u1', created_at: 0, updated_at: 0
+		});
+		await flush();
+		expect(get(selectedTaskId)).toBe('slow-task'); // the competing open survives, not closed
+		expect(get(inboxTask)?.title).toBe('Competing'); // untouched by the stale, discarded fetch
+	});
 });

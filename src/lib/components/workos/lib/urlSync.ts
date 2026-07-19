@@ -116,18 +116,22 @@ async function applyUrl(params: URLSearchParams, rawSearch: string): Promise<voi
 
 		const openId = get(selectedTaskId);
 		if (task && task !== openId) {
-			const opened = await openTaskById(task);
+			const result = await openTaskById(task);
 			if (epoch !== myEpoch) {
-				// The route was left (or a newer navigation started) while this
-				// fetch was in flight. openTaskById may already have opened the
-				// drawer for a task nobody is looking at anymore (its own
-				// moved-on guard only catches a DIFFERENT selection landing
-				// mid-flight, not "nothing changed but the session ended") --
-				// undo it so a dead session doesn't leave the store half-applied.
-				if (opened && get(selectedTaskId) === task) closeTask();
+				// The route was left while this fetch was in flight (epoch only
+				// tracks destroyUrlSync -- a same-session navigation instead
+				// queues into pendingUrl and never reaches this stale branch).
+				// Only undo when THIS call is the one that actually committed
+				// the open: 'superseded' means a DIFFERENT call (a newer
+				// session's open, or a manual click) already owns whatever is
+				// selected now -- id equality with `task` is not proof it was
+				// THIS call, since another call can legitimately open the very
+				// same id first. Closing on id equality alone would wipe that
+				// other call's legitimate drawer instead of this dead one's.
+				if (result === 'opened') closeTask();
 				return;
 			}
-			if (!opened) {
+			if (result === 'gone') {
 				toast.error('Task not available');
 				task = null;
 			}
