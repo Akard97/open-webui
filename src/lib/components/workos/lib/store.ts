@@ -208,7 +208,7 @@ export function token(): string {
 	return browser ? localStorage.token : '';
 }
 
-export async function loadBootstrap(): Promise<void> {
+export async function loadBootstrap(opts: { selectDefaultWorkstream?: boolean } = {}): Promise<void> {
 	loading.set(true);
 	try {
 		const b = await api.getBootstrap(token());
@@ -229,7 +229,11 @@ export async function loadBootstrap(): Promise<void> {
 			const ws = b.workspaces.find((w) => w.id === s.workspace_id);
 			return ws && ws.team_id === get(currentTeamId);
 		});
-		if (firstStream && !get(currentWorkstreamId)) await selectWorkstream(firstStream.id);
+		// URL deep links (urlSync.hydrateFromUrl) perform their own selection;
+		// skipping the default here keeps it to exactly one selectWorkstream
+		// call per load (spec: bootstrap default-selection interplay).
+		if (opts.selectDefaultWorkstream !== false && firstStream && !get(currentWorkstreamId))
+			await selectWorkstream(firstStream.id);
 	} finally {
 		loading.set(false);
 	}
@@ -703,6 +707,40 @@ export async function openInboxNotification(n: Notification): Promise<void> {
 	if (t) inboxTask.set(t);
 	else if (gone) inboxTaskError.set(true);
 	else inboxTaskLoadError.set(true);
+}
+
+/**
+ * Deep-link task open (URL `task` param): the id may live outside both the
+ * loaded workstream list and My Work. Local lists first; otherwise fetch the
+ * row directly and park it in `inboxTask` — the first slot in the
+ * `selectedTask` derivation — joining its workstream room so realtime keeps
+ * the drawer fresh (same mechanics as the inbox split-pane; closeTask()
+ * undoes all of it). Returns false when the task is gone or unreadable —
+ * 404 and 403 are indistinguishable by design (see the access reference).
+ */
+export async function openTaskById(id: string): Promise<boolean> {
+	if (get(tasks).some((t) => t.id === id) || get(myTasks).some((t) => t.id === id)) {
+		openTask(id);
+		return true;
+	}
+	let t: Task | null = null;
+	try {
+		t = await api.getTask(token(), id);
+	} catch {
+		t = null; // transient failures also report false: a deep link has no retry UI
+	}
+	if (!t) return false;
+	if (inboxRoomKey) {
+		leaveRoom(inboxRoomKey);
+		inboxRoomKey = null;
+	}
+	inboxRoomKey = streamKey(t.workstream_id);
+	enterRoom(inboxRoomKey);
+	// inboxTask BEFORE selectedTaskId so the drawer renders once, with data.
+	inboxTask.set(t);
+	selectedTaskId.set(id);
+	void loadTaskDetail(id);
+	return true;
 }
 
 export async function loadWorkstreamActivity(id: string): Promise<void> {

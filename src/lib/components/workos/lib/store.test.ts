@@ -36,6 +36,7 @@ vi.mock('./api', () => ({
 	})),
 	archiveNotifications: vi.fn(async () => ({ unread: 0 })),
 	markNotificationsRead: vi.fn(async () => ({ unread: 0 })),
+	getDirectory: vi.fn(async () => []),
 }));
 
 vi.mock('$lib/stores', () => {
@@ -748,5 +749,71 @@ describe('editTask myTasks mirror', () => {
 		vi.mocked(apiMock.updateTask).mockRejectedValueOnce({ detail: 'boom', status: 500 });
 		await expect(editTask('m1', { title: 'new' })).rejects.toMatchObject({ detail: 'boom' });
 		expect(get(myTasks)[0].title).toBe('old');
+	});
+});
+
+// New for URL deep-linking (Task 2): openTaskById + loadBootstrap's
+// selectDefaultWorkstream option. currentTeamId isn't imported above.
+import { loadBootstrap, openTaskById, currentTeamId } from './store';
+
+describe('openTaskById (URL deep-link open)', () => {
+	beforeEach(() => {
+		tasks.set([]);
+		myTasks.set([]);
+		inboxTask.set(null);
+		selectedTaskId.set(null);
+	});
+
+	it('opens directly when the task is already in the workstream list', async () => {
+		tasks.set([mk({ id: 'in-list' })]);
+		const ok = await openTaskById('in-list');
+		expect(ok).toBe(true);
+		expect(get(selectedTaskId)).toBe('in-list');
+		expect(get(inboxTask)).toBeNull(); // no fetch fallback needed
+	});
+
+	it('falls back to a direct fetch when the task is in no local list', async () => {
+		const ok = await openTaskById('folded'); // mocked getTask returns id 'folded'
+		expect(ok).toBe(true);
+		expect(get(selectedTaskId)).toBe('folded');
+		expect(get(inboxTask)?.id).toBe('folded');
+	});
+
+	it('returns false when the fetch fails, leaving selection untouched', async () => {
+		const api = await import('./api');
+		(api.getTask as any).mockRejectedValueOnce(Object.assign(new Error('nope'), { status: 404 }));
+		const ok = await openTaskById('ghost');
+		expect(ok).toBe(false);
+		expect(get(selectedTaskId)).toBeNull();
+		expect(get(inboxTask)).toBeNull();
+	});
+});
+
+describe('loadBootstrap selectDefaultWorkstream option', () => {
+	it('skips the default workstream selection when told to', async () => {
+		const api = await import('./api');
+		(api.getBootstrap as any).mockResolvedValueOnce({
+			teams: [{ id: 'tm', name: 'T' }],
+			workspaces: [{ id: 'wsp', team_id: 'tm', name: 'W', visibility: 'team' }],
+			workstreams: [{ id: 'w1', workspace_id: 'wsp', name: 'S' }],
+			roles: { tm: 'member' }
+		});
+		currentWorkstreamId.set(null);
+		await loadBootstrap({ selectDefaultWorkstream: false });
+		expect(get(currentWorkstreamId)).toBeNull();
+	});
+
+	it('still auto-selects by default (regression)', async () => {
+		const api = await import('./api');
+		(api.getBootstrap as any).mockResolvedValueOnce({
+			teams: [{ id: 'tm', name: 'T' }],
+			workspaces: [{ id: 'wsp', team_id: 'tm', name: 'W', visibility: 'team' }],
+			workstreams: [{ id: 'w1', workspace_id: 'wsp', name: 'S' }],
+			roles: { tm: 'member' }
+		});
+		currentWorkstreamId.set(null);
+		currentTeamId.set('tm');
+		await loadBootstrap();
+		expect(get(currentWorkstreamId)).toBe('w1');
 	});
 });
