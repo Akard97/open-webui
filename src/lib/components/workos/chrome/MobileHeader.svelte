@@ -26,7 +26,7 @@
 	>
 		<SidebarIcon className="size-5" />
 		{#if $unreadCount > 0}
-			<span class="absolute top-1 right-1 size-1.5 rounded-full bg-sky-500"></span>
+			<span class="absolute top-1 right-1 size-1.5 rounded-full bg-primary"></span>
 		{/if}
 	</Button>
 	<div class="flex-1 min-w-0 text-sm font-medium truncate px-1">{title}</div>

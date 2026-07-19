@@ -39,7 +39,7 @@
 							<div class="self-center text-sm font-primary {$view === 'inbox' ? 'font-medium' : ''}">Inbox</div>
 						</div>
 						{#if $unreadCount > 0}
-							<span class="shrink-0 self-center text-[10px] min-w-4 h-4 px-1 rounded-full bg-sky-500 text-white flex items-center justify-center">{$unreadCount}</span>
+							<span class="shrink-0 self-center text-[10px] min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground flex items-center justify-center">{$unreadCount}</span>
 						{/if}
 					</button>
 				</div>

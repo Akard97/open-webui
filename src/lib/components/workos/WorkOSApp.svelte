@@ -23,7 +23,7 @@
 	import { user, mobile } from '$lib/stores';
 	import {
 		loadBootstrap, connectRealtime, disconnectRealtime,
-		view, selectedTask, teams, loading, mobileNavOpen
+		view, selectedTask, teams, loading, mobileNavOpen, inboxSplit
 	} from './lib/store';
 
 	// Guard: snap non-admins away from the admin view.
@@ -80,7 +80,7 @@
 			{:else}
 				<BoardView />
 			{/if}
-			{#if $selectedTask}
+			{#if $selectedTask && !($view === 'inbox' && $inboxSplit)}
 				<TaskDetail />
 			{/if}
 		</div>
