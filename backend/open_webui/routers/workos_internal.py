@@ -45,7 +45,10 @@ async def _load_user(user_id: str):
 
 async def _acting_user(request: Request, user_id: str, db: AsyncSession):
     user = await _load_user(user_id)
-    if not user:
+    # Mirror get_verified_user's role gate on the public routes: only active
+    # roles act. 404 (not 401) keeps a pending account indistinguishable
+    # from a nonexistent one.
+    if not user or user.role not in ('user', 'admin'):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
     await require_workos(request, user, db)
     return user

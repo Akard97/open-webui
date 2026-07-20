@@ -15,7 +15,9 @@ import open_webui.routers.workos_internal as wi
 SECRET = 'test-service-secret'
 HDRS = {'X-Service-Token': SECRET}
 
-_USERS = {u.id: u for u in (U1, U2, ADMIN)}
+PENDING = SimpleNamespace(id='p1', name='Pat', role='pending')
+
+_USERS = {u.id: u for u in (U1, U2, ADMIN, PENDING)}
 
 
 def _make_app(user):
@@ -106,6 +108,15 @@ async def test_feature_gate_parity(monkeypatch):
     async with _client(monkeypatch, allow=False) as c:
         r = await c.get('/api/v1/workos/internal/users/u1/bootstrap', headers=HDRS)
         assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_pending_role_user_404(monkeypatch):
+    # A pending (not yet approved) account must look nonexistent, exactly
+    # like the public API where get_verified_user rejects it.
+    async with _client(monkeypatch) as c:
+        r = await c.get('/api/v1/workos/internal/users/p1/bootstrap', headers=HDRS)
+        assert r.status_code == 404
 
 
 # ──────────────────────────── bootstrap ────────────────────────────
