@@ -122,3 +122,117 @@ async def test_bootstrap_returns_visible_tree(monkeypatch):
         # Non-member sees an empty tree through the same endpoint.
         body2 = (await c.get('/api/v1/workos/internal/users/u2/bootstrap', headers=HDRS)).json()
         assert body2 == {'teams': [], 'workspaces': [], 'workstreams': []}
+
+
+# ──────────────────────────── my tasks ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_my_tasks_scoped_per_user(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        mine = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                             json={'title': 'Mine', 'assignee_ids': ['u1']})).json()
+        theirs = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                               json={'title': 'For u2', 'assignee_ids': ['u2']})).json()
+        u1_body = (await c.get('/api/v1/workos/internal/users/u1/tasks', headers=HDRS)).json()
+        u2_body = (await c.get('/api/v1/workos/internal/users/u2/tasks', headers=HDRS)).json()
+        u1_ids = {t['id'] for t in u1_body['tasks']}
+        u2_ids = {t['id'] for t in u2_body['tasks']}
+        assert mine['id'] in u1_ids and theirs['id'] in u1_ids  # U1 created both
+        assert u2_ids == {theirs['id']}
+        assert u2_body['users'].get('u2') == 'Yusuf'  # names resolved
+
+
+@pytest.mark.asyncio
+async def test_my_tasks_parity_with_public_endpoint(monkeypatch):
+    # The internal endpoint must return exactly what GET /me/tasks returns.
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                     json={'title': 'T1', 'assignee_ids': ['u1']})
+        public_ids = {t['id'] for t in (await c.get('/api/v1/workos/me/tasks')).json()}
+        internal = (await c.get('/api/v1/workos/internal/users/u1/tasks', headers=HDRS)).json()
+        assert {t['id'] for t in internal['tasks']} == public_ids
+
+
+@pytest.mark.asyncio
+async def test_my_tasks_excludes_restricted_after_revoke(monkeypatch):
+    # Mirror of the /me/tasks leak test, through the internal API.
+    async with _client(monkeypatch, user=U1) as c:
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()
+        await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        rws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces",
+                            json={'name': 'Secret', 'visibility': 'restricted'})).json()
+        await c.post(f"/api/v1/workos/workspaces/{rws['id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        s = (await c.post(f"/api/v1/workos/workspaces/{rws['id']}/workstreams", json={'name': 'S'})).json()
+    async with _client(monkeypatch, user=U2) as c:
+        task = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                             json={'title': 'U2 secret', 'assignee_ids': ['u2']})).json()
+        body = (await c.get('/api/v1/workos/internal/users/u2/tasks', headers=HDRS)).json()
+        assert task['id'] in {t['id'] for t in body['tasks']}
+    async with _client(monkeypatch, user=U1) as c:
+        assert (await c.delete(f"/api/v1/workos/workspaces/{rws['id']}/members/u2")).status_code == 200
+        body = (await c.get('/api/v1/workos/internal/users/u2/tasks', headers=HDRS)).json()
+        assert task['id'] not in {t['id'] for t in body['tasks']}
+
+
+# ──────────────────────────── workstream tasks ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_workstream_tasks_visible(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'T', 'assignee_ids': ['u1']})).json()
+        body = (await c.get(f"/api/v1/workos/internal/users/u1/workstreams/{s['id']}/tasks",
+                            headers=HDRS)).json()
+        assert [x['id'] for x in body['tasks']] == [t['id']]
+
+
+@pytest.mark.asyncio
+async def test_workstream_tasks_invisible_404(monkeypatch):
+    # u2 is not a team member -> the workstream must look nonexistent.
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        r = await c.get(f"/api/v1/workos/internal/users/u2/workstreams/{s['id']}/tasks",
+                        headers=HDRS)
+        assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_workstream_tasks_parity_with_public_endpoint(monkeypatch):
+    # bootstrap and my-tasks share helpers with their public counterparts, so
+    # parity there is structural. This endpoint re-states the two-line public
+    # sequence (require_workstream_visible + list_for_workstream) instead of
+    # sharing it - pin the parity explicitly.
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                     json={'title': 'T1', 'assignee_ids': ['u1']})
+        await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                     json={'title': 'T2', 'assignee_ids': ['u1']})
+        public_ids = {t['id'] for t in
+                      (await c.get(f"/api/v1/workos/workstreams/{s['id']}/tasks")).json()}
+        internal = (await c.get(f"/api/v1/workos/internal/users/u1/workstreams/{s['id']}/tasks",
+                                headers=HDRS)).json()
+        assert public_ids and {t['id'] for t in internal['tasks']} == public_ids
+
+
+@pytest.mark.asyncio
+async def test_admin_bypass_parity(monkeypatch):
+    # App-admin bypass: ADMIN is a member of nothing, yet sees the whole
+    # tree and any workstream's tasks - same as in the UI.
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'T', 'assignee_ids': ['u1']})).json()
+        body = (await c.get('/api/v1/workos/internal/users/admin1/bootstrap',
+                            headers=HDRS)).json()
+        assert [x['id'] for x in body['teams']] == [team['id']]
+        assert [x['id'] for x in body['workstreams']] == [s['id']]
+        r = await c.get(f"/api/v1/workos/internal/users/admin1/workstreams/{s['id']}/tasks",
+                        headers=HDRS)
+        assert [x['id'] for x in r.json()['tasks']] == [t['id']]

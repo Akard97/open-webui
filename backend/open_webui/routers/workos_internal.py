@@ -18,8 +18,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import get_async_session
-from open_webui.routers.workos import resolve_user_names, visible_tree
-from open_webui.utils.workos_access import require_workos
+from open_webui.models.workos import Tasks
+from open_webui.routers.workos import resolve_user_names, visible_my_tasks, visible_tree
+from open_webui.utils.workos_access import require_workos, require_workstream_visible
 
 router = APIRouter()
 
@@ -62,3 +63,30 @@ async def internal_bootstrap(
     user = await _acting_user(request, user_id, db)
     teams, workspaces, workstreams = await visible_tree(user, db)
     return {'teams': teams, 'workspaces': workspaces, 'workstreams': workstreams}
+
+
+def _task_name_groups(tasks):
+    groups = [t.assignee_ids or [] for t in tasks]
+    groups.append([t.created_by_id for t in tasks])
+    return groups
+
+
+@router.get('/users/{user_id}/tasks', dependencies=[Depends(require_service_token)])
+async def internal_my_tasks(
+    request: Request, user_id: str, db: AsyncSession = Depends(get_async_session)
+):
+    user = await _acting_user(request, user_id, db)
+    tasks = await visible_my_tasks(user, db)
+    return {'tasks': tasks, 'users': await _user_names(*_task_name_groups(tasks))}
+
+
+@router.get('/users/{user_id}/workstreams/{workstream_id}/tasks',
+            dependencies=[Depends(require_service_token)])
+async def internal_workstream_tasks(
+    request: Request, user_id: str, workstream_id: str,
+    db: AsyncSession = Depends(get_async_session),
+):
+    user = await _acting_user(request, user_id, db)
+    await require_workstream_visible(user, workstream_id, db)
+    tasks = await Tasks.list_for_workstream(workstream_id, db=db)
+    return {'tasks': tasks, 'users': await _user_names(*_task_name_groups(tasks))}
