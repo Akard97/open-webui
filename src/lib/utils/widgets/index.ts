@@ -51,6 +51,24 @@ export interface TableWidget {
 	rows: Record<string, string | number | boolean | null>[];
 }
 
+export interface TasksWidget {
+	type: 'tasks';
+	title?: string;
+	layout?: 'list' | 'cards';
+	items: {
+		key: string;
+		title: string;
+		status?: string;
+		priority?: string;
+		due?: string;
+		progress?: number;
+		assignees?: string[];
+		note?: string;
+		id?: string;
+		ws?: string;
+	}[];
+}
+
 export interface TimelineWidget {
 	type: 'timeline';
 	items: {
@@ -87,6 +105,7 @@ export type Widget =
 	| KpiWidget
 	| CardsWidget
 	| TableWidget
+	| TasksWidget
 	| TimelineWidget
 	| ButtonsWidget
 	| FormWidget;
@@ -334,10 +353,50 @@ export const validateWidget = (payload: unknown): WidgetValidation => {
 				}
 			};
 		}
+		case 'tasks': {
+			if (!isNonEmptyArray(obj.items)) {
+				return { ok: false, error: `"tasks" widget requires a non-empty "items" array` };
+			}
+			const items = (obj.items as unknown[])
+				.map((entry) => {
+					const item = (entry ?? {}) as Record<string, unknown>;
+					if (item.title == null) return null;
+					const progress = item.progress != null ? Number(item.progress) : NaN;
+					return {
+						key: item.key != null ? String(item.key) : '',
+						title: String(item.title),
+						status: item.status != null ? String(item.status) : undefined,
+						priority: item.priority != null ? String(item.priority) : undefined,
+						due: item.due != null ? String(item.due) : undefined,
+						progress: Number.isFinite(progress)
+							? Math.min(Math.max(Math.round(progress), 0), 100)
+							: undefined,
+						assignees: Array.isArray(item.assignees)
+							? (item.assignees as unknown[]).map((a) => String(a))
+							: undefined,
+						note: item.note != null ? String(item.note) : undefined,
+						id: item.id != null ? String(item.id) : undefined,
+						ws: item.ws != null ? String(item.ws) : undefined
+					};
+				})
+				.filter((item) => item !== null);
+			if (items.length === 0) {
+				return { ok: false, error: `"tasks" items need a "title"` };
+			}
+			return {
+				ok: true,
+				widget: {
+					type: 'tasks',
+					title: obj.title != null ? String(obj.title) : undefined,
+					layout: obj.layout === 'cards' ? 'cards' : 'list',
+					items
+				}
+			};
+		}
 		default:
 			return {
 				ok: false,
-				error: `Unknown widget type "${String(type)}" (expected chart, kpi, cards, table, timeline, buttons or form)`
+				error: `Unknown widget type "${String(type)}" (expected chart, kpi, cards, table, tasks, timeline, buttons or form)`
 			};
 	}
 };
