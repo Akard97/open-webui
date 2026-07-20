@@ -284,3 +284,46 @@ async def test_task_detail_attachments_hide_storage_key(monkeypatch):
         body = (await c.get(f"/api/v1/workos/internal/users/u1/tasks/{t['id']}", headers=HDRS)).json()
         assert [a['name'] for a in body['attachments']] == ['note.txt']
         assert all('storage_key' not in a for a in body['attachments'])
+
+
+# ──────────────────────────── surface guarantees ────────────────────────────
+
+
+def test_internal_router_is_get_only():
+    from fastapi.routing import APIRoute
+
+    for route in wi.router.routes:
+        assert isinstance(route, APIRoute)
+        assert route.methods == {'GET'}, f'{route.path} allows {route.methods}'
+
+
+def _internal_paths(app):
+    return [r.path for r in app.routes if r.path.startswith('/api/v1/workos/internal')]
+
+
+def test_mount_requires_secret(monkeypatch):
+    monkeypatch.delenv('WORKOS_SERVICE_SECRET', raising=False)
+    app = FastAPI()
+    assert wi.mount(app) is False
+    assert _internal_paths(app) == []
+
+
+def test_mount_with_secret_hides_routes_from_openapi(monkeypatch):
+    monkeypatch.setenv('WORKOS_SERVICE_SECRET', 'x')
+    app = FastAPI()
+    assert wi.mount(app) is True
+    assert _internal_paths(app)
+    assert not any(p.startswith('/api/v1/workos/internal')
+                   for p in app.openapi()['paths'])
+
+
+def test_main_wires_mount():
+    # The gate itself is behavior-tested above; importing open_webui.main
+    # would build the whole app at module import, so this only pins that
+    # main.py actually calls the helper.
+    from pathlib import Path
+
+    import open_webui
+
+    src = (Path(open_webui.__file__).parent / 'main.py').read_text(encoding='utf-8')
+    assert 'workos_internal.mount(app)' in src

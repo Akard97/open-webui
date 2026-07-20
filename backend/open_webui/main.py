@@ -91,6 +91,7 @@ from open_webui.routers import (
     notes,
     policy_review,
     workos,
+    workos_internal,
     folders,
     configs,
     groups,
@@ -1474,6 +1475,9 @@ app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
 app.include_router(policy_review.router, prefix='/api/v1/policy', tags=['policy'])
 app.include_router(workos.router, prefix='/api/v1/workos', tags=['workos'])
+# Service-to-service WorkOS read API for the Osool AI backend. Mounts only
+# when WORKOS_SERVICE_SECRET is set (fail closed).
+workos_internal.mount(app)
 app.include_router(avatar.router, prefix='/api/v1/avatar', tags=['avatar'])
 
 

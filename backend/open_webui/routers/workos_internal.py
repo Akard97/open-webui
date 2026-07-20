@@ -121,3 +121,16 @@ async def internal_task_detail(
         ],
         'users': users,
     }
+
+
+def mount(app) -> bool:
+    """Mount the internal API iff WORKOS_SERVICE_SECRET is set (fail closed).
+    Hidden from the OpenAPI schema; the reverse proxy also blocks the prefix
+    from outside. Returns whether the router was mounted."""
+    if not os.environ.get('WORKOS_SERVICE_SECRET'):
+        return False
+    app.include_router(
+        router, prefix='/api/v1/workos/internal',
+        include_in_schema=False, tags=['workos-internal'],
+    )
+    return True
