@@ -2379,7 +2379,7 @@ Hard rules:
 - Never place a widget fence inside another code block, list item, blockquote, or table.
 - Surround widgets with normal prose — introduce them briefly and continue your answer after.
 - **Be proactive.** Decide on your own to use a widget whenever the content fits — never wait for the user to ask for a widget, chart, or table. If you are about to write a markdown table, a series of numbers, a comparison, or a step sequence, render the matching widget instead. Never draw ASCII/text-art charts — use a `chart` widget.
-- Choosing the widget: numeric comparisons or trends → `chart`; headline metrics → `kpi`; structured records → `table` (always prefer it over a markdown table); distinct options or entities → `cards`; sequences of events, stages, or plans → `timeline`; asking the user to pick between actions → `buttons`; collecting several inputs → `form`.
+- Choosing the widget: numeric comparisons or trends → `chart`; headline metrics → `kpi`; structured records → `table` (always prefer it over a markdown table); WorkOS tasks → `tasks` (always prefer it over `table`/`cards` for task data); distinct options or entities → `cards`; sequences of events, stages, or plans → `timeline`; asking the user to pick between actions → `buttons`; collecting several inputs → `form`.
 - Purely conversational or textual answers need no widget — don't force one.
 - Write widget labels, titles and text in the chat's language.
 - `color` values (where accepted) must be one of: emerald, blue, violet, amber, rose, gray.
@@ -2419,6 +2419,11 @@ Widget types:
 7. `form` — collect several inputs at once. Field `type` is one of: text, number, select, textarea, date, checkbox. On submit, `{name}` placeholders in `template` are filled with the values and sent as the user's next message.
 ```widget
 {"type": "form", "title": "Trip details", "submit": "Plan it", "fields": [{"name": "city", "label": "City", "type": "select", "options": ["Riyadh", "Jeddah"], "required": true}, {"name": "budget", "label": "Budget (SAR)", "type": "number"}], "template": "Plan a trip to {city} with a budget of {budget} SAR"}
+```
+
+8. `tasks` — WorkOS task lists. Always use this for WorkOS task data. Copy `id` (task id) and `ws` (workstream id) exactly as the workos tools report them — they make the task clickable, opening it in WorkOS; omit them when unknown, never invent them. Put your own per-task insight in `note`. `layout` is "list" (default) or "cards" (cards suit ≤6 tasks being compared). Optional per item: `status` (backlog, todo, in_progress, in_review, done, canceled), `priority` (urgent, high, medium, low), `due` (YYYY-MM-DD), `progress` (0-100), `assignees`, `note`, `id`, `ws`.
+```widget
+{"type": "tasks", "title": "Focus this week", "layout": "list", "items": [{"key": "OSL-14", "title": "Migrate billing to the new ledger", "status": "in_review", "priority": "urgent", "due": "2026-06-10", "progress": 55, "assignees": ["Lara"], "note": "Past due — 2 open subtasks", "id": "1f2a…", "ws": "9c8b…"}]}
 ```
 
 For fully custom visuals (custom layouts, animations, mini-apps), emit a `widget-html` fence containing a complete self-contained HTML document instead of JSON. It renders inline in a sandboxed frame with no network access, so inline all CSS/JS and use no external resources. Optionally hint the frame height with `<!-- height: 400 -->` as the first line. Prefer the JSON widgets above whenever they fit; use `widget-html` only when none of them can express what you need."""
