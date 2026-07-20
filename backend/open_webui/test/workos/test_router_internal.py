@@ -236,3 +236,51 @@ async def test_admin_bypass_parity(monkeypatch):
         r = await c.get(f"/api/v1/workos/internal/users/admin1/workstreams/{s['id']}/tasks",
                         headers=HDRS)
         assert [x['id'] for x in r.json()['tasks']] == [t['id']]
+
+
+# ──────────────────────────── task detail ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_task_detail_composed(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'T', 'assignee_ids': ['u1']})).json()
+        await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks", json={'title': 'Sub A'})
+        await c.post(f"/api/v1/workos/tasks/{t['id']}/comments", json={'body': 'hello'})
+        body = (await c.get(f"/api/v1/workos/internal/users/u1/tasks/{t['id']}", headers=HDRS)).json()
+        assert body['task']['id'] == t['id']
+        assert [x['title'] for x in body['subtasks']] == ['Sub A']
+        assert [x['body'] for x in body['comments']] == ['hello']
+        assert body['attachments'] == []
+        assert body['users'].get('u1') == 'Lara'
+
+
+@pytest.mark.asyncio
+async def test_task_detail_invisible_404(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'T', 'assignee_ids': ['u1']})).json()
+        r = await c.get(f"/api/v1/workos/internal/users/u2/tasks/{t['id']}", headers=HDRS)
+        assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_task_detail_attachments_hide_storage_key(monkeypatch):
+    import io
+
+    from open_webui.test.workos.test_router_attachments import _FakeStorage
+
+    monkeypatch.setattr(wr, 'Storage', _FakeStorage)
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _seed(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'T', 'assignee_ids': ['u1']})).json()
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments",
+                         files={'file': ('note.txt', io.BytesIO(b'hi'), 'text/plain')})
+        assert r.status_code == 200, r.text
+        body = (await c.get(f"/api/v1/workos/internal/users/u1/tasks/{t['id']}", headers=HDRS)).json()
+        assert [a['name'] for a in body['attachments']] == ['note.txt']
+        assert all('storage_key' not in a for a in body['attachments'])

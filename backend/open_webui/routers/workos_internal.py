@@ -18,9 +18,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import get_async_session
-from open_webui.models.workos import Tasks
+from open_webui.models.workos import Attachments, Comments, Subtasks, Tasks
 from open_webui.routers.workos import resolve_user_names, visible_my_tasks, visible_tree
-from open_webui.utils.workos_access import require_workos, require_workstream_visible
+from open_webui.utils.workos_access import (
+    require_task_visible, require_workos, require_workstream_visible,
+)
 
 router = APIRouter()
 
@@ -90,3 +92,32 @@ async def internal_workstream_tasks(
     await require_workstream_visible(user, workstream_id, db)
     tasks = await Tasks.list_for_workstream(workstream_id, db=db)
     return {'tasks': tasks, 'users': await _user_names(*_task_name_groups(tasks))}
+
+
+@router.get('/users/{user_id}/tasks/{task_id}', dependencies=[Depends(require_service_token)])
+async def internal_task_detail(
+    request: Request, user_id: str, task_id: str,
+    db: AsyncSession = Depends(get_async_session),
+):
+    user = await _acting_user(request, user_id, db)
+    task, _ = await require_task_visible(user, task_id, db)
+    subtasks = await Subtasks.list_for_task(task_id, db=db)
+    comments = await Comments.list_for_task(task_id, db=db)
+    attachments = await Attachments.list_for_task(task_id, db=db)
+    users = await _user_names(
+        task.assignee_ids or [], [task.created_by_id],
+        [c.user_id for c in comments],
+        [s.created_by_id for s in subtasks],
+        [a.created_by_id for a in attachments],
+    )
+    return {
+        'task': task, 'subtasks': subtasks, 'comments': comments,
+        # storage_key stays server-side: it is a storage-layer path, useless
+        # and mildly leaky outside this process.
+        'attachments': [
+            {'id': a.id, 'name': a.name, 'size': a.size, 'content_type': a.content_type,
+             'created_by_id': a.created_by_id, 'created_at': a.created_at}
+            for a in attachments
+        ],
+        'users': users,
+    }
