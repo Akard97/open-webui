@@ -45,7 +45,7 @@
 					</div>
 					{#if item.badge}
 						<span
-							class="shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-medium {palette.badge}"
+							class="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[0.7rem] font-medium {palette.badge}"
 						>
 							{item.badge}
 						</span>

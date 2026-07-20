@@ -22,7 +22,7 @@
 	{/if}
 
 	<div class="overflow-x-auto scrollbar-hidden">
-		<table class="w-full text-sm" dir="auto">
+		<table class="w-full text-sm [word-break:normal]" dir="auto">
 			<thead>
 				<tr class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
 					{#each widget.columns as column}
@@ -44,7 +44,7 @@
 							<td class="px-4 py-2 text-gray-700 dark:text-gray-200 {alignClass(column.align)}">
 								{#if column.badge && text !== ''}
 									<span
-										class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {PALETTE[
+										class="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {PALETTE[
 											badgeColorForValue(text)
 										].badge}"
 									>
