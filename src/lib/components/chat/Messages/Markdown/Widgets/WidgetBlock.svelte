@@ -17,6 +17,7 @@
 	import WidgetButtons from './WidgetButtons.svelte';
 	import WidgetForm from './WidgetForm.svelte';
 	import WidgetHtml from './WidgetHtml.svelte';
+	import WidgetTasks from './WidgetTasks.svelte';
 
 	export let id: string;
 	export let token: any;
@@ -121,6 +122,8 @@
 			<WidgetCards {id} {widget} {done} />
 		{:else if widget.type === 'table'}
 			<WidgetTable {widget} />
+		{:else if widget.type === 'tasks'}
+			<WidgetTasks {widget} />
 		{:else if widget.type === 'timeline'}
 			<WidgetTimeline {widget} />
 		{:else if widget.type === 'buttons'}
