@@ -154,19 +154,41 @@ async def list_users(
 # ──────────────────────────────── bootstrap ────────────────────────────────
 
 
-@router.get('/bootstrap')
-async def bootstrap(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
-    await require_workos(request, user, db)
-    teams = await Teams.list_for_user(user.id, db=db) if user.role != 'admin' else await Teams.list_all(db=db)
-    roles: dict = {}
+async def visible_tree(user, db):
+    """Teams the user belongs to (all teams for an app admin) plus every
+    workspace/workstream they can see. Shared read model for /bootstrap and
+    the internal on-behalf-of API (routers/workos_internal.py)."""
+    is_admin = user.role == 'admin'
+    teams = await (Teams.list_all(db=db) if is_admin else Teams.list_for_user(user.id, db=db))
     workspaces = []
     workstreams = []
     for t in teams:
-        roles[t.id] = await team_role(user, t.id, db)
         for w in await Workspaces.list_for_team(t.id, db=db):
-            if await can_see_workspace(user.id, user.role == 'admin', w, db=db):
+            if await can_see_workspace(user.id, is_admin, w, db=db):
                 workspaces.append(w)
                 workstreams.extend(await Workstreams.list_for_workspace(w.id, db=db))
+    return teams, workspaces, workstreams
+
+
+async def visible_my_tasks(user, db):
+    """The user's created/assigned tasks, filtered to visible workstreams.
+    Shared by GET /me/tasks and the internal on-behalf-of API."""
+    is_admin = user.role == 'admin'
+    teams = await Teams.list_all(db=db) if is_admin else await Teams.list_for_user(user.id, db=db)
+    candidates = await Tasks.list_for_user(user.id, [t.id for t in teams], db=db)
+    return [
+        t for t in candidates
+        if await can_see_workstream(user.id, is_admin, t.workstream_id, db=db)
+    ]
+
+
+@router.get('/bootstrap')
+async def bootstrap(request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+    await require_workos(request, user, db)
+    teams, workspaces, workstreams = await visible_tree(user, db)
+    roles: dict = {}
+    for t in teams:
+        roles[t.id] = await team_role(user, t.id, db)
     return {
         'teams': teams, 'workspaces': workspaces, 'workstreams': workstreams, 'roles': roles,
         'notifications_unread': await Notifications.unread_count(user.id, db=db),
@@ -646,14 +668,7 @@ async def list_my_tasks(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     await require_workos(request, user, db)
-    is_admin = user.role == 'admin'
-    teams = await Teams.list_all(db=db) if is_admin else await Teams.list_for_user(user.id, db=db)
-    candidates = await Tasks.list_for_user(user.id, [t.id for t in teams], db=db)
-    visible = []
-    for task in candidates:
-        if await can_see_workstream(user.id, is_admin, task.workstream_id, db=db):
-            visible.append(task)
-    return visible
+    return await visible_my_tasks(user, db)
 
 
 @router.post('/workstreams/{workstream_id}/tasks')
