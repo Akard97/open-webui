@@ -25,6 +25,15 @@
 		item.id && item.ws
 			? `/workos?ws=${encodeURIComponent(item.ws)}&task=${encodeURIComponent(item.id)}`
 			: null;
+
+	// List layout: fixed-width slots keep the right-side meta columns vertically
+	// aligned across rows; a slot renders (possibly empty) whenever any row in
+	// the widget uses that field, and disappears entirely when none do.
+	$: hasStatus = widget.items.some((i) => i.status);
+	$: hasPriority = widget.items.some((i) => i.priority);
+	$: hasDue = widget.items.some((i) => i.due);
+	$: hasProgress = widget.items.some((i) => i.progress != null);
+	$: hasLink = widget.items.some((i) => taskUrl(i) !== null);
 </script>
 
 <div
@@ -153,65 +162,78 @@
 							{item.title}
 						</span>
 						<span class="ms-auto flex shrink-0 items-center gap-2">
-							{#if item.status}
-								<span
-									class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium"
-									style="background:{tint(statusColor(item.status))}; color:{statusColor(
-										item.status
-									)}"
-								>
-									<span
-										class="size-1.5 rounded-full"
-										style="background:{statusColor(item.status)}"
-									></span>
-									{statusLabel(item.status)}
+							{#if hasStatus}
+								<span class="flex w-24 shrink-0 items-center">
+									{#if item.status}
+										<span
+											class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium"
+											style="background:{tint(statusColor(item.status))}; color:{statusColor(
+												item.status
+											)}"
+										>
+											<span
+												class="size-1.5 rounded-full"
+												style="background:{statusColor(item.status)}"
+											></span>
+											{statusLabel(item.status)}
+										</span>
+									{/if}
 								</span>
 							{/if}
-							{#if item.priority}
-								<span
-									class="whitespace-nowrap text-[11px] font-medium"
-									style="color:{priorityColor(item.priority)}"
-								>
-									&#x2691; {priorityLabel(item.priority)}
+							{#if hasPriority}
+								<span class="w-16 shrink-0 whitespace-nowrap text-[11px] font-medium">
+									{#if item.priority}
+										<span style="color:{priorityColor(item.priority)}">
+											&#x2691; {priorityLabel(item.priority)}
+										</span>
+									{/if}
 								</span>
 							{/if}
-							{#if item.due}
+							{#if hasDue}
 								<span
-									class="whitespace-nowrap text-[11px] {overdue(item.due)
+									class="w-[4.5rem] shrink-0 whitespace-nowrap text-[11px] {overdue(item.due)
 										? 'font-medium text-[#c96b5d]'
 										: 'text-gray-500 dark:text-gray-400'}"
 								>
-									{item.due}
+									{item.due ?? ''}
 								</span>
 							{/if}
-							{#if item.progress != null}
-								<span class="flex w-20 items-center gap-1.5">
-									<span
-										class="h-1 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
-									>
+							{#if hasProgress}
+								<span class="flex w-20 shrink-0 items-center gap-1.5">
+									{#if item.progress != null}
 										<span
-											class="block h-full rounded-full bg-[#00a5ba]"
-											style="width:{item.progress}%"
-										></span>
-									</span>
-									<span class="text-[10px] text-gray-400">{item.progress}%</span>
+											class="h-1 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+										>
+											<span
+												class="block h-full rounded-full bg-[#00a5ba]"
+												style="width:{item.progress}%"
+											></span>
+										</span>
+										<span class="w-7 shrink-0 text-end text-[10px] text-gray-400">
+											{item.progress}%
+										</span>
+									{/if}
 								</span>
 							{/if}
-							{#if url}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-									stroke="currentColor"
-									class="invisible size-3.5 text-gray-400 group-hover/task:visible group-focus-visible/task:visible"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-									/>
-								</svg>
+							{#if hasLink}
+								<span class="flex size-3.5 shrink-0 items-center">
+									{#if url}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2"
+											stroke="currentColor"
+											class="invisible size-3.5 text-gray-400 group-hover/task:visible group-focus-visible/task:visible"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+											/>
+										</svg>
+									{/if}
+								</span>
 							{/if}
 						</span>
 					</div>
