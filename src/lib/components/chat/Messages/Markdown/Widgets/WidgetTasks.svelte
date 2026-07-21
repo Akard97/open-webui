@@ -7,10 +7,12 @@
 
 	// Unknown statuses/priorities from model drift render gray, never crash.
 	const FALLBACK = '#6b7280';
-	const statusColor = (s: string) => (STATUS_COLOR as Record<string, string>)[s] ?? FALLBACK;
-	const statusLabel = (s: string) => (STATUS_LABEL as Record<string, string>)[s] ?? s.replace(/_/g, ' ');
-	const priorityColor = (p: string) => (PRIORITY_COLOR as Record<string, string>)[p] ?? FALLBACK;
-	const priorityLabel = (p: string) => (PRIORITY_LABEL as Record<string, string>)[p] ?? p;
+	const own = (map: object, key: string): string | undefined =>
+		Object.hasOwn(map, key) ? (map as Record<string, string>)[key] : undefined;
+	const statusColor = (s: string) => own(STATUS_COLOR, s) ?? FALLBACK;
+	const statusLabel = (s: string) => own(STATUS_LABEL, s) ?? s.replace(/_/g, ' ');
+	const priorityColor = (p: string) => own(PRIORITY_COLOR, p) ?? FALLBACK;
+	const priorityLabel = (p: string) => own(PRIORITY_LABEL, p) ?? p;
 
 	// A date-only due is overdue once its day has fully passed (local clock).
 	const overdue = (due?: string): boolean => {
@@ -65,7 +67,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="2"
 								stroke="currentColor"
-								class="invisible size-3.5 shrink-0 text-gray-400 group-hover/task:visible"
+								class="invisible size-3.5 shrink-0 text-gray-400 group-hover/task:visible group-focus-visible/task:visible"
 							>
 								<path
 									stroke-linecap="round"
@@ -202,7 +204,7 @@
 									viewBox="0 0 24 24"
 									stroke-width="2"
 									stroke="currentColor"
-									class="invisible size-3.5 text-gray-400 group-hover/task:visible"
+									class="invisible size-3.5 text-gray-400 group-hover/task:visible group-focus-visible/task:visible"
 								>
 									<path
 										stroke-linecap="round"

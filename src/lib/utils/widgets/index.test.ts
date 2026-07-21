@@ -57,6 +57,16 @@ describe('validateWidget: tasks', () => {
 		expect(item.ws).toBe('s-1');
 	});
 
+	it('drops null assignee entries instead of stringifying them', () => {
+		const result = validateWidget({
+			type: 'tasks',
+			items: [{ title: 'a', assignees: ['Lara', null, undefined, 7] }]
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect((result.widget as any).items[0].assignees).toEqual(['Lara', '7']);
+	});
+
 	it('clamps out-of-range progress and drops non-numeric progress', () => {
 		const result = validateWidget({
 			type: 'tasks',

@@ -372,7 +372,7 @@ export const validateWidget = (payload: unknown): WidgetValidation => {
 							? Math.min(Math.max(Math.round(progress), 0), 100)
 							: undefined,
 						assignees: Array.isArray(item.assignees)
-							? (item.assignees as unknown[]).map((a) => String(a))
+							? (item.assignees as unknown[]).filter((a) => a != null).map((a) => String(a))
 							: undefined,
 						note: item.note != null ? String(item.note) : undefined,
 						id: item.id != null ? String(item.id) : undefined,
