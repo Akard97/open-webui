@@ -616,6 +616,7 @@ class TaskUpdateForm(BaseModel):
 
 class SubtaskCreateForm(BaseModel):
     title: str
+    assignee_ids: Optional[list] = None
     sort_key: Optional[float] = None
 
 
@@ -925,10 +926,14 @@ class CommentForm(BaseModel):
 # ──────────────────────────────── collaboration: helpers ────────────────────────────────
 
 
+# Notification types that share another type's WORKOS_RULES.notifications toggle.
+_NOTIF_CATEGORY = {'subtask_assigned': 'assigned'}
+
+
 def _notif_enabled(request: Request, type: str) -> bool:
     rules = request.app.state.config.WORKOS_RULES or {}
     cfg = rules.get('notifications') or {}
-    return cfg.get(type, True)
+    return cfg.get(_NOTIF_CATEGORY.get(type, type), True)
 
 
 def _actor_name(user) -> str:
@@ -1303,6 +1308,34 @@ async def _emit_parent_after_subtask(task_id: str, db: AsyncSession):
     return task
 
 
+async def _expand_parent_assignees(request: Request, user, task, stream, assignee_ids: list, db: AsyncSession):
+    """Auto-add subtask assignees missing from the parent task (subset invariant).
+
+    Expanding the parent list requires task.write: subtask creation is open to
+    any task-visible user, and parent assignment itself grants task.write, so an
+    ungated auto-add would let any visible user self-assign into edit rights.
+    Returns the (possibly updated) parent task.
+    """
+    missing = [uid for uid in assignee_ids if uid not in (task.assignee_ids or [])]
+    if not missing:
+        return task
+    try:
+        await require_task_writable(user, task, stream, db)
+    except HTTPException:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail='Only task editors can add new people to the task.')
+    before = task.model_dump()
+    updated = await Tasks.update_fields(
+        task.id, {'assignee_ids': [*(task.assignee_ids or []), *missing]}, db=db
+    )
+    await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
+    for act in task_change_activities(user.id, before, updated.model_dump()):
+        row = await Activity.insert(task.id, updated.team_id, user.id, act['type'], act['data'], db=db)
+        await _emit_task_room('workos:activity.created', updated,
+                              {**row.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id})
+    return updated
+
+
 @router.get('/tasks/{task_id}/subtasks')
 async def list_subtasks(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
@@ -1318,15 +1351,26 @@ async def create_subtask(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
 ):
     await require_workos(request, user, db)
-    task, _ = await require_task_visible(user, task_id, db)
+    task, stream = await require_task_visible(user, task_id, db)
     if not form.title.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Subtask title is required.')
-    subtask = await Subtasks.insert(task_id, form.title.strip(), user.id, sort_key=form.sort_key, db=db)
+    assignee_ids = list(dict.fromkeys(form.assignee_ids or []))
+    if assignee_ids:
+        await validate_assignees(assignee_ids, task.workstream_id, db)
+        task = await _expand_parent_assignees(request, user, task, stream, assignee_ids, db)
+    elif task.assignee_ids:
+        assignee_ids = [task.assignee_ids[0]]
+    subtask = await Subtasks.insert(
+        task_id, form.title.strip(), user.id, assignee_ids=assignee_ids, sort_key=form.sort_key, db=db
+    )
     payload = {**subtask.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
     await emit_event('workos:subtask.created', f'workos:workstream:{task.workstream_id}', payload)
     await _emit_parent_after_subtask(task_id, db)
     row = await Activity.insert(task_id, task.team_id, user.id, 'subtask_created', {'title': subtask.title}, db=db)
     await _emit_task_room('workos:activity.created', task, {**row.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    if assignee_ids:
+        await notify(request, db, recipients=set(assignee_ids), actor=user,
+                     type='subtask_assigned', task=task, extra={'subtask_title': subtask.title})
     return subtask
 
 

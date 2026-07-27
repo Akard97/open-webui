@@ -1236,7 +1236,7 @@ class NotificationsDao:
                 )
                 .group_by(WorkosNotification.type)
             )
-            by_type = {'assigned': 0, 'mentioned': 0, 'commented': 0, 'status_changed': 0}
+            by_type = {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 0, 'commented': 0, 'status_changed': 0}
             by_type.update({t: c for t, c in res.all()})
             return {'unread': sum(by_type.values()), 'by_type': by_type}
 

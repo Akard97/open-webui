@@ -56,7 +56,7 @@ async def test_counts_for_user_by_type_unread_nonarchived_only():
     counts = await Notifications.counts_for_user('u1')
     assert counts == {
         'unread': 2,
-        'by_type': {'assigned': 0, 'mentioned': 2, 'commented': 0, 'status_changed': 0},
+        'by_type': {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 2, 'commented': 0, 'status_changed': 0},
     }
 
 

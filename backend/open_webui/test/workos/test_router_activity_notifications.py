@@ -129,4 +129,4 @@ async def test_counts_endpoint(monkeypatch):
         await c.post('/api/v1/workos/notifications/archive', json={'ids': [n.id]})
         counts = (await c.get('/api/v1/workos/notifications/counts')).json()
         assert counts['unread'] == 1
-        assert counts['by_type'] == {'assigned': 0, 'mentioned': 1, 'commented': 0, 'status_changed': 0}
+        assert counts['by_type'] == {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 1, 'commented': 0, 'status_changed': 0}
