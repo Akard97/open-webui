@@ -39,6 +39,18 @@
 
   2026-07-20: URL deep linking shipped (query-param sync, urlSync.ts). §6 gains a
   bullet; no access logic changed.
+
+  2026-07-28: subtasks gained assignee_ids (JSON list) with a subset invariant
+  against the parent task's list. POST /tasks/{id}/subtasks and PATCH
+  /subtasks/{id} accept assignee_ids (validated via validate_assignees);
+  assigning someone NOT already on the parent requires task.write on the parent
+  (403 'Only task editors can add new people to the task.') — without this
+  gate, any task-visible user could self-assign via a subtask and thereby gain
+  task.write. Parent-side removal cascades off all subtasks (PATCH /tasks).
+  New notification type 'subtask_assigned' shares the 'assigned' rules toggle
+  and is visibility-filtered by notify() like every other type. subtask.write
+  chain unchanged (subset invariant ⇒ subtask assignee is always a parent
+  assignee). Assignment still confers no visibility.
 -->
 
 # WorkOS — Access Control & Visibility (Reference)
@@ -66,6 +78,8 @@ There are **two distinct user→thing relationships, and they must not be confla
 | **Task assignment** | `WorkosTask.assignee_ids` (a JSON list on the task itself, [workos.py:470](backend/open_webui/models/workos.py:470)) | **NO.** Being an assignee is *not* an access grant. An assignee who is not also a member who can see the workstream **cannot open the task** ([require_task_visible](backend/open_webui/routers/workos.py:581) never consults `assignee_ids`). |
 
 This split is the root of several gaps in §8: the assignee picker and notification fan-out treat assignment as if it implied access, but the visibility gate does not — so a task can be assigned to (and a notification pushed to) someone who then gets a 404 trying to open it.
+
+Subtasks carry their own `assignee_ids` (JSON list on `workos_subtask`), constrained to a **subset of the parent task's list** (auto-add on grow — gated by `task.write` — and cascade on parent shrink). Like task assignment, subtask assignment grants **no visibility**.
 
 Key structural facts:
 - **Workstreams have no visibility column** — they inherit the workspace gate 1:1 ([WorkosWorkstream](backend/open_webui/models/workos.py:86)).
@@ -258,8 +272,8 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 | Route / Helper | Gate applied | Location |
 |---|---|---|
 | `GET /tasks/{id}/subtasks` | `require_workos` + `require_task_visible` | [workos.py:1101](backend/open_webui/routers/workos.py:1101) |
-| `POST /tasks/{id}/subtasks` | `require_workos` + `require_task_visible`; title required | [workos.py:1110](backend/open_webui/routers/workos.py:1110) |
-| `PATCH /subtasks/{id}` | `require_workos` + `require_subtask_visible` + `require_subtask_writable` (closes G5) | [workos.py:1128](backend/open_webui/routers/workos.py:1128) |
+| `POST /tasks/{id}/subtasks` | `require_workos` + `require_task_visible`; title required; `assignee_ids` validated via `validate_assignees`, defaults to parent's first assignee; ids not on the parent additionally require `require_task_writable` (auto-add) | [workos.py:1110](backend/open_webui/routers/workos.py:1110) |
+| `PATCH /subtasks/{id}` | `require_workos` + `require_subtask_visible` + `require_subtask_writable` (closes G5); `assignee_ids` edits validated via `validate_assignees`; expanding the parent list additionally requires `require_task_writable` | [workos.py:1128](backend/open_webui/routers/workos.py:1128) |
 | `DELETE /subtasks/{id}` | `require_workos` + `require_subtask_visible` + `require_subtask_writable` (closes G6) | [workos.py:1155](backend/open_webui/routers/workos.py:1155) |
 
 ### Notifications
