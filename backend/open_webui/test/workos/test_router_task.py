@@ -39,6 +39,25 @@ async def test_task_patch_rejects_bad_status(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_task_create_rejects_non_string_assignee_ids(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)
+        r = await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                         json={'title': 'X', 'assignee_ids': [{}]})
+        assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_task_patch_rejects_non_string_assignee_ids(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s = await _stream(c)
+        t = (await c.post(f"/api/v1/workos/workstreams/{s['id']}/tasks",
+                          json={'title': 'X', 'assignee_ids': ['u1']})).json()
+        r = await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': [{}]})
+        assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
 async def test_labels_crud(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         team = (await c.post('/api/v1/workos/teams', json={'name': 'Acme', 'key': 'OSL'})).json()

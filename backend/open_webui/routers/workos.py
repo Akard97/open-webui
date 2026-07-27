@@ -593,7 +593,7 @@ class TaskCreateForm(BaseModel):
     description: Optional[str] = None
     status: str = 'backlog'
     priority: Optional[str] = None
-    assignee_ids: Optional[list] = None
+    assignee_ids: Optional[list[str]] = None
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     labels: Optional[list] = None
@@ -605,7 +605,7 @@ class TaskUpdateForm(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     priority: Optional[str] = None
-    assignee_ids: Optional[list] = None
+    assignee_ids: Optional[list[str]] = None
     start_date: Optional[int] = None
     due_date: Optional[int] = None
     progress: Optional[int] = None
@@ -616,14 +616,14 @@ class TaskUpdateForm(BaseModel):
 
 class SubtaskCreateForm(BaseModel):
     title: str
-    assignee_ids: Optional[list] = None
+    assignee_ids: Optional[list[str]] = None
     sort_key: Optional[float] = None
 
 
 class SubtaskUpdateForm(BaseModel):
     title: Optional[str] = None
     completed: Optional[bool] = None
-    assignee_ids: Optional[list] = None
+    assignee_ids: Optional[list[str]] = None
     sort_key: Optional[float] = None
 
 
@@ -1335,14 +1335,17 @@ async def _expand_parent_assignees(request: Request, user, task, stream, assigne
         return task
     try:
         await require_task_writable(user, task, stream, db)
-    except HTTPException:
+    except HTTPException as e:
+        if e.status_code != status.HTTP_403_FORBIDDEN:
+            raise
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail='Only task editors can add new people to the task.')
     before = task.model_dump()
     updated = await Tasks.update_fields(
         task.id, {'assignee_ids': [*(task.assignee_ids or []), *missing]}, db=db
     )
-    await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
+    # No task.updated emit here — both callers emit the final parent state via
+    # _emit_parent_after_subtask once the subtask write lands.
     for act in task_change_activities(user.id, before, updated.model_dump()):
         row = await Activity.insert(task.id, updated.team_id, user.id, act['type'], act['data'], db=db)
         await _emit_task_room('workos:activity.created', updated,

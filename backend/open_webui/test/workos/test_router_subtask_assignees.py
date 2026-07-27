@@ -219,6 +219,74 @@ async def test_cascade_can_empty_a_subtask(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_rejects_non_string_assignee_ids(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                         json={'title': 'A', 'assignee_ids': [{}]})
+        assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_patch_rejects_non_string_assignee_ids(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks", json={'title': 'A'})).json()
+        r = await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'assignee_ids': [{}]})
+        assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_patch_invisible_assignee_rejected(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks", json={'title': 'A'})).json()
+        r = await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'assignee_ids': ['u9']})
+        assert r.status_code == 400
+        assert 'cannot access this workstream' in r.text
+
+
+@pytest.mark.asyncio
+async def test_expand_gate_non_403_not_remapped(monkeypatch):
+    """A non-403 from require_task_writable (e.g. a future 401) must propagate,
+    not be masked as 'Only task editors...'."""
+    from fastapi import HTTPException
+
+    async def _boom(user, task, stream, db):
+        raise HTTPException(status_code=401, detail='session expired')
+
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        monkeypatch.setattr(wr, 'require_task_writable', _boom)
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                         json={'title': 'A', 'assignee_ids': ['u3']})
+        assert r.status_code == 401, r.text
+        assert 'session expired' in r.text
+
+
+@pytest.mark.asyncio
+async def test_expand_emits_single_task_updated(monkeypatch):
+    """Auto-add used to emit task.updated inside the helper AND again via
+    _emit_parent_after_subtask — exactly one emit should survive."""
+    events = []
+    real_emit = wr.emit_event
+
+    async def _ee(event, room, payload):
+        if event == 'workos:task.updated':
+            events.append(payload['id'])
+        return await real_emit(event, room, payload)
+
+    monkeypatch.setattr(wr, 'emit_event', _ee)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)  # parent assignees ['u1']
+        events.clear()
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                         json={'title': 'A', 'assignee_ids': ['u3']})
+        assert r.status_code == 200, r.text
+    assert events == [t['id']]
+
+
+@pytest.mark.asyncio
 async def test_cascade_emits_subtask_updated_events(monkeypatch):
     events = []
     real_emit = wr.emit_event
@@ -236,3 +304,27 @@ async def test_cascade_emits_subtask_updated_events(monkeypatch):
         events.clear()
         await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1']})
     assert events == [st['id']]
+
+
+@pytest.mark.asyncio
+async def test_cascade_emits_only_for_touched_subtasks(monkeypatch):
+    """Two subtasks, one loses an assignee — exactly one subtask.updated fires."""
+    events = []
+    real_emit = wr.emit_event
+
+    async def _ee(event, room, payload):
+        if event == 'workos:subtask.updated':
+            events.append(payload['id'])
+        return await real_emit(event, room, payload)
+
+    monkeypatch.setattr(wr, 'emit_event', _ee)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2', 'u3'])
+        a = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                          json={'title': 'A', 'assignee_ids': ['u2', 'u3']})).json()
+        await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                     json={'title': 'B', 'assignee_ids': ['u1']})
+        events.clear()
+        r = await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1', 'u3']})
+        assert r.status_code == 200, r.text
+    assert events == [a['id']]  # B untouched -> no event for it

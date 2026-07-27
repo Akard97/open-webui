@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { toast } from 'svelte-sonner';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Icon from '../../ui/Icon.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -25,15 +26,25 @@
 	$: canExpand =
 		$user?.role === 'admin' || canEditTask(task, $user?.id ?? '', $roles[task.team_id], undefined);
 
+	// Store calls roll back optimistically on failure — surface it, InboxView-style.
+	const notifyFailed = () => toast.error("Couldn't update — try again");
+
 	async function submit() {
 		if (!title.trim()) return;
-		await addSubtask(task.id, title.trim());
+		try {
+			await addSubtask(task.id, title.trim());
+		} catch {
+			notifyFailed();
+			return;
+		}
 		title = '';
 		creating = false;
 	}
 
 	function toggle(subtask: Subtask, id: string) {
-		editSubtask(subtask.id, { assignee_ids: toggleAssignee(subtask.assignee_ids, id) });
+		void editSubtask(subtask.id, { assignee_ids: toggleAssignee(subtask.assignee_ids, id) }).catch(
+			notifyFailed
+		);
 	}
 </script>
 
@@ -42,7 +53,7 @@
 		<div class="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2">
 			<Checkbox
 				checked={subtask.completed}
-				onCheckedChange={(v) => editSubtask(subtask.id, { completed: !!v })}
+				onCheckedChange={(v) => void editSubtask(subtask.id, { completed: !!v }).catch(notifyFailed)}
 				class="size-4"
 				aria-label="Toggle subtask completion"
 			/>
@@ -108,7 +119,7 @@
 					{/if}
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<Button variant="ghost" size="icon-xs" class="text-gray-400 hover:text-red-500" title="Delete subtask" onclick={() => removeSubtask(subtask.id)}>
+			<Button variant="ghost" size="icon-xs" class="text-gray-400 hover:text-red-500" title="Delete subtask" onclick={() => void removeSubtask(subtask.id).catch(notifyFailed)}>
 				<Icon name="trash" size={14} />
 			</Button>
 		</div>
