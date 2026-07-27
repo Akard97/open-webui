@@ -128,3 +128,63 @@ async def test_subtask_assigned_respects_assigned_rules_toggle(monkeypatch):
         await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
                      json={'title': 'A', 'assignee_ids': ['u2']})
     assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_patch_auto_adds_and_notifies_only_new_ids(monkeypatch):
+    sent = _capture(monkeypatch, {'subtask_assigned', 'assigned'})
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                           json={'title': 'A', 'assignee_ids': ['u2']})).json()
+        sent.clear()
+        r = await c.patch(f"/api/v1/workos/subtasks/{st['id']}",
+                          json={'assignee_ids': ['u2', 'u3']})
+        assert r.status_code == 200, r.text
+        assert r.json()['assignee_ids'] == ['u2', 'u3']
+    parent = None
+    async with _client(monkeypatch, user=U1) as c:
+        parent = (await c.get(f"/api/v1/workos/tasks/{t['id']}")).json()
+    assert parent['assignee_ids'] == ['u1', 'u2', 'u3']
+    # only the NEW subtask assignee is notified, and only subtask_assigned
+    assert [x[0] for x in sent] == ['subtask_assigned']
+    assert sent[0][1] == ('u3',)
+
+
+@pytest.mark.asyncio
+async def test_patch_clear_to_empty_allowed(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks", json={'title': 'A'})).json()
+        assert st['assignee_ids'] == ['u1']
+        r = await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'assignee_ids': []})
+        assert r.status_code == 200, r.text
+        assert r.json()['assignee_ids'] == []
+
+
+@pytest.mark.asyncio
+async def test_patch_unrelated_edit_does_not_renotify(monkeypatch):
+    sent = _capture(monkeypatch, {'subtask_assigned'})
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                           json={'title': 'A', 'assignee_ids': ['u2']})).json()
+        sent.clear()
+        await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'completed': True})
+        # resending the same assignee list is also not a new assignment
+        await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'assignee_ids': ['u2']})
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_subtask_creator_without_task_write_cannot_expand_parent(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        team, ws, s, t = await _task(c)  # u2 is a plain member, task-visible
+    async with _client(monkeypatch, user=U2) as c:
+        # u2 creates a subtask (open posture) without touching assignees
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks", json={'title': 'mine'})).json()
+        # u2 IS the subtask creator -> passes subtask.write, but self-assign
+        # would expand the parent -> 403
+        r = await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'assignee_ids': ['u2']})
+        assert r.status_code == 403, r.text
+        assert 'Only task editors' in r.text

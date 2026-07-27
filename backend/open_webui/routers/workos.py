@@ -623,6 +623,7 @@ class SubtaskCreateForm(BaseModel):
 class SubtaskUpdateForm(BaseModel):
     title: Optional[str] = None
     completed: Optional[bool] = None
+    assignee_ids: Optional[list] = None
     sort_key: Optional[float] = None
 
 
@@ -1387,6 +1388,12 @@ async def update_subtask(
         fields['title'] = fields['title'].strip()
         if not fields['title']:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Subtask title is required.')
+    newly_assigned: list = []
+    if 'assignee_ids' in fields:
+        fields['assignee_ids'] = list(dict.fromkeys(fields['assignee_ids']))
+        await validate_assignees(fields['assignee_ids'], task.workstream_id, db)
+        task = await _expand_parent_assignees(request, user, task, stream, fields['assignee_ids'], db)
+        newly_assigned = [uid for uid in fields['assignee_ids'] if uid not in (subtask.assignee_ids or [])]
     updated = await Subtasks.update_fields(subtask_id, fields, db=db)
     payload = {**updated.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
     await emit_event('workos:subtask.updated', f'workos:workstream:{task.workstream_id}', payload)
@@ -1399,6 +1406,9 @@ async def update_subtask(
             db=db,
         )
         await _emit_task_room('workos:activity.created', task, {**row.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
+    if newly_assigned:
+        await notify(request, db, recipients=set(newly_assigned), actor=user,
+                     type='subtask_assigned', task=task, extra={'subtask_title': updated.title})
     return updated
 
 
