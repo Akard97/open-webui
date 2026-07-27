@@ -530,7 +530,7 @@
 							<Tabs.Trigger value="activities">Activities</Tabs.Trigger>
 						</Tabs.List>
 
-						<Tabs.Content value="subtasks"><SubtasksPanel taskId={t.id} /></Tabs.Content>
+						<Tabs.Content value="subtasks"><SubtasksPanel task={t} /></Tabs.Content>
 
 						<Tabs.Content value="comments">
 							<div class="divide-y divide-gray-100 dark:divide-gray-900">
