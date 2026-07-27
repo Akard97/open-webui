@@ -12,13 +12,15 @@
 	const ICON: Record<NotificationType, string> = {
 		mentioned: 'at-sign',
 		assigned: 'user-plus',
+		subtask_assigned: 'list-checks',
 		commented: 'message-square',
 		status_changed: 'arrow-right-left'
 	};
 	// Colored types carry an inline style; neutral ones use theme classes.
 	const STYLE: Partial<Record<NotificationType, string>> = {
 		mentioned: `color:var(--primary);background:${tint('var(--primary)')}`,
-		assigned: `color:${STATUS_COLOR.in_progress};background:${tint(STATUS_COLOR.in_progress)}`
+		assigned: `color:${STATUS_COLOR.in_progress};background:${tint(STATUS_COLOR.in_progress)}`,
+		subtask_assigned: `color:${STATUS_COLOR.in_progress};background:${tint(STATUS_COLOR.in_progress)}`
 	};
 </script>
 

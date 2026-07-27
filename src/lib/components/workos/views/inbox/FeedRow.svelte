@@ -20,7 +20,8 @@
 	$: rows = expanded ? entry.stack : [entry.latest];
 
 	const VERB: Record<string, string> = {
-		assigned: 'assigned you', mentioned: 'mentioned you in',
+		assigned: 'assigned you', subtask_assigned: 'assigned you a subtask on',
+		mentioned: 'mentioned you in',
 		commented: 'commented on', status_changed: 'moved'
 	};
 	const who = (x: Notification) => x.data?.actor_name ?? displayName(x.actor_id);
@@ -67,6 +68,8 @@
 				</div>
 			{:else if item.data?.snippet}
 				<div class="wos-meta mt-1 line-clamp-2 border-l-2 border-gray-200 pl-2.5 text-gray-500 dark:border-gray-800 dark:text-gray-400">{item.data.snippet}</div>
+			{:else if item.type === 'subtask_assigned' && item.data?.subtask_title}
+				<div class="wos-meta mt-1 line-clamp-1 border-l-2 border-gray-200 pl-2.5 text-gray-500 dark:border-gray-800 dark:text-gray-400">{item.data.subtask_title}</div>
 			{/if}
 		</div>
 		<span class="wos-caption mt-1 flex-none tabular-nums text-gray-400 dark:text-gray-500">{agoShort(item.created_at)}</span>

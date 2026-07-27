@@ -151,6 +151,7 @@
 		const target = n.data?.task_key ?? '';
 		let action = 'updated', detail = '';
 		if (n.type === 'assigned') { action = 'assigned'; detail = 'to you'; }
+		else if (n.type === 'subtask_assigned') { action = 'assigned you a subtask on'; }
 		else if (n.type === 'mentioned') action = 'mentioned you in';
 		else if (n.type === 'commented') action = 'commented on';
 		return { who, first: who.split(' ')[0], action, target, detail, when: ago(n.created_at), n };

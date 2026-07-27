@@ -16,7 +16,10 @@
 
 	$: who = n.data?.actor_name ?? displayName(n.actor_id);
 	$: initialsOf = (who || '?').trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
-	$: verb = n.type === 'assigned' ? 'assigned you' : 'mentioned you in';
+	$: verb =
+		n.type === 'assigned' ? 'assigned you' :
+		n.type === 'subtask_assigned' ? 'assigned you a subtask on' :
+		'mentioned you in';
 </script>
 
 <div

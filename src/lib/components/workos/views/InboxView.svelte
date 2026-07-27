@@ -52,14 +52,22 @@
 	}
 
 	$: counts = $notificationCounts;
-	$: tabCount = (k: Tab) => (k === 'all' ? counts.unread : counts.by_type[k]);
+	$: tabCount = (k: Tab) =>
+		k === 'all'
+			? counts.unread
+			: k === 'assigned'
+				? (counts.by_type.assigned ?? 0) + (counts.by_type.subtask_assigned ?? 0)
+				: (counts.by_type[k] ?? 0);
 	$: source = showArchived ? $archivedNotifications : $notifications;
 	$: filtered = source.filter(
-		(n) => (tab === 'all' || n.type === tab) && (!unreadOnly || !n.read)
+		(n) =>
+			(tab === 'all' || n.type === tab || (tab === 'assigned' && n.type === 'subtask_assigned')) &&
+			(!unreadOnly || !n.read)
 	);
 	$: groups = groupInbox(filtered, now);
 
-	$: needsCount = counts.by_type.mentioned + counts.by_type.assigned;
+	$: needsCount =
+		counts.by_type.mentioned + counts.by_type.assigned + (counts.by_type.subtask_assigned ?? 0);
 	$: updatesCount = Math.max(0, counts.unread - needsCount);
 	$: oldestUnread = [...$notifications].reverse().find((n) => !n.read);
 
