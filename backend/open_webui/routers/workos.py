@@ -752,6 +752,19 @@ async def update_task(
         await notify(request, db, recipients={updated.created_by_id, *(updated.assignee_ids or [])}, actor=user,
                      type='status_changed', task=updated,
                      extra={'from': before.get('status'), 'to': updated.status})
+    # Cascade: dropping a parent assignee strips them from every subtask, keeping
+    # the invariant "subtask assignees are a subset of parent assignees".
+    if 'assignee_ids' in fields:
+        removed = [uid for uid in (before.get('assignee_ids') or []) if uid not in (updated.assignee_ids or [])]
+        if removed:
+            for st in await Subtasks.list_for_task(task_id, db=db):
+                kept = [uid for uid in (st.assignee_ids or []) if uid not in removed]
+                if kept != (st.assignee_ids or []):
+                    changed = await Subtasks.update_fields(st.id, {'assignee_ids': kept}, db=db)
+                    await emit_event(
+                        'workos:subtask.updated', f'workos:workstream:{updated.workstream_id}',
+                        {**changed.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id},
+                    )
     return {**updated.model_dump(), 'deleted_label_ids': deleted_label_ids}
 
 

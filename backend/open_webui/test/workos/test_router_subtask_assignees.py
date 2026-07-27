@@ -188,3 +188,51 @@ async def test_subtask_creator_without_task_write_cannot_expand_parent(monkeypat
         r = await c.patch(f"/api/v1/workos/subtasks/{st['id']}", json={'assignee_ids': ['u2']})
         assert r.status_code == 403, r.text
         assert 'Only task editors' in r.text
+
+
+@pytest.mark.asyncio
+async def test_parent_removal_cascades_to_subtasks(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2', 'u3'])
+        a = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                          json={'title': 'A', 'assignee_ids': ['u2', 'u3']})).json()
+        b = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                          json={'title': 'B', 'assignee_ids': ['u1']})).json()
+        # drop u2 from the parent
+        r = await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1', 'u3']})
+        assert r.status_code == 200, r.text
+        listed = {s['title']: s['assignee_ids'] for s in
+                  (await c.get(f"/api/v1/workos/tasks/{t['id']}/subtasks")).json()}
+        assert listed['A'] == ['u3']   # u2 stripped
+        assert listed['B'] == ['u1']   # untouched
+
+
+@pytest.mark.asyncio
+async def test_cascade_can_empty_a_subtask(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                           json={'title': 'A', 'assignee_ids': ['u2']})).json()
+        await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1']})
+        listed = (await c.get(f"/api/v1/workos/tasks/{t['id']}/subtasks")).json()
+        assert listed[0]['assignee_ids'] == []
+
+
+@pytest.mark.asyncio
+async def test_cascade_emits_subtask_updated_events(monkeypatch):
+    events = []
+    real_emit = wr.emit_event
+
+    async def _ee(event, room, payload):
+        if event == 'workos:subtask.updated':
+            events.append(payload['id'])
+        return await real_emit(event, room, payload)
+
+    monkeypatch.setattr(wr, 'emit_event', _ee)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                           json={'title': 'A', 'assignee_ids': ['u2']})).json()
+        events.clear()
+        await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1']})
+    assert events == [st['id']]
