@@ -15,6 +15,7 @@
 - Invariant: subtask assignees ⊆ parent `assignee_ids` from first write onward (pre-migration rows may stay `[]`).
 - Auto-add 403 detail string, exact: `'Only task editors can add new people to the task.'`
 - `subtask_assigned` maps to the existing `assigned` toggle in `WORKOS_RULES.notifications` — no new admin knob, no RulesTab change.
+- Inbox: `subtask_assigned` folds into the **Assigned** tab (tab filter, tab badge count, needs-you count) — no new tab. `by_type` gains a `subtask_assigned` key everywhere the counts dict is written (backend zero-fill, store initial value, test literals).
 - Auto-added users get `subtask_assigned` only — never a parent-level `assigned` notification from the auto-add path.
 - Parent's first assignee never shifts: auto-add appends missing ids at the END of the parent list.
 - Zero assignees allowed on subtasks (`[]` valid); parent keeps its min-1 rule.
@@ -144,8 +145,11 @@ Create `backend/open_webui/migrations/versions/b0c1d2e3f4a5_workos_subtask_assig
 """workos subtask assignees
 
 Adds ``workos_subtask.assignee_ids`` as a JSON list (mirroring
-``workos_task.assignee_ids``). No backfill by design — pre-feature
-subtasks stay unassigned (spec 2026-07-28, decision 4).
+``workos_task.assignee_ids``). Pre-feature subtasks stay unassigned
+(spec 2026-07-28, decision 4) but rows are backfilled to ``[]`` — NOT
+left NULL — because ``SubtaskModel.assignee_ids: list = []`` rejects an
+explicit ``None`` (pydantic defaults apply only to MISSING attributes).
+Same posture as the task-side migration c5d6e7f8a9b0.
 
 Revision ID: b0c1d2e3f4a5
 Revises: a9b0c1d2e3f4
@@ -165,6 +169,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column('workos_subtask', sa.Column('assignee_ids', sa.JSON(), nullable=True))
+    # Backfill every existing row to [] so model validation never sees NULL.
+    tbl = sa.Table(
+        'workos_subtask', sa.MetaData(),
+        sa.Column('id', sa.Text(), primary_key=True),
+        sa.Column('assignee_ids', sa.JSON()),
+    )
+    op.get_bind().execute(tbl.update().values(assignee_ids=[]))
 
 
 def downgrade() -> None:
@@ -187,6 +198,8 @@ git commit -m "feat(workos): subtask assignee_ids column, model field, DAO suppo
 
 **Files:**
 - Modify: `backend/open_webui/routers/workos.py` (SubtaskCreateForm ~line 617, `_notif_enabled` ~line 928, `create_subtask` ~line 1315, new helper above the subtask endpoints ~line 1299)
+- Modify: `backend/open_webui/models/workos.py` (`counts_for_user` zero-fill dict ~line 1235)
+- Modify: `backend/open_webui/test/workos/test_models_notifications.py` (~line 57) + `backend/open_webui/test/workos/test_router_activity_notifications.py` (~line 132) — both pin the exact `by_type` dict shape
 - Test: `backend/open_webui/test/workos/test_router_subtask_assignees.py` (create)
 
 **Interfaces:**
@@ -423,6 +436,14 @@ async def create_subtask(
 ```
 Note the existing `task, _ =` unpack changes to `task, stream =` (the helper needs the stream). `notify()` already excludes the actor and filters recipients through `can_see_workstream`, so the default-assignee-is-actor case sends nothing.
 
+**(e)** `counts_for_user` zero-fill (`backend/open_webui/models/workos.py` ~line 1235) — the unread-counts endpoint must always return a `subtask_assigned` key (the frontend sums it into the Assigned tab badge and the needs-you count; a missing key would surface as `undefined`):
+```python
+            by_type = {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 0, 'commented': 0, 'status_changed': 0}
+```
+Two existing tests pin the exact dict — update both assertions to include `'subtask_assigned': 0`:
+- `backend/open_webui/test/workos/test_models_notifications.py` (~line 57, `test_counts_for_user_by_type_unread_nonarchived_only`)
+- `backend/open_webui/test/workos/test_router_activity_notifications.py` (~line 132)
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
@@ -430,16 +451,16 @@ Note the existing `task, _ =` unpack changes to `task, stream =` (the helper nee
 ```
 Expected: 9 PASS (Task 3's patch tests are not written yet).
 
-Also run the untouched neighbors to catch regressions:
+Also run the untouched neighbors to catch regressions (the two counts tests updated in (e) live in the notification files):
 ```bash
-.venv/Scripts/python.exe -m pytest open_webui/test/workos/test_router_task.py open_webui/test/workos/test_router_write_gates.py open_webui/test/workos/test_router_multi_assignee.py -v
+.venv/Scripts/python.exe -m pytest open_webui/test/workos/test_router_task.py open_webui/test/workos/test_router_write_gates.py open_webui/test/workos/test_router_multi_assignee.py open_webui/test/workos/test_models_notifications.py open_webui/test/workos/test_router_activity_notifications.py -v
 ```
 Expected: all PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/open_webui/routers/workos.py backend/open_webui/test/workos/test_router_subtask_assignees.py
+git add backend/open_webui/routers/workos.py backend/open_webui/models/workos.py backend/open_webui/test/workos/test_router_subtask_assignees.py backend/open_webui/test/workos/test_models_notifications.py backend/open_webui/test/workos/test_router_activity_notifications.py
 git commit -m "feat(workos): subtask create defaults + gated auto-add to parent + subtask_assigned notify"
 ```
 
@@ -703,9 +724,10 @@ git commit -m "feat(workos): cascade parent assignee removal onto subtasks"
 **Files:**
 - Modify: `src/lib/components/workos/lib/types.ts` (Subtask ~line 122, NotificationType ~line 151)
 - Modify: `src/lib/components/workos/lib/api.ts` (~lines 187–191)
-- Modify: `src/lib/components/workos/lib/store.ts` (`editSubtask` ~line 455)
+- Modify: `src/lib/components/workos/lib/store.ts` (`editSubtask` ~line 455; `notificationCounts` initial literal ~line 111)
 - Modify: `src/lib/components/workos/lib/notifications.ts`
 - Modify: `src/lib/components/workos/lib/inbox.ts` (`isNeedsYou` ~line 20)
+- Modify: `src/lib/components/workos/lib/store.test.ts` (~15 `by_type` literals — the widened `Record<NotificationType, number>` makes the new key mandatory)
 - Test: `src/lib/components/workos/lib/notifications.test.ts`, `src/lib/components/workos/lib/inbox.test.ts` (append)
 
 **Interfaces:**
@@ -717,11 +739,13 @@ Append to `src/lib/components/workos/lib/notifications.test.ts` (match the file'
 
 ```ts
 it('summarizes subtask_assigned', () => {
-	expect(summarizeNotification(mk('subtask_assigned', d))).toBe('Mia assigned you a subtask on OSL-7');
-	expect(summarizeNotification(mk('subtask_assigned'))).toBe('Mia assigned you a subtask on');
+	expect(
+		summarizeNotification(mk('subtask_assigned', { actor_name: 'Mia', task_key: 'OSL-7' }))
+	).toBe('Mia assigned you a subtask on OSL-7');
+	expect(summarizeNotification(mk('subtask_assigned'))).toBe('Someone assigned you a subtask on');
 });
 ```
-(If the file's bare `mk('assigned')` case expects `'Someone assigned you'`, mirror that actor-less pattern instead — copy whatever `mk` produces; adjust the expected string to `Someone assigned you a subtask on` accordingly.)
+(`mk(type, data = {})` is the file's helper; the bare case has no `actor_name`/`task_key`, so `who` falls back to `'Someone'` and `key` to `''` — trailing space removed by the case's `.trim()`.)
 
 Append to `src/lib/components/workos/lib/inbox.test.ts` inside the `isNeedsYou` describe block:
 
@@ -777,6 +801,13 @@ export const updateSubtask = (
 export async function editSubtask(id: string, fields: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key' | 'assignee_ids'>>): Promise<void> {
 ```
 
+`store.ts` — `notificationCounts` initial value (~line 111): the widened union makes `Record<NotificationType, number>` REQUIRE the new key — svelte-check hard-fails without it:
+```ts
+	unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+```
+
+`store.test.ts` — every `by_type` object literal (~15 sites: lines ~35, ~438, ~446, ~452, ~461, ~472, ~477, ~487, ~492, ~530, ~535, ~552, ~568, ~574, ~588, ~591, ~697) gains `subtask_assigned: 0` the same way. Mechanical: add the key right after `assigned` in each literal (vitest runs untyped via esbuild, but `npm run check` type-checks test files).
+
 `notifications.ts` — add the case after `'assigned'`:
 ```ts
 		case 'subtask_assigned': return `${who} assigned you a subtask on ${key}`.trim();
@@ -799,7 +830,7 @@ Expected: all lib tests PASS (including pre-existing store/roles/urlSync suites)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/components/workos/lib/types.ts src/lib/components/workos/lib/api.ts src/lib/components/workos/lib/store.ts src/lib/components/workos/lib/notifications.ts src/lib/components/workos/lib/inbox.ts src/lib/components/workos/lib/notifications.test.ts src/lib/components/workos/lib/inbox.test.ts
+git add src/lib/components/workos/lib/types.ts src/lib/components/workos/lib/api.ts src/lib/components/workos/lib/store.ts src/lib/components/workos/lib/store.test.ts src/lib/components/workos/lib/notifications.ts src/lib/components/workos/lib/inbox.ts src/lib/components/workos/lib/notifications.test.ts src/lib/components/workos/lib/inbox.test.ts
 git commit -m "feat(workos): subtask assignee_ids + subtask_assigned type in frontend lib"
 ```
 
@@ -813,6 +844,7 @@ git commit -m "feat(workos): subtask assignee_ids + subtask_assigned type in fro
 - Modify: `src/lib/components/workos/views/inbox/FeedRow.svelte` (~lines 22–25, 62–70)
 - Modify: `src/lib/components/workos/views/inbox/NeedsYouCard.svelte` (~line 19)
 - Modify: `src/lib/components/workos/views/MyWorkView.svelte` (~line 153)
+- Modify: `src/lib/components/workos/views/InboxView.svelte` (tab filter ~line 58, `tabCount` ~line 55, `needsCount` ~line 62)
 
 **Interfaces:**
 - Consumes: `NotificationType` incl. `'subtask_assigned'` (Task 5); notification `data.subtask_title` (Task 2).
@@ -889,6 +921,36 @@ to:
 		else if (n.type === 'commented') action = 'commented on';
 ```
 
+- [ ] **Step 5b: InboxView — fold subtask_assigned into the Assigned tab**
+
+`InboxView.svelte`: no new tab (TABS list unchanged); `subtask_assigned` rows ride the existing **Assigned** tab and its counts. Three reactive lines change:
+
+`tabCount` (~line 55):
+```ts
+	$: tabCount = (k: Tab) =>
+		k === 'all'
+			? counts.unread
+			: k === 'assigned'
+				? (counts.by_type.assigned ?? 0) + (counts.by_type.subtask_assigned ?? 0)
+				: (counts.by_type[k] ?? 0);
+```
+
+Tab filter (~line 58):
+```ts
+	$: filtered = source.filter(
+		(n) =>
+			(tab === 'all' || n.type === tab || (tab === 'assigned' && n.type === 'subtask_assigned')) &&
+			(!unreadOnly || !n.read)
+	);
+```
+
+`needsCount` (~line 62) — must agree with `isNeedsYou` (Task 5) or the header "N need your attention / M more updates" split miscounts:
+```ts
+	$: needsCount =
+		counts.by_type.mentioned + counts.by_type.assigned + (counts.by_type.subtask_assigned ?? 0);
+```
+(The `?? 0` guards are belt-and-braces for a stale store value written before this deploy; the store literal and backend zero-fill both carry the key after Tasks 2+5.)
+
 - [ ] **Step 6: Type-check**
 
 ```bash
@@ -899,7 +961,7 @@ Expected: 0 errors (warnings at the pre-existing baseline are fine).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/lib/components/workos/ui/Icon.svelte src/lib/components/workos/views/inbox/TypeGlyph.svelte src/lib/components/workos/views/inbox/FeedRow.svelte src/lib/components/workos/views/inbox/NeedsYouCard.svelte src/lib/components/workos/views/MyWorkView.svelte
+git add src/lib/components/workos/ui/Icon.svelte src/lib/components/workos/views/inbox/TypeGlyph.svelte src/lib/components/workos/views/inbox/FeedRow.svelte src/lib/components/workos/views/inbox/NeedsYouCard.svelte src/lib/components/workos/views/MyWorkView.svelte src/lib/components/workos/views/InboxView.svelte
 git commit -m "feat(workos): render subtask_assigned notifications in inbox and My Work"
 ```
 
