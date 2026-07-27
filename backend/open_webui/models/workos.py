@@ -500,6 +500,7 @@ class WorkosSubtask(Base):
     task_id = Column(Text)
     title = Column(Text)
     completed = Column(Boolean, default=False)
+    assignee_ids = Column(JSON, default=list)
     sort_key = Column(Float, default=0.0)
     created_by_id = Column(Text, nullable=True)
     completed_at = Column(BigInteger, nullable=True)
@@ -551,6 +552,7 @@ class SubtaskModel(BaseModel):
     task_id: str
     title: str
     completed: bool = False
+    assignee_ids: list = []
     sort_key: float
     created_by_id: Optional[str] = None
     completed_at: Optional[int] = None
@@ -751,12 +753,14 @@ Tasks = TasksDao()
 class SubtasksDao:
     async def insert(
         self, task_id: str, title: str, created_by_id: Optional[str],
-        *, sort_key: Optional[float] = None, db: Optional[AsyncSession] = None,
+        *, assignee_ids: Optional[list] = None, sort_key: Optional[float] = None,
+        db: Optional[AsyncSession] = None,
     ) -> SubtaskModel:
         async with get_async_db_context(db) as db:
             now = _now()
             row = WorkosSubtask(
                 id=_id(), task_id=task_id, title=title, completed=False,
+                assignee_ids=assignee_ids or [],
                 sort_key=sort_key if sort_key is not None else float(now),
                 created_by_id=created_by_id, completed_at=None, created_at=now, updated_at=now,
             )

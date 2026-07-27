@@ -1,6 +1,6 @@
 import pytest
 
-from open_webui.models.workos import Teams, Workspaces, Workstreams, Labels, Tasks
+from open_webui.models.workos import Teams, Workspaces, Workstreams, Labels, Tasks, Subtasks
 
 
 def test_now_is_epoch_milliseconds():
@@ -116,3 +116,22 @@ async def test_attachment_required_round_trips():
     assert plain.attachment_required is False
     toggled = await Tasks.update_fields(flagged.id, {'attachment_required': False})
     assert toggled.attachment_required is False
+
+
+@pytest.mark.asyncio
+async def test_subtask_assignee_ids_roundtrip():
+    team, s = await _stream()
+    task = await Tasks.insert(s.id, team.id, team.key, 'Parent', 'u1', assignee_ids=['u1', 'u2'])
+
+    st = await Subtasks.insert(task.id, 'Child', 'u1', assignee_ids=['u2'])
+    assert st.assignee_ids == ['u2']
+
+    # default: no assignees passed -> empty list, not None
+    st2 = await Subtasks.insert(task.id, 'Child 2', 'u1')
+    assert st2.assignee_ids == []
+
+    updated = await Subtasks.update_fields(st.id, {'assignee_ids': ['u1', 'u2']})
+    assert updated.assignee_ids == ['u1', 'u2']
+
+    cleared = await Subtasks.update_fields(st.id, {'assignee_ids': []})
+    assert cleared.assignee_ids == []
