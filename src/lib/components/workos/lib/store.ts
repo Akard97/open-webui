@@ -108,7 +108,7 @@ export const notifications: Writable<Notification[]> = writable([]);
 export const unreadCount: Writable<number> = writable(0);
 
 const EMPTY_COUNTS = (): NotificationCounts => ({
-	unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+	unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
 });
 export const notificationCounts: Writable<NotificationCounts> = writable(EMPTY_COUNTS());
 export const archivedNotifications: Writable<Notification[]> = writable([]);
@@ -452,7 +452,7 @@ export async function addSubtask(taskId: string, title: string): Promise<void> {
 	if (refreshed) tasks.update((list) => list.map((t) => (t.id === taskId ? refreshed : t)));
 }
 
-export async function editSubtask(id: string, fields: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key'>>): Promise<void> {
+export async function editSubtask(id: string, fields: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key' | 'assignee_ids'>>): Promise<void> {
 	const before = get(subtasks);
 	subtasks.update((list) => list.map((s) => (s.id === id ? { ...s, ...fields } : s)));
 	try {

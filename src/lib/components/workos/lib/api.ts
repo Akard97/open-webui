@@ -184,10 +184,11 @@ export async function uploadAttachment(
 // Subtasks
 export const listSubtasks = (token: string, taskId: string) =>
 	request<Subtask[]>(token, `/tasks/${taskId}/subtasks`);
-export const createSubtask = (token: string, taskId: string, body: { title: string; sort_key?: number }) =>
-	request<Subtask>(token, `/tasks/${taskId}/subtasks`, 'POST', body);
+export const createSubtask = (
+	token: string, taskId: string, body: { title: string; sort_key?: number; assignee_ids?: string[] }
+) => request<Subtask>(token, `/tasks/${taskId}/subtasks`, 'POST', body);
 export const updateSubtask = (
-	token: string, id: string, body: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key'>>
+	token: string, id: string, body: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key' | 'assignee_ids'>>
 ) => request<Subtask>(token, `/subtasks/${id}`, 'PATCH', body);
 export const deleteSubtask = (token: string, id: string) =>
 	request<{ deleted: boolean }>(token, `/subtasks/${id}`, 'DELETE');

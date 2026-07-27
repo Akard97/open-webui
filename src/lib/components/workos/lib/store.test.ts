@@ -32,7 +32,7 @@ vi.mock('./api', () => ({
 	listWorkstreamAttachments: vi.fn(async () => []),
 	listNotifications: vi.fn(async () => []),
 	getNotificationCounts: vi.fn(async () => ({
-		unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+		unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
 	})),
 	archiveNotifications: vi.fn(async () => ({ unread: 0 })),
 	markNotificationsRead: vi.fn(async () => ({ unread: 0 })),
@@ -435,7 +435,7 @@ describe('inbox notification store', () => {
 		inboxTaskError.set(false);
 		selectedTaskId.set(null);
 		unreadCount.set(0);
-		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
+		notificationCounts.set({ unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
 	});
 
 	it('applyNotificationEvent prepends and bumps per-type counts', () => {
@@ -443,13 +443,13 @@ describe('inbox notification store', () => {
 		applyNotificationEvent(mkN({ id: 'a', type: 'mentioned' })); // dupe ignored
 		expect(get(notifications)).toHaveLength(1);
 		expect(get(notificationCounts)).toEqual({
-			unread: 1, by_type: { assigned: 0, mentioned: 1, commented: 0, status_changed: 0 }
+			unread: 1, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 1, commented: 0, status_changed: 0 }
 		});
 	});
 
 	it('markRead decrements the matching type count', async () => {
 		notifications.set([mkN({ id: 'a', type: 'assigned' })]);
-		notificationCounts.set({ unread: 1, by_type: { assigned: 1, mentioned: 0, commented: 0, status_changed: 0 } });
+		notificationCounts.set({ unread: 1, by_type: { assigned: 1, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
 		await markRead(['a']);
 		expect(get(notifications)[0].read).toBe(true); // row stays, flipped to read
 		expect(get(notificationCounts).by_type.assigned).toBe(0);
@@ -458,7 +458,7 @@ describe('inbox notification store', () => {
 
 	it('archiveNotificationsAction moves the row out optimistically and marks it read', async () => {
 		notifications.set([mkN({ id: 'a' }), mkN({ id: 'b' })]);
-		notificationCounts.set({ unread: 2, by_type: { assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
+		notificationCounts.set({ unread: 2, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
 		await archiveNotificationsAction(['a']);
 		expect(get(notifications).map((n) => n.id)).toEqual(['b']);
 		expect(get(archivedNotifications).map((n) => n.id)).toEqual(['a']);
@@ -469,12 +469,12 @@ describe('inbox notification store', () => {
 	it('archive failure rolls lists and counts back', async () => {
 		vi.mocked(apiMock.archiveNotifications).mockRejectedValueOnce(new Error('nope'));
 		notifications.set([mkN({ id: 'a' })]);
-		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
 		await expect(archiveNotificationsAction(['a'])).rejects.toThrow();
 		expect(get(notifications).map((n) => n.id)).toEqual(['a']);
 		expect(get(archivedNotifications)).toHaveLength(0);
 		expect(get(notificationCounts)).toEqual({
-			unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
+			unread: 1, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
 		});
 	});
 
@@ -484,12 +484,12 @@ describe('inbox notification store', () => {
 			throw new Error('nope');
 		});
 		notifications.set([mkN({ id: 'a' })]);
-		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
 		await expect(archiveNotificationsAction(['a'])).rejects.toThrow();
 		expect(get(notifications).map((n) => n.id)).toEqual(['live', 'a']); // snapshot restore must not eat 'live'
 		expect(get(archivedNotifications)).toHaveLength(0);
 		expect(get(notificationCounts)).toEqual({
-			unread: 2, by_type: { assigned: 1, mentioned: 0, commented: 1, status_changed: 0 }
+			unread: 2, by_type: { assigned: 1, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
 		});
 	});
 
@@ -527,12 +527,12 @@ describe('inbox rollback isolation + pagination cursor', () => {
 		inboxTaskError.set(false);
 		selectedTaskId.set(null);
 		unreadCount.set(0);
-		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
+		notificationCounts.set({ unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
 	});
 
 	it('failed markRead rolls back only its own rows, keeping a concurrent success', async () => {
 		notifications.set([mkN({ id: 'a', created_at: 2000 }), mkN({ id: 'b', created_at: 1000 })]);
-		notificationCounts.set({ unread: 2, by_type: { assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
+		notificationCounts.set({ unread: 2, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
 		let rejectA: ((e: unknown) => void) | undefined;
 		vi.mocked(apiMock.markNotificationsRead)
 			.mockImplementationOnce(() => new Promise((_, rej) => { rejectA = rej; }))
@@ -549,7 +549,7 @@ describe('inbox rollback isolation + pagination cursor', () => {
 
 	it('failed archive does not revert a concurrent markRead success', async () => {
 		notifications.set([mkN({ id: 'a', created_at: 2000 }), mkN({ id: 'b', created_at: 1000 })]);
-		notificationCounts.set({ unread: 2, by_type: { assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
+		notificationCounts.set({ unread: 2, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 2, status_changed: 0 } });
 		let rejectArch: ((e: unknown) => void) | undefined;
 		vi.mocked(apiMock.archiveNotifications)
 			.mockImplementationOnce(() => new Promise((_, rej) => { rejectArch = rej; }));
@@ -565,13 +565,13 @@ describe('inbox rollback isolation + pagination cursor', () => {
 
 	it('markRead failure after a successful concurrent archive must not resurrect counts', async () => {
 		notifications.set([mkN({ id: 'a' })]);
-		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
 		let rejectRead: ((e: unknown) => void) | undefined;
 		vi.mocked(apiMock.markNotificationsRead)
 			.mockImplementationOnce(() => new Promise((_, rej) => { rejectRead = rej; }));
 		vi.mocked(apiMock.archiveNotifications).mockResolvedValueOnce({ unread: 0 });
 		vi.mocked(apiMock.getNotificationCounts).mockResolvedValueOnce({
-			unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+			unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
 		});
 		const pr = markRead(['a']);
 		await archiveNotificationsAction(['a']); // archive commits while mark-read is in flight
@@ -585,10 +585,10 @@ describe('inbox rollback isolation + pagination cursor', () => {
 
 	it('markAllRead failure refetches authoritative counts instead of restoring a stale snapshot', async () => {
 		notifications.set([mkN({ id: 'a' })]);
-		notificationCounts.set({ unread: 1, by_type: { assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
+		notificationCounts.set({ unread: 1, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 } });
 		vi.mocked(apiMock.markNotificationsRead).mockRejectedValueOnce(new Error('nope'));
 		vi.mocked(apiMock.getNotificationCounts).mockResolvedValueOnce({
-			unread: 3, by_type: { assigned: 2, mentioned: 0, commented: 1, status_changed: 0 }
+			unread: 3, by_type: { assigned: 2, subtask_assigned: 0, mentioned: 0, commented: 1, status_changed: 0 }
 		});
 		await expect(markAllRead()).rejects.toThrow();
 		expect(get(notifications)[0].read).toBe(false); // own row restored
@@ -694,7 +694,7 @@ describe('stale list fetches must not clobber committed mutations', () => {
 		notificationsHasMore.set(false);
 		archivedHasMore.set(false);
 		unreadCount.set(0);
-		notificationCounts.set({ unread: 0, by_type: { assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
+		notificationCounts.set({ unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 } });
 	});
 
 	it('a loadNotifications snapshot resolving after an archive is discarded', async () => {

@@ -124,6 +124,7 @@ export interface Subtask {
 	task_id: string;
 	title: string;
 	completed: boolean;
+	assignee_ids: string[];
 	sort_key: number;
 	created_by_id?: string | null;
 	completed_at?: number | null;
@@ -148,7 +149,7 @@ export interface Activity {
 	created_at: number;
 }
 
-export type NotificationType = 'assigned' | 'mentioned' | 'commented' | 'status_changed';
+export type NotificationType = 'assigned' | 'subtask_assigned' | 'mentioned' | 'commented' | 'status_changed';
 
 export interface Notification {
 	id: string;

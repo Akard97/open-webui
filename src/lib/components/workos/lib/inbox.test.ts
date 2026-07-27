@@ -17,6 +17,11 @@ describe('isNeedsYou', () => {
 		expect(isNeedsYou(mk({ type: 'mentioned', read: true }))).toBe(false);
 		expect(isNeedsYou(mk({ type: 'commented' }))).toBe(false);
 	});
+
+	it('treats unread subtask_assigned as needs-you', () => {
+		expect(isNeedsYou(mk({ type: 'subtask_assigned' }))).toBe(true);
+		expect(isNeedsYou(mk({ type: 'subtask_assigned', read: true }))).toBe(false);
+	});
 });
 
 describe('dayLabelOf', () => {

@@ -23,4 +23,11 @@ describe('summarizeNotification', () => {
 		const n = mk('something_else' as any, { actor_name: 'Mia', task_key: 'OSL-7' });
 		expect(summarizeNotification(n)).toBe('Mia updated OSL-7');
 	});
+
+	it('summarizes subtask_assigned', () => {
+		expect(
+			summarizeNotification(mk('subtask_assigned', { actor_name: 'Mia', task_key: 'OSL-7' }))
+		).toBe('Mia assigned you a subtask on OSL-7');
+		expect(summarizeNotification(mk('subtask_assigned'))).toBe('Someone assigned you a subtask on');
+	});
 });
