@@ -10,7 +10,12 @@
 	import { canEditTask } from '../../lib/roles';
 	import { user } from '$lib/stores';
 	import type { Task, Subtask } from '../../lib/types';
-	import { computeSortKey, resolveRename, type SortKeyUpdate } from '../../lib/subtaskPanel';
+	import {
+		autogrowHeight,
+		computeSortKey,
+		resolveRename,
+		type SortKeyUpdate
+	} from '../../lib/subtaskPanel';
 
 	export let task: Task;
 
@@ -75,11 +80,13 @@
 	}
 
 	// Grow a textarea to fit its content; the param ties re-measuring to the
-	// bound value so programmatic clears (submit) shrink it back.
+	// bound value so programmatic clears (submit) shrink it back. When the
+	// element is hidden (mounted under an inactive tab) scrollHeight is 0 —
+	// autogrowHeight returns '' so we never pin it to height:0.
 	function autogrow(el: HTMLTextAreaElement, _value: string) {
 		const resize = () => {
 			el.style.height = 'auto';
-			el.style.height = `${el.scrollHeight}px`;
+			el.style.height = autogrowHeight(el.scrollHeight);
 		};
 		resize();
 		return { update: resize };

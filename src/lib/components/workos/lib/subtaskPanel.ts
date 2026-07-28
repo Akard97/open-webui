@@ -41,6 +41,15 @@ export function computeSortKey(
 	return finalOrder.map((s, i) => ({ id: s.id, sort_key: (i + 1) * SORT_SPACING }));
 }
 
+/**
+ * Inline height for an autogrow textarea. A hidden element (e.g. mounted under
+ * an inactive tab) measures scrollHeight 0 — return '' so the inline style is
+ * cleared and the browser's natural height applies once it becomes visible.
+ */
+export function autogrowHeight(scrollHeight: number): string {
+	return scrollHeight > 0 ? `${scrollHeight}px` : '';
+}
+
 export type RenameResolution = { action: 'commit'; title: string } | { action: 'revert' };
 
 /** Decide what an inline-rename blur/Enter should do. */

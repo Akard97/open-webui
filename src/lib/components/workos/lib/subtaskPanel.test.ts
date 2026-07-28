@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSortKey, resolveRename, SORT_SPACING } from './subtaskPanel';
+import { autogrowHeight, computeSortKey, resolveRename, SORT_SPACING } from './subtaskPanel';
 
 const row = (id: string, sort_key: number) => ({ id, sort_key });
 
@@ -56,6 +56,15 @@ describe('computeSortKey', () => {
 		const input = [row('a', 1000), row('b', 2000)];
 		computeSortKey(input, 0, 1);
 		expect(input).toEqual([row('a', 1000), row('b', 2000)]);
+	});
+});
+
+describe('autogrowHeight', () => {
+	it('returns a pixel height for a visible element', () => {
+		expect(autogrowHeight(19)).toBe('19px');
+	});
+	it('returns empty (clear inline style) when the element measures 0 (hidden)', () => {
+		expect(autogrowHeight(0)).toBe('');
 	});
 });
 
