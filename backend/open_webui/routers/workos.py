@@ -1047,14 +1047,19 @@ async def create_comment(
     await _emit_task_room('workos:comment.created', task, payload)
     await _emit_task_room('workos:activity.created',
                           task, {**activity.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id})
-    # Notification fan-out: mentioned first, then commented (minus those mentioned).
+    # Notification fan-out precedence: mentioned > replied > commented — one per recipient.
     mentioned = set()
     for m in mentions:
         if await can_see_workstream(m, await is_app_admin(m, db), task.workstream_id, db=db):
             mentioned.add(m)
     await notify(request, db, recipients=mentioned, actor=user, type='mentioned', task=task,
                  comment_id=comment.id, snippet=body)
-    participants = await _participants(task, db) - mentioned
+    replied_to = set()
+    if parent and parent.user_id and parent.user_id not in mentioned:
+        replied_to = {parent.user_id}
+        await notify(request, db, recipients=replied_to, actor=user, type='replied', task=task,
+                     comment_id=comment.id, snippet=body)
+    participants = await _participants(task, db) - mentioned - replied_to
     await notify(request, db, recipients=participants, actor=user, type='commented', task=task,
                  comment_id=comment.id, snippet=body)
     return comment
@@ -1227,6 +1232,9 @@ async def upload_attachment(
         com = await Comments.get_by_id(comment_id, db=db)
         if not com or com.task_id != task_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid comment for this task.')
+        if not (file.content_type or '').startswith('image/'):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='Comment attachments must be images.')
     import io as _io
 
     safe_name = file.filename or 'file'

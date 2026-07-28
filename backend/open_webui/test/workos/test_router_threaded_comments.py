@@ -119,3 +119,60 @@ async def test_reaction_rejected_on_tombstone(monkeypatch):
         await c.delete(f"/api/v1/workos/comments/{root['id']}")
         r = await c.post(f"/api/v1/workos/comments/{root['id']}/reactions", json={'emoji': '👍'})
         assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_replied_notification_precedence(monkeypatch):
+    sent = []
+
+    async def _eu(event, payload, user_ids):
+        sent.append((event, tuple(user_ids), payload.get('type')))
+
+    monkeypatch.setattr(wr, 'emit_users', _eu)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        await c.post(f"/api/v1/workos/teams/{t['team_id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        root = await _comment(c, t['id'], 'root by u1')
+    async with _client(monkeypatch, user=U2) as c:
+        sent.clear()
+        await _comment(c, t['id'], 'reply to u1', parent_id=root['id'])
+    types_for_u1 = [ty for _e, ids, ty in sent if 'u1' in ids]
+    assert 'replied' in types_for_u1          # parent author got replied…
+    assert 'commented' not in types_for_u1    # …and not a duplicate commented
+    assert all('u2' not in ids for _e, ids, _t in sent)  # actor never notified
+
+
+@pytest.mark.asyncio
+async def test_mention_beats_replied(monkeypatch):
+    sent = []
+
+    async def _eu(event, payload, user_ids):
+        sent.append((event, tuple(user_ids), payload.get('type')))
+
+    monkeypatch.setattr(wr, 'emit_users', _eu)
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        await c.post(f"/api/v1/workos/teams/{t['team_id']}/members", json={'user_id': 'u2', 'role': 'member'})
+        root = await _comment(c, t['id'], 'root by u1')
+    async with _client(monkeypatch, user=U2) as c:
+        sent.clear()
+        await _comment(c, t['id'], 'ping @[A](mention:u1)', parent_id=root['id'])
+    types_for_u1 = [ty for _e, ids, ty in sent if 'u1' in ids]
+    assert types_for_u1 == ['mentioned']  # exactly one notification, the mention
+
+
+@pytest.mark.asyncio
+async def test_comment_attachment_must_be_image(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        com = await _comment(c, t['id'], 'has files')
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments?comment_id={com['id']}",
+                         files={'file': ('note.txt', b'hello', 'text/plain')})
+        assert r.status_code == 400
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments?comment_id={com['id']}",
+                         files={'file': ('shot.png', b'\x89PNG fake', 'image/png')})
+        assert r.status_code == 200, r.text
+        # task-level upload (no comment_id) still takes non-images
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/attachments",
+                         files={'file': ('note.txt', b'hello', 'text/plain')})
+        assert r.status_code == 200, r.text

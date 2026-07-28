@@ -81,6 +81,24 @@
   overlays: failed edits drop their overlay (no phantom optimistic state) and
   realtime subtask.updated payloads rebase under pending edits instead of
   clobbering them.
+
+  2026-07-28 (threaded comments): comments gained `parent_id` (reply
+  threading) and a tombstone fork on delete — comments with replies are
+  tombstoned (body/mentions cleared, `deleted_at` set, reactions purged)
+  instead of hard-deleted so children survive; childless comments still
+  hard-delete. Replying to a missing/cross-task/tombstoned parent is
+  rejected (404/400). A new `POST /comments/{id}/reactions` endpoint
+  (`require_workos` + `require_task_visible`, fixed emoji allowlist, no
+  capability gate) lets any task-visible member toggle a reaction; realtime
+  `workos:comment.reaction` joins the existing `comment.*` events in the
+  workstream room, and tombstoning emits `workos:comment.updated` (not
+  `comment.deleted`). Notification fan-out gained a `replied` type (own
+  `WORKOS_RULES.notifications` toggle key, defaults enabled like all types)
+  ranked between `mentioned` and `commented` — the parent comment's author is
+  notified once as `replied` when not already mentioned, never duplicated as
+  `commented`. Comment attachments (`POST /tasks/{id}/attachments` with
+  `comment_id`) must now be images (`content_type` starts with `image/`);
+  task-level uploads are unaffected.
 -->
 
 # WorkOS — Access Control & Visibility (Reference)
@@ -282,17 +300,18 @@ All routes are authenticated with `get_verified_user` and call `require_workos` 
 ### Comments / activity
 | Route / Helper | Gate applied | Location |
 |---|---|---|
-| `GET /tasks/{id}/comments` | `require_workos` + `require_task_visible` | [workos.py:861](backend/open_webui/routers/workos.py:861) |
-| `POST /tasks/{id}/comments` | `require_workos` + `require_task_visible`; mentions re-checked via `can_see_workstream` before notifying (leak-safe) | [workos.py:870](backend/open_webui/routers/workos.py:870) |
-| `PATCH /comments/{id}` | `require_workos`; fetch (`404`); `require_task_visible`; `require_capability('comment.edit')` — **author-only, no admin bypass** (`403` else); new mentions re-checked | [workos.py:900](backend/open_webui/routers/workos.py:900) |
-| `DELETE /comments/{id}` | `require_workos`; fetch (`404`); `require_task_visible`; `require_capability('comment.delete')` — **author OR team owner/admin** (`403` else) | [workos.py:929](backend/open_webui/routers/workos.py:929) |
-| `GET /tasks/{id}/activity` | `require_workos` + `require_task_visible` | [workos.py:949](backend/open_webui/routers/workos.py:949) |
+| `GET /tasks/{id}/comments` | `require_workos` + `require_task_visible` | [workos.py:1006](backend/open_webui/routers/workos.py:1006) |
+| `POST /tasks/{id}/comments` | `require_workos` + `require_task_visible`; `parent_id` (if given) must resolve to a comment on the same task and not be tombstoned (`404`/`400` else); mentions re-checked via `can_see_workstream` before notifying (leak-safe); notification fan-out is precedence-ordered **mentioned > replied > commented** — one notification per recipient | [workos.py:1022](backend/open_webui/routers/workos.py:1022) |
+| `PATCH /comments/{id}` | `require_workos`; fetch (`404`); `require_task_visible`; `require_capability('comment.edit')` — **author-only, no admin bypass** (`403` else); new mentions re-checked | [workos.py:1068](backend/open_webui/routers/workos.py:1068) |
+| `DELETE /comments/{id}` | `require_workos`; fetch (`404`); `require_task_visible`; `require_capability('comment.delete')` — **author OR team owner/admin** (`403` else); forks on children: comments with replies are **tombstoned** (body/mentions cleared, `deleted_at` set, reactions purged, children survive) instead of hard-deleted; childless comments hard-delete as before | [workos.py:1098](backend/open_webui/routers/workos.py:1098) |
+| `POST /comments/{id}/reactions` | `require_workos`; fetch (`404`); `require_task_visible`; emoji checked against the `REACTION_EMOJI` allowlist (`400` else); tombstoned-comment reactions rejected (`400`); **no `require_capability` entry** — any task-visible member may react; toggles the caller's own reaction only, notifies nobody | [workos.py:1130](backend/open_webui/routers/workos.py:1130) |
+| `GET /tasks/{id}/activity` | `require_workos` + `require_task_visible` | [workos.py:1156](backend/open_webui/routers/workos.py:1156) |
 | `GET /workstreams/{id}/activity` | `require_workos` + `require_workstream_visible` — workstream-scoped activity list (items joined w/ task key/title) + tz-aware daily histogram; `limit`≤100, `days`≤31 clamped | [workos.py:1046](backend/open_webui/routers/workos.py:1046) |
 
 ### Attachments
 | Route / Helper | Gate applied | Location |
 |---|---|---|
-| `POST /tasks/{id}/attachments` | `require_workos` + `require_task_visible`; size limit; MIME checked against `ATTACHMENT_MIME_ALLOW`; `comment_id` validated against `task_id` before insert (closes G11) | [workos.py:967](backend/open_webui/routers/workos.py:967) |
+| `POST /tasks/{id}/attachments` | `require_workos` + `require_task_visible`; size limit; MIME checked against `ATTACHMENT_MIME_ALLOW`; `comment_id` validated against `task_id` before insert (closes G11); when `comment_id` is set, `content_type` must additionally start with `image/` (`400` else) — task-level uploads (no `comment_id`) are unaffected | [workos.py:1218](backend/open_webui/routers/workos.py:1218) |
 | `GET /tasks/{id}/attachments` | `require_workos` + `require_task_visible` | [workos.py:998](backend/open_webui/routers/workos.py:998) |
 | `GET /workstreams/{id}/attachments` | `require_workos` + `require_workstream_visible` — workstream-wide listing (rows joined w/ task key/title/status), read-only, cap 1000 | [workos.py:1148](backend/open_webui/routers/workos.py:1148) `list_workstream_attachments` |
 | `GET /attachments/{id}/content` | `require_workos`; fetch (`404`); `require_task_visible` on `att.task_id` — visibility-gated, OK | [workos.py:1007](backend/open_webui/routers/workos.py:1007) |
@@ -344,7 +363,7 @@ Two independent push channels with **different** gating postures.
 Three room namespaces: `workos:team:{team_id}`, `workos:workstream:{workstream_id}`, and the platform per-user room `user:{id}`.
 
 - **The only join path** is the `workos:subscribe` handler ([socket/main.py:477](backend/open_webui/socket/main.py:477)). Since 2026-07-02 it trusts the **connection's established session identity** (`SESSION_POOL[sid]`, set at connect/user-join) — a token in the event payload is ignored, and no session means no join (fail closed). It calls `enter_room` **only after** `can_see_team` / `can_see_workstream` pass. There is no auto-join anywhere.
-- Every workstream-scoped emit targets `workos:workstream:{task.workstream_id}` (via `_emit_task_room`, [workos.py:854](backend/open_webui/routers/workos.py:854)); `emit_event` ([workos.py:26](backend/open_webui/routers/workos.py:26)) does no access check by design — security is at the join.
+- Every workstream-scoped emit targets `workos:workstream:{task.workstream_id}` (via `_emit_task_room`, [workos.py:999](backend/open_webui/routers/workos.py:999)); `emit_event` ([workos.py:26](backend/open_webui/routers/workos.py:26)) does no access check by design — security is at the join. Comment-related events in this room: `workos:comment.created`, `workos:comment.updated`, `workos:comment.deleted`, `workos:comment.reaction` (reaction toggle). Tombstoning a comment (has children) emits `workos:comment.updated` with the cleared body, not `workos:comment.deleted` — the row survives for its children.
 - **Conclusion (verified):** a user who fails `can_see_workstream` **cannot receive** task/comment/activity/subtask/attachment realtime events. This claim was checked and is accurate, *not* overstated.
 
 **Realtime caveats — all three CLOSED (2026-07-02):**
@@ -361,9 +380,10 @@ Three room namespaces: `workos:team:{team_id}`, `workos:workstream:{workstream_i
 
 | Caller | Type | Visibility-filtered? |
 |---|---|---|
-| `create_comment` mentions ([:889–892](backend/open_webui/routers/workos.py:889)) | `mentioned` | **YES** — filtered via `can_see_workstream` |
+| `create_comment` mentions ([:1051–1056](backend/open_webui/routers/workos.py:1051)) | `mentioned` | **YES** — filtered via `can_see_workstream` |
 | `update_comment` new mentions ([:920–923](backend/open_webui/routers/workos.py:920)) | `mentioned` | **YES** |
-| `create_comment` participants ([:894–896](backend/open_webui/routers/workos.py:894)) | `commented` | **YES** — `_participants` set filtered by `can_see_workstream` before `notify()` (closes G4) |
+| `create_comment` parent author ([:1057–1061](backend/open_webui/routers/workos.py:1057)) | `replied` | **YES** — own `WORKOS_RULES.notifications` toggle key (unset ⇒ default-enabled, same as every type); recipient is `parent.user_id`, excluded when already in `mentioned` (precedence: mentioned > replied > commented, one notification per recipient) |
+| `create_comment` participants ([:1062–1064](backend/open_webui/routers/workos.py:1062)) | `commented` | **YES** — `_participants` set filtered by `can_see_workstream` before `notify()` (closes G4); excludes both `mentioned` and `replied_to` |
 | `create_task` ([:629–630](backend/open_webui/routers/workos.py:629)) | `assigned` | **YES** — `validate_assignees` ensures only visible members reach `notify()` (closes G3) |
 | `update_task` ([:668–669](backend/open_webui/routers/workos.py:668)) | `assigned` | **YES** |
 | `update_task` ([:670–673](backend/open_webui/routers/workos.py:670)) | `status_changed` | **YES** |
