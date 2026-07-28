@@ -9,7 +9,7 @@
 	import { canEditTask } from '../../lib/roles';
 	import { user } from '$lib/stores';
 	import type { Task, Subtask } from '../../lib/types';
-	import { resolveRename } from '../../lib/subtaskPanel';
+	import { computeSortKey, resolveRename, type SortKeyUpdate } from '../../lib/subtaskPanel';
 
 	export let task: Task;
 
@@ -72,6 +72,62 @@
 			notifyFailed
 		);
 	}
+
+	let dragIndex: number | null = null;
+	let dropIndex: number | null = null; // gap index 0..n in the sorted list
+	let rowEls: HTMLElement[] = [];
+
+	function dragStart(i: number, e: PointerEvent) {
+		if (e.button !== 0) return;
+		dragIndex = i;
+		dropIndex = null;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	function dragMove(e: PointerEvent) {
+		if (dragIndex === null) return;
+		let gap = rowEls.length;
+		for (let i = 0; i < rowEls.length; i++) {
+			const el = rowEls[i];
+			if (!el) continue;
+			const r = el.getBoundingClientRect();
+			if (e.clientY < r.top + r.height / 2) {
+				gap = i;
+				break;
+			}
+		}
+		dropIndex = gap;
+	}
+
+	function dragEnd() {
+		if (dragIndex === null) return;
+		const from = dragIndex;
+		const gap = dropIndex;
+		dragIndex = null;
+		dropIndex = null;
+		if (gap === null) return;
+		// gap is an insertion point in the list INCLUDING the dragged row;
+		// removing that row first shifts positions after it down by one.
+		const to = gap > from ? gap - 1 : gap;
+		void applyReorder(computeSortKey(sorted, from, to));
+	}
+
+	async function applyReorder(updates: SortKeyUpdate[]) {
+		if (!updates.length) return;
+		const results = await Promise.allSettled(
+			updates.map((u) => editSubtask(u.id, { sort_key: u.sort_key }))
+		);
+		// One toast per batch even if several row PATCHes fail (renumber case).
+		if (results.some((r) => r.status === 'rejected')) notifyFailed();
+	}
+
+	function moveByKeyboard(i: number, e: KeyboardEvent) {
+		if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+		e.preventDefault();
+		const to = e.key === 'ArrowUp' ? i - 1 : i + 1;
+		if (to < 0 || to >= sorted.length) return;
+		void applyReorder(computeSortKey(sorted, i, to));
+	}
 </script>
 
 <div class="pt-4 space-y-3">
@@ -102,10 +158,29 @@
 	{/if}
 
 	<div class="space-y-[5px]">
-		{#each sorted as subtask (subtask.id)}
+		{#each sorted as subtask, i (subtask.id)}
+			{#if dragIndex !== null && dropIndex === i}
+				<div class="h-0.5 rounded bg-primary"></div>
+			{/if}
 			<div
-				class="group flex items-center gap-2.5 rounded-[10px] bg-gray-50 px-3 py-2.5 transition-colors hover:bg-gray-100 dark:bg-gray-900/50 dark:hover:bg-gray-800/60"
+				bind:this={rowEls[i]}
+				class="group flex items-center gap-2.5 rounded-[10px] bg-gray-50 px-3 py-2.5 transition-colors hover:bg-gray-100 dark:bg-gray-900/50 dark:hover:bg-gray-800/60 {dragIndex ===
+				i
+					? 'opacity-50'
+					: ''}"
 			>
+				<button
+					type="button"
+					class="wos-drag wos-reveal -ml-1 shrink-0 cursor-grab touch-none text-gray-300 opacity-0 transition-opacity hover:text-gray-500 focus-visible:opacity-100 group-hover:opacity-100 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
+					aria-label="Reorder subtask (Arrow keys to move)"
+					onpointerdown={(e) => dragStart(i, e)}
+					onpointermove={dragMove}
+					onpointerup={dragEnd}
+					onpointercancel={dragEnd}
+					onkeydown={(e) => moveByKeyboard(i, e)}
+				>
+					<Icon name="grip-vertical" size={14} />
+				</button>
 				<button
 					type="button"
 					role="checkbox"
@@ -220,6 +295,9 @@
 				</span>
 			</div>
 		{/each}
+		{#if dragIndex !== null && dropIndex === sorted.length}
+			<div class="h-0.5 rounded bg-primary"></div>
+		{/if}
 	</div>
 
 	{#if !sorted.length}
@@ -272,10 +350,14 @@
 			opacity: 1;
 		}
 	}
-	/* Touch devices have no hover — keep controls visible. */
+	/* Touch devices have no hover — keep controls visible, and reorder is
+	   desktop-only (spec): hide the drag handle entirely. */
 	@media (hover: none) {
 		.wos-reveal {
 			opacity: 1 !important;
+		}
+		.wos-drag {
+			display: none;
 		}
 	}
 </style>
