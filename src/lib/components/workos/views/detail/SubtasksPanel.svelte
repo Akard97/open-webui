@@ -17,6 +17,7 @@
 	let title = '';
 	let renamingId: string | null = null;
 	let draft = '';
+	let confirmingId: string | null = null; // row showing the inline delete confirm
 
 	function startRename(subtask: Subtask) {
 		renamingId = subtask.id;
@@ -135,14 +136,14 @@
 	}
 </script>
 
-<div class="pt-4 space-y-3">
+<div class="pt-4 space-y-2">
 	{#if sorted.length}
-		<div class="flex items-center gap-3">
+		<div class="flex items-center gap-2.5">
 			{#if sorted.length <= 24}
-				<div class="flex flex-1 gap-[3px]" aria-hidden="true">
+				<div class="flex flex-1 gap-[2px]" aria-hidden="true">
 					{#each sorted as s, i (s.id)}
 						<div
-							class="h-1.5 flex-1 rounded-[3px] transition-colors duration-300 {i < doneCount
+							class="h-1 flex-1 rounded-[2px] transition-colors duration-300 {i < doneCount
 								? 'bg-primary'
 								: 'bg-gray-200 dark:bg-gray-800'}"
 						></div>
@@ -150,38 +151,58 @@
 				</div>
 			{:else}
 				<div
-					class="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-gray-200 dark:bg-gray-800"
+					class="h-1 flex-1 overflow-hidden rounded-[2px] bg-gray-200 dark:bg-gray-800"
 					aria-hidden="true"
 				>
 					<div
-						class="h-full rounded-[3px] bg-primary transition-[width] duration-300"
+						class="h-full rounded-[2px] bg-primary transition-[width] duration-300"
 						style="width:{(doneCount / sorted.length) * 100}%"
 					></div>
 				</div>
 			{/if}
-			<span class="wos-micro rounded bg-primary/10 px-2 py-0.5 text-primary">
+			<span class="wos-micro text-primary">
 				{doneCount}/{sorted.length} done
 			</span>
 		</div>
 	{/if}
 
-	<div class="space-y-[5px]">
+	<div class="divide-y divide-gray-100 dark:divide-gray-900">
 		{#each sorted as subtask, i (subtask.id)}
 			{#if dragIndex !== null && dropIndex === i}
 				<div class="h-0.5 rounded bg-primary"></div>
 			{/if}
 			<div
 				bind:this={rowEls[i]}
-				class="group flex items-center gap-2.5 rounded-[10px] bg-gray-50 px-3 py-2.5 transition-colors hover:bg-gray-100 dark:bg-gray-900/50 dark:hover:bg-gray-800/60 {dragIndex ===
+				class="group flex items-center gap-2 px-0.5 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 {dragIndex ===
 				i
 					? 'opacity-50'
 					: subtask.completed
 						? 'opacity-75'
 						: ''}"
 			>
+				{#if confirmingId === subtask.id}
+				<div
+					class="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-300"
+				>
+					<span class="min-w-0 truncate">Delete "{subtask.title}"?</span>
+					<div class="ml-auto flex shrink-0 items-center gap-1.5">
+						<Button
+							variant="destructive"
+							size="xs"
+							onclick={() => {
+								confirmingId = null;
+								void removeSubtask(subtask.id).catch(notifyFailed);
+							}}
+						>
+							Delete
+						</Button>
+						<Button variant="outline" size="xs" onclick={() => (confirmingId = null)}>Cancel</Button>
+					</div>
+				</div>
+				{:else}
 				<button
 					type="button"
-					class="wos-drag wos-reveal -ml-1 shrink-0 cursor-grab touch-none text-gray-300 opacity-0 transition-opacity hover:text-gray-500 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
+					class="wos-drag -ml-0.5 shrink-0 cursor-grab touch-none text-gray-300 transition-colors hover:text-gray-500 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
 					aria-label="Reorder subtask (Arrow keys to move)"
 					onpointerdown={(e) => dragStart(i, e)}
 					onpointermove={dragMove}
@@ -189,27 +210,27 @@
 					onpointercancel={dragEnd}
 					onkeydown={(e) => moveByKeyboard(i, e)}
 				>
-					<Icon name="grip-vertical" size={14} />
+					<Icon name="grip-vertical" size={12} />
 				</button>
 				<button
 					type="button"
 					role="checkbox"
 					aria-checked={subtask.completed}
 					aria-label="Toggle subtask completion"
-					class="flex size-[18px] shrink-0 items-center justify-center rounded-full border-2 transition-colors {subtask.completed
+					class="flex size-[15px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors {subtask.completed
 						? 'border-primary bg-primary text-primary-foreground'
 						: 'border-gray-300 hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500'}"
 					onclick={() =>
 						void editSubtask(subtask.id, { completed: !subtask.completed }).catch(notifyFailed)}
 				>
 					{#if subtask.completed}
-						<span class="wos-subcheck-pop"><Icon name="check" size={11} /></span>
+						<span class="wos-subcheck-pop"><Icon name="check" size={10} /></span>
 					{/if}
 				</button>
 				{#if renamingId === subtask.id}
 					<!-- svelte-ignore a11y_autofocus -->
 					<input
-						class="min-w-0 flex-1 bg-transparent text-sm outline-none"
+						class="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
 						aria-label="Rename subtask"
 						bind:value={draft}
 						autofocus
@@ -225,7 +246,7 @@
 				{:else}
 					<button
 						type="button"
-						class="min-w-0 flex-1 truncate text-left text-sm {subtask.completed
+						class="min-w-0 flex-1 truncate text-left text-[13px] {subtask.completed
 							? 'text-gray-400 line-through'
 							: 'text-gray-900 dark:text-gray-100'}"
 						title="Click to rename"
@@ -240,12 +261,12 @@
 						aria-label="Edit subtask assignees"
 					>
 						{#if (subtask.assignee_ids ?? []).length}
-							<AssigneeAvatars ids={subtask.assignee_ids} size={20} max={3} />
+							<AssigneeAvatars ids={subtask.assignee_ids} size={18} max={3} />
 						{:else}
 							<span
-								class="flex size-6 items-center justify-center rounded-full border-[1.5px] border-dashed border-gray-300 text-gray-400 dark:border-gray-700 dark:text-gray-500"
+								class="flex size-[18px] items-center justify-center rounded-full border-[1.5px] border-dashed border-gray-300 text-gray-400 dark:border-gray-700 dark:text-gray-500"
 							>
-								<Icon name="user-plus" size={13} />
+								<Icon name="user-plus" size={11} />
 							</span>
 						{/if}
 					</DropdownMenu.Trigger>
@@ -301,11 +322,12 @@
 						size="icon-xs"
 						class="text-gray-400 hover:text-red-500"
 						title="Delete subtask"
-						onclick={() => void removeSubtask(subtask.id).catch(notifyFailed)}
+						onclick={() => (confirmingId = subtask.id)}
 					>
-						<Icon name="trash" size={14} />
+						<Icon name="trash" size={13} />
 					</Button>
 				</span>
+				{/if}
 			</div>
 		{/each}
 		{#if dragIndex !== null && dropIndex === sorted.length}
@@ -314,23 +336,21 @@
 	</div>
 
 	{#if !sorted.length}
-		<div class="flex flex-col items-center gap-1.5 py-8 text-center">
-			<span class="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-				<Icon name="list-checks" size={18} />
+		<div class="flex flex-col items-center gap-1.5 py-6 text-center">
+			<span class="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+				<Icon name="list-checks" size={16} />
 			</span>
-			<div class="text-sm font-medium text-gray-700 dark:text-gray-300">
+			<div class="text-[13px] font-medium text-gray-700 dark:text-gray-300">
 				Break this task into smaller steps.
 			</div>
 			<div class="text-xs text-gray-400 dark:text-gray-500">Type below — Enter adds the next one.</div>
 		</div>
 	{/if}
 
-	<div
-		class="flex items-center gap-2 rounded-[10px] border-[1.5px] border-gray-200 bg-white px-3 py-2.5 transition-colors focus-within:border-primary dark:border-gray-800 dark:bg-gray-950"
-	>
-		<span class="text-primary"><Icon name="plus" size={15} /></span>
+	<div class="flex items-center gap-2 border-t border-gray-100 px-0.5 py-1.5 dark:border-gray-900">
+		<span class="text-primary"><Icon name="plus" size={14} /></span>
 		<input
-			class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
+			class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-gray-400"
 			placeholder="Add a subtask — Enter adds another"
 			aria-label="Add a subtask"
 			bind:value={title}
