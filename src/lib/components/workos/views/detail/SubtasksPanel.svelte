@@ -9,10 +9,32 @@
 	import { canEditTask } from '../../lib/roles';
 	import { user } from '$lib/stores';
 	import type { Task, Subtask } from '../../lib/types';
+	import { resolveRename } from '../../lib/subtaskPanel';
 
 	export let task: Task;
 
 	let title = '';
+	let renamingId: string | null = null;
+	let draft = '';
+
+	function startRename(subtask: Subtask) {
+		renamingId = subtask.id;
+		draft = subtask.title;
+	}
+
+	// Null renamingId BEFORE acting so the input's blur (fired by unmount)
+	// can't double-commit.
+	function commitRename(subtask: Subtask) {
+		if (renamingId !== subtask.id) return;
+		renamingId = null;
+		const res = resolveRename(subtask.title, draft);
+		if (res.action === 'commit')
+			void editSubtask(subtask.id, { title: res.title }).catch(notifyFailed);
+	}
+
+	function cancelRename() {
+		renamingId = null;
+	}
 
 	// Panel-local sorted view: the store appends realtime/created rows at the end;
 	// sorting here keeps display order canonical and makes sort_key edits
@@ -99,13 +121,31 @@
 						<span class="wos-subcheck-pop"><Icon name="check" size={11} /></span>
 					{/if}
 				</button>
-				<span
-					class="min-w-0 flex-1 truncate text-sm {subtask.completed
-						? 'text-gray-400 line-through'
-						: 'text-gray-900 dark:text-gray-100'}"
-				>
-					{subtask.title}
-				</span>
+				{#if renamingId === subtask.id}
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						class="min-w-0 flex-1 bg-transparent text-sm outline-none"
+						aria-label="Rename subtask"
+						bind:value={draft}
+						autofocus
+						onkeydown={(e) => {
+							if (e.key === 'Enter') commitRename(subtask);
+							if (e.key === 'Escape') cancelRename();
+						}}
+						onblur={() => commitRename(subtask)}
+					/>
+				{:else}
+					<button
+						type="button"
+						class="min-w-0 flex-1 truncate text-left text-sm {subtask.completed
+							? 'text-gray-400 line-through'
+							: 'text-gray-900 dark:text-gray-100'}"
+						title="Click to rename"
+						onclick={() => startRename(subtask)}
+					>
+						{subtask.title}
+					</button>
+				{/if}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger
 						class="inline-flex items-center rounded-md p-0.5 hover:bg-gray-100 dark:hover:bg-gray-900"
