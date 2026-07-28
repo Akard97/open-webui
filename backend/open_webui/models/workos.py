@@ -952,6 +952,8 @@ class WorkosComment(Base):
     user_id = Column(Text)
     body = Column(Text)
     mentions = Column(JSON, default=list)
+    parent_id = Column(Text, nullable=True)   # threading: null = top-level; parent is on the same task
+    deleted_at = Column(BigInteger, nullable=True)  # tombstone marker (body/mentions blanked when set)
     edited_at = Column(BigInteger, nullable=True)
     created_at = Column(BigInteger)
     updated_at = Column(BigInteger)
@@ -969,6 +971,20 @@ class WorkosActivity(Base):
     created_at = Column(BigInteger)
 
 
+class WorkosCommentReaction(Base):
+    __tablename__ = 'workos_comment_reaction'
+
+    id = Column(Text, primary_key=True, unique=True)
+    comment_id = Column(Text)
+    user_id = Column(Text)
+    emoji = Column(Text)
+    created_at = Column(BigInteger)
+
+    __table_args__ = (
+        UniqueConstraint('comment_id', 'user_id', 'emoji', name='uq_workos_reaction'),
+    )
+
+
 class CommentModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -976,6 +992,9 @@ class CommentModel(BaseModel):
     user_id: str
     body: str
     mentions: list = []
+    parent_id: Optional[str] = None
+    deleted_at: Optional[int] = None
+    reactions: list = []
     edited_at: Optional[int] = None
     created_at: int
     updated_at: int
@@ -1039,13 +1058,14 @@ def task_change_activities(actor_id: str, before: dict, after: dict) -> list:
 class CommentsDao:
     async def insert(
         self, task_id: str, user_id: str, body: str, mentions: list,
-        db: Optional[AsyncSession] = None,
+        parent_id: Optional[str] = None, db: Optional[AsyncSession] = None,
     ) -> CommentModel:
         async with get_async_db_context(db) as db:
             now = _now()
             row = WorkosComment(
                 id=_id(), task_id=task_id, user_id=user_id, body=body,
-                mentions=mentions or [], edited_at=None, created_at=now, updated_at=now,
+                mentions=mentions or [], parent_id=parent_id, deleted_at=None,
+                edited_at=None, created_at=now, updated_at=now,
             )
             db.add(row)
             await db.commit()
@@ -1090,6 +1110,27 @@ class CommentsDao:
             await db.execute(delete(WorkosComment).filter_by(id=id))
             await db.commit()
             return True
+
+    async def has_children(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosComment.id).filter_by(parent_id=id).limit(1))
+            return res.scalars().first() is not None
+
+    async def tombstone(self, id: str, db: Optional[AsyncSession] = None) -> Optional[CommentModel]:
+        """Soft-delete: blank content, keep the row so replies stay attached."""
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosComment).filter_by(id=id))
+            row = res.scalars().first()
+            if not row:
+                return None
+            now = _now()
+            row.deleted_at = now
+            row.body = ''
+            row.mentions = []
+            row.updated_at = now
+            await db.commit()
+            await db.refresh(row)
+            return CommentModel.model_validate(row)
 
 
 class ActivityDao:
@@ -1146,7 +1187,53 @@ class ActivityDao:
             return [r[0] for r in res.all()]
 
 
+class ReactionsDao:
+    async def toggle(
+        self, comment_id: str, user_id: str, emoji: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Add the reaction, or remove it if it already exists. True = added."""
+        async with get_async_db_context(db) as db:
+            res = await db.execute(select(WorkosCommentReaction).filter_by(
+                comment_id=comment_id, user_id=user_id, emoji=emoji))
+            row = res.scalars().first()
+            if row:
+                await db.execute(delete(WorkosCommentReaction).filter_by(id=row.id))
+                await db.commit()
+                return False
+            db.add(WorkosCommentReaction(
+                id=_id(), comment_id=comment_id, user_id=user_id, emoji=emoji, created_at=_now(),
+            ))
+            await db.commit()
+            return True
+
+    async def purge_for_comment(self, comment_id: str, db: Optional[AsyncSession] = None) -> None:
+        async with get_async_db_context(db) as db:
+            await db.execute(delete(WorkosCommentReaction).filter_by(comment_id=comment_id))
+            await db.commit()
+
+    async def aggregate_for_comments(
+        self, comment_ids: list, db: Optional[AsyncSession] = None
+    ) -> dict:
+        """{comment_id: [{'emoji','count','user_ids'}]} — entries ordered by first reaction."""
+        if not comment_ids:
+            return {}
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(WorkosCommentReaction)
+                .where(WorkosCommentReaction.comment_id.in_(comment_ids))
+                .order_by(WorkosCommentReaction.created_at.asc())
+            )
+            out: dict = {}
+            for row in res.scalars().all():
+                per = out.setdefault(row.comment_id, {})
+                agg = per.setdefault(row.emoji, {'emoji': row.emoji, 'count': 0, 'user_ids': []})
+                agg['count'] += 1
+                agg['user_ids'].append(row.user_id)
+            return {cid: list(per.values()) for cid, per in out.items()}
+
+
 Comments = CommentsDao()
+Reactions = ReactionsDao()
 Activity = ActivityDao()
 
 
