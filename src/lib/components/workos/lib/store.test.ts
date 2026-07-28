@@ -821,6 +821,120 @@ describe('openTaskById (URL deep-link open)', () => {
 	});
 });
 
+describe('editSubtask serialization + row-scoped rollback', () => {
+	const mkS = (over: Record<string, unknown>) => ({
+		id: 's1', task_id: 'task-1', title: 'Sub', completed: false, assignee_ids: [] as string[],
+		sort_key: 1, created_by_id: 'u1', completed_at: null, created_at: 1, updated_at: 1, ...over
+	});
+
+	beforeEach(() => {
+		subtasks.set([]);
+		vi.mocked(apiMock.updateSubtask).mockClear();
+	});
+
+	it('applies the optimistic update synchronously so rapid toggles compound', async () => {
+		const { editSubtask } = await import('./store');
+		subtasks.set([mkS({ assignee_ids: ['a'] }) as any]);
+		let release!: (v: unknown) => void;
+		vi.mocked(apiMock.updateSubtask).mockImplementationOnce(
+			() => new Promise((r) => { release = r; }) as any
+		);
+		const p = editSubtask('s1', { assignee_ids: ['a', 'b'] } as any);
+		expect((get(subtasks)[0] as any).assignee_ids).toEqual(['a', 'b']); // before the response
+		await Promise.resolve(); // let the queued request start so `release` exists
+		release(mkS({ assignee_ids: ['a', 'b'], updated_at: 2 }));
+		await p;
+	});
+
+	it('serializes edits to the same subtask and never lets a superseded response clobber a newer one', async () => {
+		const { editSubtask } = await import('./store');
+		subtasks.set([mkS({ id: 'sB', assignee_ids: ['a'] }) as any]);
+		let release1!: (v: unknown) => void;
+		let release2!: (v: unknown) => void;
+		vi.mocked(apiMock.updateSubtask)
+			.mockImplementationOnce(() => new Promise((r) => { release1 = r; }) as any)
+			.mockImplementationOnce(() => new Promise((r) => { release2 = r; }) as any);
+		const p1 = editSubtask('sB', { assignee_ids: ['a', 'b'] } as any);
+		const p2 = editSubtask('sB', { assignee_ids: ['a', 'b', 'c'] } as any);
+		await new Promise((r) => setTimeout(r, 0));
+		// The second request must WAIT for the first — not fly concurrently.
+		expect(vi.mocked(apiMock.updateSubtask)).toHaveBeenCalledTimes(1);
+		release1(mkS({ assignee_ids: ['a', 'b'], updated_at: 2 }));
+		await p1;
+		// The older response must not overwrite the newer optimistic value.
+		expect((get(subtasks)[0] as any).assignee_ids).toEqual(['a', 'b', 'c']);
+		await new Promise((r) => setTimeout(r, 0));
+		expect(vi.mocked(apiMock.updateSubtask)).toHaveBeenCalledTimes(2);
+		expect(vi.mocked(apiMock.updateSubtask).mock.calls[1][2]).toEqual({ assignee_ids: ['a', 'b', 'c'] });
+		release2(mkS({ assignee_ids: ['a', 'b', 'c'], updated_at: 3 }));
+		await p2;
+		expect((get(subtasks)[0] as any).assignee_ids).toEqual(['a', 'b', 'c']);
+	});
+
+	it('a failed edit rolls back only its own fields on its own row', async () => {
+		const { editSubtask } = await import('./store');
+		selectedTaskId.set('task-1');
+		subtasks.set([
+			mkS({ id: 'sC1', assignee_ids: ['a'] }) as any,
+			mkS({ id: 'sC2', title: 'Other' }) as any
+		]);
+		vi.mocked(apiMock.updateSubtask).mockRejectedValueOnce({ detail: 'boom', status: 500 });
+		const p = editSubtask('sC1', { assignee_ids: ['a', 'b'] } as any);
+		// Concurrent changes land while the request is in flight: another row
+		// updates, and a realtime event (the pathway concurrent changes actually
+		// arrive by) flips an untouched FIELD on the pending row.
+		subtasks.update((list) => list.map((s) => (s.id === 'sC2' ? { ...s, title: 'Live' } : s)));
+		applyCollabEvent('workos:subtask.updated',
+			mkS({ id: 'sC1', assignee_ids: ['a'], completed: true, completed_at: 2, updated_at: 2 }));
+		await expect(p).rejects.toBeTruthy();
+		const s1 = get(subtasks).find((s) => s.id === 'sC1') as any;
+		const s2 = get(subtasks).find((s) => s.id === 'sC2') as any;
+		expect(s1.assignee_ids).toEqual(['a']); // own field rolled back
+		expect(s1.completed).toBe(true); // untouched field survives
+		expect(s2.title).toBe('Live'); // other row survives
+	});
+
+	it('two consecutive failures leave no phantom optimistic state', async () => {
+		const { editSubtask } = await import('./store');
+		subtasks.set([mkS({ id: 'sD', assignee_ids: ['a'] }) as any]);
+		vi.mocked(apiMock.updateSubtask)
+			.mockRejectedValueOnce({ detail: 'boom', status: 500 })
+			.mockRejectedValueOnce({ detail: 'boom', status: 500 });
+		const p1 = editSubtask('sD', { assignee_ids: ['a', 'b'] } as any);
+		const p2 = editSubtask('sD', { assignee_ids: ['a', 'b', 'c'] } as any);
+		await expect(p1).rejects.toBeTruthy();
+		await expect(p2).rejects.toBeTruthy();
+		// Both edits rejected -> the row returns to the confirmed baseline.
+		expect((get(subtasks)[0] as any).assignee_ids).toEqual(['a']);
+	});
+
+	it('a realtime event mid-queue rebases under pending edits instead of clobbering them', async () => {
+		const { editSubtask } = await import('./store');
+		selectedTaskId.set('task-1');
+		subtasks.set([mkS({ id: 'sE', assignee_ids: ['a'] }) as any]);
+		let release1!: (v: unknown) => void;
+		let release2!: (v: unknown) => void;
+		vi.mocked(apiMock.updateSubtask)
+			.mockImplementationOnce(() => new Promise((r) => { release1 = r; }) as any)
+			.mockImplementationOnce(() => new Promise((r) => { release2 = r; }) as any);
+		const p1 = editSubtask('sE', { assignee_ids: ['a', 'b'] } as any);
+		const p2 = editSubtask('sE', { assignee_ids: ['a', 'b', 'c'] } as any);
+		// The server's own emit for edit 1 lands before its HTTP response.
+		applyCollabEvent('workos:subtask.updated',
+			mkS({ id: 'sE', assignee_ids: ['a', 'b'], title: 'Renamed', updated_at: 2 }));
+		const row = get(subtasks)[0] as any;
+		expect(row.assignee_ids).toEqual(['a', 'b', 'c']); // pending overlay preserved
+		expect(row.title).toBe('Renamed'); // but the event's other fields land
+		await new Promise((r) => setTimeout(r, 0));
+		release1(mkS({ id: 'sE', assignee_ids: ['a', 'b'], title: 'Renamed', updated_at: 3 }));
+		await p1;
+		await new Promise((r) => setTimeout(r, 0));
+		release2(mkS({ id: 'sE', assignee_ids: ['a', 'b', 'c'], title: 'Renamed', updated_at: 4 }));
+		await p2;
+		expect((get(subtasks)[0] as any).assignee_ids).toEqual(['a', 'b', 'c']);
+	});
+});
+
 describe('loadBootstrap selectDefaultWorkstream option', () => {
 	it('skips the default workstream selection when told to', async () => {
 		const api = await import('./api');

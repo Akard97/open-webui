@@ -306,6 +306,115 @@ async def test_cascade_emits_subtask_updated_events(monkeypatch):
     assert events == [st['id']]
 
 
+# ───────────────────── race / atomicity hardening (adversarial review) ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_auto_add_does_not_restore_concurrently_removed_assignee(monkeypatch):
+    """A parent-assignee removal that commits inside the auto-add window must
+    stay removed: the union is computed from the fresh row, never from the
+    snapshot loaded at the top of the request."""
+    real_gate = wr.require_task_writable
+
+    async def _gate_then_remove(user, task, stream, db):
+        await real_gate(user, task, stream, db)
+        # Concurrent admin edit lands inside the window: drop u2 from the parent.
+        await wr.Tasks.update_fields(task.id, {'assignee_ids': ['u1']}, db=db)
+
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        monkeypatch.setattr(wr, 'require_task_writable', _gate_then_remove)
+        r = await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                         json={'title': 'A', 'assignee_ids': ['u3']})
+        assert r.status_code == 200, r.text
+        monkeypatch.setattr(wr, 'require_task_writable', real_gate)
+        parent = (await c.get(f"/api/v1/workos/tasks/{t['id']}")).json()
+        assert parent['assignee_ids'] == ['u1', 'u3']  # u2 must NOT be restored
+
+
+@pytest.mark.asyncio
+async def test_cascade_failure_rolls_back_parent_removal(monkeypatch):
+    """Parent-assignee removal and the subtask strip commit atomically: if the
+    cascade blows up mid-flight the parent update rolls back with it, so the
+    subset invariant can never half-commit."""
+
+    async def _boom(self, db, task_id, removed):
+        raise RuntimeError('injected cascade failure')
+
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                     json={'title': 'A', 'assignee_ids': ['u2']})
+        orig = type(wr.Tasks)._cascade_subtask_assignees
+        monkeypatch.setattr(type(wr.Tasks), '_cascade_subtask_assignees', _boom)
+        with pytest.raises(RuntimeError, match='injected cascade failure'):
+            await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1']})
+        monkeypatch.setattr(type(wr.Tasks), '_cascade_subtask_assignees', orig)
+        parent = (await c.get(f"/api/v1/workos/tasks/{t['id']}")).json()
+        assert parent['assignee_ids'] == ['u1', 'u2']  # parent removal rolled back
+        listed = (await c.get(f"/api/v1/workos/tasks/{t['id']}/subtasks")).json()
+        assert listed[0]['assignee_ids'] == ['u2']  # subtask untouched
+
+
+@pytest.mark.asyncio
+async def test_stale_subtask_write_cannot_exceed_parent_assignees(monkeypatch):
+    """Subtask assignee writes intersect against the parent read in the same
+    transaction — a stale full-list write racing the removal cascade can never
+    resurrect a removed assignee on a subtask."""
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                           json={'title': 'A', 'assignee_ids': ['u2']})).json()
+        await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1']})
+        # Stale writer that raced past the endpoint checks replays the old list.
+        updated = await wr.Subtasks.update_fields(st['id'], {'assignee_ids': ['u2']})
+        assert updated.assignee_ids == []  # intersected against fresh parent ['u1']
+
+
+@pytest.mark.asyncio
+async def test_stale_subtask_insert_cannot_exceed_parent_assignees(monkeypatch):
+    """Same subset enforcement at insert time: a create landing after a
+    concurrent parent removal must not carry the removed assignee."""
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        await c.patch(f"/api/v1/workos/tasks/{t['id']}", json={'assignee_ids': ['u1']})
+        inserted = await wr.Subtasks.insert(t['id'], 'stale', 'u1', assignee_ids=['u2'])
+        assert inserted.assignee_ids == []
+
+
+@pytest.mark.asyncio
+async def test_assignee_writers_serialize_on_the_task_lock(monkeypatch):
+    """SQLite (the default backend) has no row locks — with_for_update() is a
+    no-op there — so every assignee-invariant writer must queue on the
+    process-local task lock: while it is held, merge, cascade and subtask
+    writes all block; on release they land strictly in order."""
+    import asyncio
+    from open_webui.models import workos as wm
+
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c, assignee_ids=['u1', 'u2'])
+        st = (await c.post(f"/api/v1/workos/tasks/{t['id']}/subtasks",
+                           json={'title': 'A', 'assignee_ids': ['u2']})).json()
+
+    lock = wm._task_write_lock(t['id'])
+    async with lock:
+        writers = [
+            asyncio.create_task(wm.Tasks.merge_assignees(t['id'], ['u3'])),
+            asyncio.create_task(wm.Tasks.update_with_cascade(t['id'], {'assignee_ids': ['u1', 'u3']})),
+            asyncio.create_task(wm.Subtasks.update_fields(st['id'], {'assignee_ids': ['u1']})),
+        ]
+        await asyncio.sleep(0.1)
+        assert not any(w.done() for w in writers)  # all queued behind the held lock
+    for w in writers:
+        await w
+    task = await wm.Tasks.get_by_id(t['id'])
+    subs = await wm.Subtasks.list_for_task(t['id'])
+    # FIFO wakeup: merge -> [u1,u2,u3]; cascade -> [u1,u3], stripping u2 from
+    # the subtask; the subtask write then intersects [u1] against the fresh parent.
+    assert task.assignee_ids == ['u1', 'u3']
+    assert subs[0].assignee_ids == ['u1']
+
+
 @pytest.mark.asyncio
 async def test_cascade_emits_only_for_touched_subtasks(monkeypatch):
     """Two subtasks, one loses an assignee — exactly one subtask.updated fires."""

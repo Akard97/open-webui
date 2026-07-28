@@ -51,6 +51,36 @@
   and is visibility-filtered by notify() like every other type. subtask.write
   chain unchanged (subset invariant ⇒ subtask assignee is always a parent
   assignee). Assignment still confers no visibility.
+
+  2026-07-28 (same day, race hardening after adversarial review): the subset
+  invariant is now enforced transactionally, not just at the endpoint layer.
+  (1) Auto-add uses Tasks.merge_assignees — the union is computed from the
+  parent row re-read (FOR UPDATE where supported) inside the write transaction,
+  never from the request's snapshot, so a concurrent assignee REMOVAL (an
+  access revocation, since parent assignment grants task.write) can no longer
+  be silently undone by a racing subtask write. (2) Parent-assignee removal and
+  the subtask strip commit atomically via Tasks.update_with_cascade — the
+  invariant can never half-commit; realtime emits fire only after commit.
+  (3) Subtasks.insert/update_fields intersect assignee_ids against the parent
+  read in the same transaction (Subtasks._parent_subset), so whichever side of
+  a race commits second still satisfies the invariant. No capability or
+  visibility semantics changed — only the concurrency guarantees.
+
+  2026-07-28 (round 3, after a second adversarial review): SQLite — the
+  default backend — has no row locks (with_for_update() is a no-op there and
+  the legacy pysqlite transaction mode doesn't even open a transaction for the
+  SELECT), so round 2's in-transaction reads were not actually serialized on
+  SQLite. All assignee-invariant writers (Tasks.merge_assignees,
+  Tasks.update_with_cascade, Subtasks.insert, Subtasks.update_fields assignee
+  path) now additionally serialize on a process-local per-task asyncio lock
+  (models/workos.py _task_write_lock). On Postgres the retained
+  with_for_update() row locks protect across processes; on SQLite the lock is
+  the guarantee and the supported topology is a single app process (locks are
+  never evicted — eviction races would break mutual exclusion). Client side,
+  editSubtask renders pending rows as confirmed-server-baseline ⊕ pending
+  overlays: failed edits drop their overlay (no phantom optimistic state) and
+  realtime subtask.updated payloads rebase under pending edits instead of
+  clobbering them.
 -->
 
 # WorkOS — Access Control & Visibility (Reference)

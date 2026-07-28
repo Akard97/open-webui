@@ -452,18 +452,71 @@ export async function addSubtask(taskId: string, title: string): Promise<void> {
 	if (refreshed) tasks.update((list) => list.map((t) => (t.id === taskId ? refreshed : t)));
 }
 
-export async function editSubtask(id: string, fields: Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key' | 'assignee_ids'>>): Promise<void> {
-	const before = get(subtasks);
-	subtasks.update((list) => list.map((s) => (s.id === id ? { ...s, ...fields } : s)));
-	try {
-		const saved = await api.updateSubtask(token(), id, fields);
-		subtasks.update((list) => list.map((s) => (s.id === id ? saved : s)));
-		const refreshed = await api.getTask(token(), saved.task_id).catch(() => null);
-		if (refreshed) tasks.update((list) => list.map((t) => (t.id === saved.task_id ? refreshed : t)));
-	} catch (e) {
-		subtasks.set(before);
-		throw e;
+// Per-subtask edit pipeline. The server replaces whole values (assignee_ids is
+// a full-list write), so same-row requests serialize through a chain. While
+// edits are in flight the rendered row = confirmed server baseline ⊕ the
+// pending edits' field overlays, in order: a failed edit just drops its
+// overlay (no phantom state left behind, nothing else clobbered), and realtime
+// payloads update the baseline UNDER the overlays instead of overwriting them
+// (see applyCollabEvent).
+type SubtaskEditFields = Partial<Pick<Subtask, 'title' | 'completed' | 'sort_key' | 'assignee_ids'>>;
+const subtaskEditChain = new Map<string, Promise<unknown>>();
+const subtaskEditPending = new Map<string, SubtaskEditFields[]>();
+const subtaskBaseline = new Map<string, Subtask>();
+
+function rebaseSubtaskRow(id: string): void {
+	const pending = subtaskEditPending.get(id) ?? [];
+	subtasks.update((list) => list.map((s) => {
+		if (s.id !== id) return s;
+		const base = subtaskBaseline.get(id) ?? s;
+		return pending.reduce((row, fields) => ({ ...row, ...fields }), base);
+	}));
+}
+
+/** Fold a realtime subtask payload in through the baseline, so pending
+ * optimistic edits are rebased on top instead of clobbered. */
+function applySubtaskRealtime(payload: any): void {
+	if (subtaskEditPending.has(payload.id)) {
+		subtaskBaseline.set(payload.id, payload);
+		rebaseSubtaskRow(payload.id);
+	} else {
+		subtasks.update((l) => l.map((s) => (s.id === payload.id ? { ...s, ...payload } : s)));
 	}
+}
+
+export function editSubtask(id: string, fields: SubtaskEditFields): Promise<void> {
+	const current = get(subtasks).find((s) => s.id === id);
+	if (current && !subtaskBaseline.has(id)) subtaskBaseline.set(id, current);
+	subtaskEditPending.set(id, [...(subtaskEditPending.get(id) ?? []), fields]);
+	rebaseSubtaskRow(id); // optimistic apply stays synchronous so rapid toggles compound
+	// Success or failure, this edit's overlay is done once the request settles:
+	// drop it and re-render from baseline ⊕ the edits still in flight.
+	const drop = () => {
+		const rest = (subtaskEditPending.get(id) ?? []).filter((f) => f !== fields);
+		if (rest.length) subtaskEditPending.set(id, rest);
+		else subtaskEditPending.delete(id);
+		rebaseSubtaskRow(id);
+		if (!rest.length) subtaskBaseline.delete(id);
+	};
+	const run = (subtaskEditChain.get(id) ?? Promise.resolve()).then(async () => {
+		try {
+			const saved = await api.updateSubtask(token(), id, fields);
+			subtaskBaseline.set(id, saved); // confirmed baseline
+			drop();
+			const refreshed = await api.getTask(token(), saved.task_id).catch(() => null);
+			if (refreshed) tasks.update((list) => list.map((t) => (t.id === saved.task_id ? refreshed : t)));
+		} catch (e) {
+			drop();
+			throw e;
+		}
+	});
+	// Chain survives failures; drop the bookkeeping once the pipeline drains.
+	const tail = run.catch(() => {});
+	subtaskEditChain.set(id, tail);
+	void tail.then(() => {
+		if (subtaskEditChain.get(id) === tail) subtaskEditChain.delete(id);
+	});
+	return run;
 }
 
 export async function removeSubtask(id: string): Promise<void> {
@@ -946,8 +999,10 @@ export function applyCollabEvent(event: string, payload: any): void {
 	} else if (event === 'workos:subtask.created') {
 		subtasks.update((l) => (l.some((s) => s.id === payload.id) ? l : [...l, payload]));
 	} else if (event === 'workos:subtask.updated') {
-		subtasks.update((l) => l.map((s) => (s.id === payload.id ? { ...s, ...payload } : s)));
+		applySubtaskRealtime(payload);
 	} else if (event === 'workos:subtask.deleted') {
+		subtaskEditPending.delete(payload.id);
+		subtaskBaseline.delete(payload.id);
 		subtasks.update((l) => l.filter((s) => s.id !== payload.id));
 	}
 }

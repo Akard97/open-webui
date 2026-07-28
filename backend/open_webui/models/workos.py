@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 import uuid
@@ -24,6 +25,25 @@ from open_webui.internal.db import Base, get_async_db_context
 
 def _now() -> int:
     return int(time.time() * 1000)
+
+
+# Process-local writer locks for a task's assignee-invariant sections (parent
+# merge, removal cascade, subtask assignee writes). SQLite — the default
+# backend — has no row locks (with_for_update() is a no-op there), so these
+# read-modify-write sections serialize through this lock instead; on Postgres
+# the retained with_for_update() row locks additionally protect across
+# processes. On SQLite the supported topology is a single app process.
+# Entries are never evicted: locks are tiny, keyed by task id, and eviction
+# races (two coroutines holding different Lock objects for the same task)
+# would silently break mutual exclusion.
+_task_write_locks: dict[str, asyncio.Lock] = {}
+
+
+def _task_write_lock(task_id: str) -> asyncio.Lock:
+    lock = _task_write_locks.get(task_id)
+    if lock is None:
+        lock = _task_write_locks.setdefault(task_id, asyncio.Lock())
+    return lock
 
 
 def _id() -> str:
@@ -724,17 +744,96 @@ class TasksDao:
             row = res.scalars().first()
             if not row:
                 return None
-            prev_status = row.status
-            for k, v in fields.items():
-                setattr(row, k, v)
-            if 'status' in fields and fields['status'] != prev_status:
-                # Stamp only on a real transition; a no-op re-save of 'done' must not
-                # shift completion history (feeds the Overview momentum chart).
-                row.completed_at = _now() if fields['status'] == 'done' else None
-            row.updated_at = _now()
+            self._apply_fields(row, fields)
             await db.commit()
             await db.refresh(row)
             return (await self._with_counts([row], db))[0]
+
+    def _apply_fields(self, row, fields: dict) -> None:
+        prev_status = row.status
+        for k, v in fields.items():
+            setattr(row, k, v)
+        if 'status' in fields and fields['status'] != prev_status:
+            # Stamp only on a real transition; a no-op re-save of 'done' must not
+            # shift completion history (feeds the Overview momentum chart).
+            row.completed_at = _now() if fields['status'] == 'done' else None
+        row.updated_at = _now()
+
+    async def merge_assignees(
+        self, id: str, add_ids: list, db: Optional[AsyncSession] = None
+    ) -> Optional[tuple[TaskModel, TaskModel]]:
+        """Union ``add_ids`` into the task's assignee list atomically.
+
+        The union is computed from the row read (FOR UPDATE where the backend
+        supports it) inside this transaction — never from a caller snapshot —
+        so a concurrent removal that committed after the caller loaded the task
+        stays removed unless explicitly re-requested. Returns (before, after)
+        models, or None if the task is gone.
+        """
+        async with _task_write_lock(id), get_async_db_context(db) as db:
+            try:
+                res = await db.execute(select(WorkosTask).filter_by(id=id).with_for_update())
+                row = res.scalars().first()
+                if not row:
+                    return None
+                before = (await self._with_counts([row], db))[0]
+                missing = [uid for uid in add_ids if uid not in (row.assignee_ids or [])]
+                if not missing:
+                    return before, before
+                row.assignee_ids = [*(row.assignee_ids or []), *missing]
+                row.updated_at = _now()
+                await db.commit()
+                await db.refresh(row)
+                return before, (await self._with_counts([row], db))[0]
+            except Exception:
+                await db.rollback()
+                raise
+
+    async def _cascade_subtask_assignees(self, db: AsyncSession, task_id: str, removed: list) -> list:
+        """Strip ``removed`` from every subtask of the task. Runs inside the
+        caller's transaction and does NOT commit; returns the changed rows."""
+        res = await db.execute(select(WorkosSubtask).filter_by(task_id=task_id))
+        changed = []
+        for st in res.scalars().all():
+            kept = [uid for uid in (st.assignee_ids or []) if uid not in removed]
+            if kept != (st.assignee_ids or []):
+                st.assignee_ids = kept
+                st.updated_at = _now()
+                changed.append(st)
+        return changed
+
+    async def update_with_cascade(
+        self, id: str, fields: dict, db: Optional[AsyncSession] = None
+    ) -> Optional[tuple[TaskModel, list[SubtaskModel]]]:
+        """update_fields plus the subtask-assignee strip in ONE transaction.
+
+        Dropping a parent assignee and stripping them from subtasks commit (or
+        roll back) together, so the "subtask assignees ⊆ parent assignees"
+        invariant can never half-commit. ``removed`` is computed from the row
+        read in this transaction, not a caller snapshot. Returns
+        (task, changed_subtasks) or None if the task is gone.
+        """
+        async with _task_write_lock(id), get_async_db_context(db) as db:
+            try:
+                res = await db.execute(select(WorkosTask).filter_by(id=id).with_for_update())
+                row = res.scalars().first()
+                if not row:
+                    return None
+                prev_assignees = list(row.assignee_ids or [])
+                self._apply_fields(row, fields)
+                changed_rows = []
+                if 'assignee_ids' in fields:
+                    removed = [uid for uid in prev_assignees if uid not in (row.assignee_ids or [])]
+                    if removed:
+                        changed_rows = await self._cascade_subtask_assignees(db, id, removed)
+                # Capture the cascade results before commit expires the rows.
+                changed = [SubtaskModel.model_validate(st) for st in changed_rows]
+                await db.commit()
+                await db.refresh(row)
+                return (await self._with_counts([row], db))[0], changed
+            except Exception:
+                await db.rollback()
+                raise
 
     async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
         async with get_async_db_context(db) as db:
@@ -751,16 +850,28 @@ Tasks = TasksDao()
 
 
 class SubtasksDao:
+    @staticmethod
+    async def _parent_subset(db: AsyncSession, task_id: str, assignee_ids: list) -> list:
+        """Intersect ``assignee_ids`` against the parent task read (FOR UPDATE
+        where supported) in the caller's transaction. Enforces the "subtask
+        assignees ⊆ parent assignees" invariant at the write itself, so a stale
+        list racing a parent-removal cascade can never resurrect a removed
+        assignee — whichever transaction commits second still satisfies it."""
+        res = await db.execute(select(WorkosTask).filter_by(id=task_id).with_for_update())
+        parent = res.scalars().first()
+        allowed = set(parent.assignee_ids or []) if parent else set()
+        return [uid for uid in assignee_ids if uid in allowed]
+
     async def insert(
         self, task_id: str, title: str, created_by_id: Optional[str],
         *, assignee_ids: Optional[list] = None, sort_key: Optional[float] = None,
         db: Optional[AsyncSession] = None,
     ) -> SubtaskModel:
-        async with get_async_db_context(db) as db:
+        async with _task_write_lock(task_id), get_async_db_context(db) as db:
             now = _now()
             row = WorkosSubtask(
                 id=_id(), task_id=task_id, title=title, completed=False,
-                assignee_ids=assignee_ids or [],
+                assignee_ids=await self._parent_subset(db, task_id, assignee_ids or []),
                 sort_key=sort_key if sort_key is not None else float(now),
                 created_by_id=created_by_id, completed_at=None, created_at=now, updated_at=now,
             )
@@ -784,18 +895,38 @@ class SubtasksDao:
 
     async def update_fields(self, id: str, fields: dict, db: Optional[AsyncSession] = None) -> Optional[SubtaskModel]:
         async with get_async_db_context(db) as db:
-            res = await db.execute(select(WorkosSubtask).filter_by(id=id))
-            row = res.scalars().first()
-            if not row:
+            if 'assignee_ids' not in fields:
+                res = await db.execute(select(WorkosSubtask).filter_by(id=id))
+                row = res.scalars().first()
+                if not row:
+                    return None
+                return await self._apply_and_commit(row, fields, db)
+            # Assignee writes serialize on the parent's task lock. task_id is
+            # immutable on subtasks, so reading it unlocked is safe; the row
+            # itself is re-read under the lock.
+            res = await db.execute(select(WorkosSubtask.task_id).filter_by(id=id))
+            task_id = res.scalar_one_or_none()
+            if task_id is None:
                 return None
-            if 'completed' in fields:
-                row.completed_at = _now() if fields['completed'] else None
-            for k, v in fields.items():
-                setattr(row, k, v)
-            row.updated_at = _now()
-            await db.commit()
-            await db.refresh(row)
-            return SubtaskModel.model_validate(row)
+            async with _task_write_lock(task_id):
+                res = await db.execute(select(WorkosSubtask).filter_by(id=id))
+                row = res.scalars().first()
+                if not row:
+                    return None
+                fields = {**fields, 'assignee_ids':
+                          await self._parent_subset(db, task_id, fields['assignee_ids'])}
+                return await self._apply_and_commit(row, fields, db)
+
+    @staticmethod
+    async def _apply_and_commit(row, fields: dict, db: AsyncSession) -> SubtaskModel:
+        if 'completed' in fields:
+            row.completed_at = _now() if fields['completed'] else None
+        for k, v in fields.items():
+            setattr(row, k, v)
+        row.updated_at = _now()
+        await db.commit()
+        await db.refresh(row)
+        return SubtaskModel.model_validate(row)
 
     async def delete(self, id: str, db: Optional[AsyncSession] = None) -> bool:
         async with get_async_db_context(db) as db:

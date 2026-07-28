@@ -731,14 +731,26 @@ async def update_task(
         if effective_flag and not await Attachments.list_for_task(task_id, db=db):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='ATTACHMENT_REQUIRED')
     before = task.model_dump()
-    updated = await Tasks.update_fields(task_id, fields, db=db)
+    # Parent update + subtask-assignee cascade commit in ONE transaction: the
+    # "subtask assignees ⊆ parent assignees" invariant must never half-commit.
+    result = await Tasks.update_with_cascade(task_id, fields, db=db)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Task not found.')
+    updated, cascaded = result
     # Auto-delete tags that this edit orphaned (removed here and used by no other task).
     deleted_label_ids: list[str] = []
     if 'labels' in fields:
         removed = [l for l in (before.get('labels') or []) if l not in (updated.labels or [])]
         if removed:
             deleted_label_ids = await Labels.prune_unused(updated.team_id, removed, db=db)
+    # Realtime only after the transaction committed — clients never see a state
+    # the database might roll back.
     await emit_event('workos:task.updated', f'workos:workstream:{updated.workstream_id}', updated.model_dump())
+    for st in cascaded:
+        await emit_event(
+            'workos:subtask.updated', f'workos:workstream:{updated.workstream_id}',
+            {**st.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id},
+        )
     # Activity log for the changed fields.
     for act in task_change_activities(user.id, before, updated.model_dump()):
         row = await Activity.insert(task_id, updated.team_id, user.id, act['type'], act['data'], db=db)
@@ -752,19 +764,6 @@ async def update_task(
         await notify(request, db, recipients={updated.created_by_id, *(updated.assignee_ids or [])}, actor=user,
                      type='status_changed', task=updated,
                      extra={'from': before.get('status'), 'to': updated.status})
-    # Cascade: dropping a parent assignee strips them from every subtask, keeping
-    # the invariant "subtask assignees are a subset of parent assignees".
-    if 'assignee_ids' in fields:
-        removed = [uid for uid in (before.get('assignee_ids') or []) if uid not in (updated.assignee_ids or [])]
-        if removed:
-            for st in await Subtasks.list_for_task(task_id, db=db):
-                kept = [uid for uid in (st.assignee_ids or []) if uid not in removed]
-                if kept != (st.assignee_ids or []):
-                    changed = await Subtasks.update_fields(st.id, {'assignee_ids': kept}, db=db)
-                    await emit_event(
-                        'workos:subtask.updated', f'workos:workstream:{updated.workstream_id}',
-                        {**changed.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id},
-                    )
     return {**updated.model_dump(), 'deleted_label_ids': deleted_label_ids}
 
 
@@ -1340,13 +1339,18 @@ async def _expand_parent_assignees(request: Request, user, task, stream, assigne
             raise
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail='Only task editors can add new people to the task.')
-    before = task.model_dump()
-    updated = await Tasks.update_fields(
-        task.id, {'assignee_ids': [*(task.assignee_ids or []), *missing]}, db=db
-    )
+    # Atomic union against the row as it is NOW — a concurrent assignee removal
+    # committed after this request's snapshot must stay removed, or the auto-add
+    # would silently hand edit rights back to a revoked user.
+    merged = await Tasks.merge_assignees(task.id, assignee_ids, db=db)
+    if merged is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Task not found.')
+    before_task, updated = merged
+    if (updated.assignee_ids or []) == (before_task.assignee_ids or []):
+        return updated
     # No task.updated emit here — both callers emit the final parent state via
     # _emit_parent_after_subtask once the subtask write lands.
-    for act in task_change_activities(user.id, before, updated.model_dump()):
+    for act in task_change_activities(user.id, before_task.model_dump(), updated.model_dump()):
         row = await Activity.insert(task.id, updated.team_id, user.id, act['type'], act['data'], db=db)
         await _emit_task_room('workos:activity.created', updated,
                               {**row.model_dump(), 'workstream_id': updated.workstream_id, 'actor_id': user.id})
