@@ -15,7 +15,7 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.storage.provider import Storage
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
-    Labels, Tasks, Comments, Activity, Attachments, Notifications, Subtasks,
+    Labels, Tasks, Comments, Reactions, Activity, Attachments, Notifications, Subtasks,
     TeamModel, WorkspaceModel, WorkstreamModel, TaskModel, LabelModel,
     CommentModel, ActivityModel, AttachmentModel, NotificationModel,
     parse_mentions, task_change_activities,
@@ -934,6 +934,7 @@ async def access_overview(
 
 class CommentForm(BaseModel):
     body: str
+    parent_id: Optional[str] = None  # create-only; ignored on PATCH
 
 
 # ──────────────────────────────── collaboration: helpers ────────────────────────────────
@@ -1008,7 +1009,14 @@ async def list_comments(
 ):
     await require_workos(request, user, db)
     await require_task_visible(user, task_id, db)
-    return await Comments.list_for_task(task_id, db=db)
+    items = await Comments.list_for_task(task_id, db=db)
+    reactions = await Reactions.aggregate_for_comments([c.id for c in items], db=db)
+    out = []
+    for c in items:
+        d = c.model_dump()
+        d['reactions'] = reactions.get(c.id, [])
+        out.append(d)
+    return out
 
 
 @router.post('/tasks/{task_id}/comments')
@@ -1021,8 +1029,19 @@ async def create_comment(
     body = (form.body or '').strip()
     if not body:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment body required.')
+    parent = None
+    if form.parent_id:
+        parent = await Comments.get_by_id(form.parent_id, db=db)
+        if not parent:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Parent comment not found.')
+        if parent.task_id != task_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='Parent comment belongs to another task.')
+        if parent.deleted_at:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='Cannot reply to a deleted comment.')
     mentions = parse_mentions(body)
-    comment = await Comments.insert(task_id, user.id, body, mentions, db=db)
+    comment = await Comments.insert(task_id, user.id, body, mentions, parent_id=form.parent_id, db=db)
     activity = await Activity.insert(task_id, task.team_id, user.id, 'comment_added', {}, db=db)
     payload = {**comment.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
     await _emit_task_room('workos:comment.created', task, payload)
@@ -1050,6 +1069,8 @@ async def update_comment(
     existing = await Comments.get_by_id(comment_id, db=db)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
+    if existing.deleted_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment was deleted.')
     task, _ = await require_task_visible(user, existing.task_id, db)
     await require_capability('comment.edit', user, db, author_id=existing.user_id)
     body = (form.body or '').strip()
@@ -1080,6 +1101,13 @@ async def delete_comment(
     task, stream = await require_task_visible(user, existing.task_id, db)
     ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
     await require_capability('comment.delete', user, db, team_id=ws.team_id, author_id=existing.user_id)
+    if await Comments.has_children(comment_id, db=db):
+        await Reactions.purge_for_comment(comment_id, db=db)
+        tomb = await Comments.tombstone(comment_id, db=db)
+        payload = {**tomb.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
+        await _emit_task_room('workos:comment.updated', task, payload)
+        return {'deleted': True, 'tombstoned': True}
+    await Reactions.purge_for_comment(comment_id, db=db)
     deleted = await Comments.delete(comment_id, db=db)
     await _emit_task_room('workos:comment.deleted',
                           task, {'id': comment_id, 'task_id': task.id, 'workstream_id': task.workstream_id,
