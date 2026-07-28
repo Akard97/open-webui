@@ -131,6 +131,24 @@ over **verbatim** — no changes to its markup, logic, or permissions gating.
 - Component-level behavior verified by browser smoke after build (checkbox
   pop, hover reveals, quick-add chaining, drag, dark mode, mobile).
 
+## Revision — 2026-07-28 post-smoke (commit 6f3f8d89b)
+
+User feedback after live smoke: rows read chunkier than the rest of the drawer.
+Approved via mockup ("compact refit", inline confirm = option B):
+
+- Rows are now transparent with hairline dividers (`divide-y`), hover tint only —
+  the soft-fill slabs are gone. One size down across the board: 13px title text,
+  15px checkbox, 18px avatars, 12px grip, 4px progress strip with plain teal
+  done-count text (no badge pill).
+- Quick-add is a borderless ghost row under a hairline top border (no boxed
+  input).
+- Drag grip is ALWAYS visible on desktop (no hover-reveal); still hidden on
+  touch. Trash stays hover-reveal.
+- Delete no longer fires immediately: the trash swaps the row content for an
+  inline confirmation strip (red tint, "Delete "title"?", destructive
+  Delete + outline Cancel, `size="xs"`). One pending confirm at a time
+  (`confirmingId`); confirming row hides its normal content until resolved.
+
 ## Out of scope
 
 - Assignee dropdown changes of any kind.
