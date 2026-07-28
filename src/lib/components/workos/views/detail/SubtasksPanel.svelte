@@ -74,6 +74,27 @@
 		);
 	}
 
+	// Grow a textarea to fit its content; the param ties re-measuring to the
+	// bound value so programmatic clears (submit) shrink it back.
+	function autogrow(el: HTMLTextAreaElement, _value: string) {
+		const resize = () => {
+			el.style.height = 'auto';
+			el.style.height = `${el.scrollHeight}px`;
+		};
+		resize();
+		return { update: resize };
+	}
+
+	// Browsers insert a newline for Shift+Enter natively but not Alt+Enter —
+	// do it by hand and fire input so bind:value stays in sync.
+	function insertNewline(el: HTMLTextAreaElement) {
+		const start = el.selectionStart;
+		const end = el.selectionEnd;
+		el.value = el.value.slice(0, start) + '\n' + el.value.slice(end);
+		el.selectionStart = el.selectionEnd = start + 1;
+		el.dispatchEvent(new Event('input'));
+	}
+
 	let dragIndex: number | null = null;
 	let dropIndex: number | null = null; // gap index 0..n in the sorted list
 	let rowEls: HTMLElement[] = [];
@@ -199,24 +220,34 @@
 				</button>
 				{#if renamingId === subtask.id}
 					<!-- svelte-ignore a11y_autofocus -->
-					<input
-						class="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+					<textarea
+						class="min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-[13px] leading-[19px] outline-none"
 						aria-label="Rename subtask"
+						rows={1}
 						bind:value={draft}
+						use:autogrow={draft}
 						autofocus
 						onkeydown={(e) => {
-							if (e.key === 'Enter') commitRename(subtask);
+							if (e.key === 'Enter') {
+								if (e.altKey) {
+									e.preventDefault();
+									insertNewline(e.currentTarget);
+								} else if (!e.shiftKey) {
+									e.preventDefault();
+									commitRename(subtask);
+								}
+							}
 							if (e.key === 'Escape') {
 								e.stopPropagation();
 								cancelRename();
 							}
 						}}
 						onblur={() => commitRename(subtask)}
-					/>
+					></textarea>
 				{:else}
 					<button
 						type="button"
-						class="min-w-0 flex-1 whitespace-normal break-words text-left text-[13px] leading-[19px] {subtask.completed
+						class="min-w-0 flex-1 whitespace-pre-wrap break-words text-left text-[13px] leading-[19px] {subtask.completed
 							? 'text-gray-400 line-through'
 							: 'text-gray-900 dark:text-gray-100'}"
 						title="Click to rename"
@@ -317,22 +348,32 @@
 		</div>
 	{/if}
 
-	<div class="flex items-center gap-2 border-t border-gray-100 px-0.5 py-1.5 dark:border-gray-900">
-		<span class="text-primary"><Icon name="plus" size={14} /></span>
-		<input
-			class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-gray-400"
+	<div class="flex items-start gap-2 border-t border-gray-100 px-0.5 py-1.5 dark:border-gray-900">
+		<span class="mt-[2px] text-primary"><Icon name="plus" size={14} /></span>
+		<textarea
+			class="min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-[13px] leading-[19px] outline-none placeholder:text-gray-400"
 			placeholder="Add a subtask — Enter adds another"
 			aria-label="Add a subtask"
+			rows={1}
 			bind:value={title}
+			use:autogrow={title}
 			onkeydown={(e) => {
-				if (e.key === 'Enter') void submit();
+				if (e.key === 'Enter') {
+					if (e.altKey) {
+						e.preventDefault();
+						insertNewline(e.currentTarget);
+					} else if (!e.shiftKey) {
+						e.preventDefault();
+						void submit();
+					}
+				}
 				if (e.key === 'Escape') {
 					e.stopPropagation();
 					title = '';
 					e.currentTarget.blur();
 				}
 			}}
-		/>
+		></textarea>
 	</div>
 </div>
 
