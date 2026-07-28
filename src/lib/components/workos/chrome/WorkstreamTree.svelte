@@ -8,6 +8,7 @@
 	import { user } from '$lib/stores';
 	import { canCreateWorkspace, canManageMembers } from '../lib/roles';
 	import type { Workspace } from '../lib/types';
+	import { WORKSTREAM_VIEWS } from '../lib/urlState';
 	import {
 		workspaces, workstreams, roles, currentTeamId, currentWorkstreamId,
 		selectWorkstream, view, openModal, token, loadBootstrap, expandedWorkspaces
@@ -113,7 +114,7 @@
 						{#each streamsByWs(ws.id) as s (s.id)}
 							<button
 								class="ws-tree-item w-full flex items-center rounded-lg pl-2 pr-[11px] py-[6px] text-sm transition {onStreamView && $currentWorkstreamId === s.id ? 'bg-gray-100 dark:bg-gray-900 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
-								onclick={() => { selectWorkstream(s.id); view.set('board'); onNavigate(); }}
+								onclick={() => { selectWorkstream(s.id); if (!WORKSTREAM_VIEWS.has($view)) view.set('board'); onNavigate(); }}
 							>
 								<span class="flex-1 text-left truncate">{s.name}</span>
 							</button>

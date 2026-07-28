@@ -165,6 +165,9 @@
 			focusSink?.focus();
 		} else if (e.key === 'Escape') {
 			e.preventDefault();
+			// Keep Escape from reaching bits-ui's document-level escape layer, which
+			// ignores defaultPrevented and would close the whole task dialog.
+			e.stopPropagation();
 			suppressPercentCommit = true;
 			focusSink?.focus();
 		}
@@ -234,7 +237,12 @@
 						onblur={commitTitle}
 						onkeydown={(e) => {
 							if (e.key === 'Enter') commitTitle();
-							if (e.key === 'Escape') editingTitle = false;
+							if (e.key === 'Escape') {
+								// stopPropagation: bits-ui's escape layer ignores defaultPrevented
+								// and would close the dialog along with the inline edit.
+								e.stopPropagation();
+								editingTitle = false;
+							}
 						}}
 						autofocus
 					/>

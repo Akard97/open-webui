@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Chart from '$lib/components/ui/chart';
-	import { BarChart } from 'layerchart';
+	import { BarChart, Labels } from 'layerchart';
 	import { scaleBand } from 'd3-scale';
 	import type { WeekBin, CompletionTime } from '../../lib/overview';
 	import DeltaBadge from '../../ui/DeltaBadge.svelte';
@@ -40,15 +40,30 @@
 			x="week"
 			xScale={scaleBand().padding(0.3)}
 			axis="x"
+			padding={{ top: 18, right: 4, bottom: 20 }}
 			seriesLayout="group"
 			series={[
 				{ key: 'created', label: 'Created', color: config.created.color },
 				{ key: 'completed', label: 'Completed', color: config.completed.color }
 			]}
-			props={{ bars: { radius: 4, 'stroke-width': 0 }, xAxis: { format: (v: string) => v.replace(' (this week)', ' ·') } }}
+			props={{ bars: { radius: 4, strokeWidth: 0 }, xAxis: { format: (v: string) => v.replace(' (this week)', ' ·') } }}
 		>
 			{#snippet tooltip()}
 				<Chart.Tooltip />
+			{/snippet}
+			{#snippet labels()}
+				<Labels
+					seriesKey="created"
+					data={data.filter((d) => d.created > 0)}
+					format={(v: number) => String(v)}
+					class="text-[10px] fill-gray-500 dark:fill-gray-400"
+				/>
+				<Labels
+					seriesKey="completed"
+					data={data.filter((d) => d.completed > 0)}
+					format={(v: number) => String(v)}
+					class="text-[10px] fill-gray-500 dark:fill-gray-400"
+				/>
 			{/snippet}
 		</BarChart>
 	</Chart.Container>

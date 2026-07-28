@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
 	import SidebarIcon from '$lib/components/icons/Sidebar.svelte';
-	import ThemeSwitcher from '$lib/components/app/ThemeSwitcher.svelte';
 	import TeamSwitcher from './TeamSwitcher.svelte';
 	import WorkstreamTree from './WorkstreamTree.svelte';
 	import { user } from '$lib/stores';
@@ -51,6 +50,16 @@
 			{/if}
 		</button>
 
+		{#if canUseAdmin($user)}
+			<button
+				class="size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition {$view === 'admin' ? 'bg-gray-100 dark:bg-gray-850 text-gray-900 dark:text-white' : ''}"
+				title="Admin"
+				onclick={() => view.set('admin')}
+			>
+				<Icon name="settings" size={18} />
+			</button>
+		{/if}
+
 		<!-- Current team (click to expand and switch) -->
 		<button
 			class="size-9 rounded-xl flex items-center justify-center text-[11px] font-semibold bg-brand-600 text-white transition hover:bg-brand-700 dark:bg-brand-500 dark:text-brand-950 dark:hover:bg-brand-400"
@@ -60,14 +69,6 @@
 			{teamBadge}
 		</button>
 
-		<div class="flex-1"></div>
-
-		{#if canUseAdmin($user)}
-			<button class="size-9 rounded-xl flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="WorkOS admin" onclick={() => view.set('admin')}>
-				<Icon name="settings" size={18} />
-			</button>
-		{/if}
-		<ThemeSwitcher />
 	</aside>
 {:else}
 	<aside class="w-64 flex-none h-full flex flex-col bg-gray-50 dark:bg-gray-950 border-e-[0.5px] border-gray-50 dark:border-gray-850/30">
@@ -116,6 +117,19 @@
 					{/if}
 				</button>
 			</div>
+			{#if canUseAdmin($user)}
+				<div class="px-[0.4375rem] flex justify-center">
+					<button
+						class="group grow flex items-center space-x-3 rounded-xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none {$view === 'admin' ? 'bg-gray-100 dark:bg-gray-900' : ''}"
+						onclick={() => view.set('admin')}
+					>
+						<div class="self-center"><Icon name="settings" size={18} /></div>
+						<div class="flex flex-1 self-center translate-y-[0.5px]">
+							<div class="self-center text-sm font-primary {$view === 'admin' ? 'font-medium' : ''}">Admin</div>
+						</div>
+					</button>
+				</div>
+			{/if}
 		</div>
 
 		<TeamSwitcher />
@@ -125,15 +139,5 @@
 			<WorkstreamTree />
 		</div>
 
-		<!-- Footer -->
-		<div class="border-t border-gray-50 dark:border-gray-850/30 p-2 flex items-center gap-2 text-gray-800 dark:text-gray-200">
-			<div class="flex-1 min-w-0 text-sm font-medium truncate">{$user?.name ?? ''}</div>
-			{#if canUseAdmin($user)}
-				<button class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition" title="WorkOS admin" onclick={() => view.set('admin')}>
-					<Icon name="settings" size={16} />
-				</button>
-			{/if}
-			<ThemeSwitcher />
-		</div>
 	</aside>
 {/if}
