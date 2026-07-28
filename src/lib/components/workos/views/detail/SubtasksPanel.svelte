@@ -86,8 +86,8 @@
 
 	function dragMove(e: PointerEvent) {
 		if (dragIndex === null) return;
-		let gap = rowEls.length;
-		for (let i = 0; i < rowEls.length; i++) {
+		let gap = sorted.length;
+		for (let i = 0; i < sorted.length; i++) {
 			const el = rowEls[i];
 			if (!el) continue;
 			const r = el.getBoundingClientRect();
