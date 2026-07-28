@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Icon from '../../ui/Icon.svelte';
@@ -121,12 +122,16 @@
 		if (results.some((r) => r.status === 'rejected')) notifyFailed();
 	}
 
-	function moveByKeyboard(i: number, e: KeyboardEvent) {
+	async function moveByKeyboard(i: number, e: KeyboardEvent) {
 		if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
 		e.preventDefault();
 		const to = e.key === 'ArrowUp' ? i - 1 : i + 1;
 		if (to < 0 || to >= sorted.length) return;
 		void applyReorder(computeSortKey(sorted, i, to));
+		// The optimistic sort_key write re-sorts the keyed each, which moves and
+		// blurs the focused handle — put focus back on it at its new position.
+		await tick();
+		rowEls[to]?.querySelector<HTMLButtonElement>('.wos-drag')?.focus();
 	}
 </script>
 
@@ -134,7 +139,7 @@
 	{#if sorted.length}
 		<div class="flex items-center gap-3">
 			{#if sorted.length <= 24}
-				<div class="flex flex-1 gap-[3px]">
+				<div class="flex flex-1 gap-[3px]" aria-hidden="true">
 					{#each sorted as s, i (s.id)}
 						<div
 							class="h-1.5 flex-1 rounded-[3px] transition-colors duration-300 {i < doneCount
@@ -144,7 +149,10 @@
 					{/each}
 				</div>
 			{:else}
-				<div class="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-gray-200 dark:bg-gray-800">
+				<div
+					class="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-gray-200 dark:bg-gray-800"
+					aria-hidden="true"
+				>
 					<div
 						class="h-full rounded-[3px] bg-primary transition-[width] duration-300"
 						style="width:{(doneCount / sorted.length) * 100}%"
@@ -167,11 +175,13 @@
 				class="group flex items-center gap-2.5 rounded-[10px] bg-gray-50 px-3 py-2.5 transition-colors hover:bg-gray-100 dark:bg-gray-900/50 dark:hover:bg-gray-800/60 {dragIndex ===
 				i
 					? 'opacity-50'
-					: ''}"
+					: subtask.completed
+						? 'opacity-75'
+						: ''}"
 			>
 				<button
 					type="button"
-					class="wos-drag wos-reveal -ml-1 shrink-0 cursor-grab touch-none text-gray-300 opacity-0 transition-opacity hover:text-gray-500 focus-visible:opacity-100 group-hover:opacity-100 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
+					class="wos-drag wos-reveal -ml-1 shrink-0 cursor-grab touch-none text-gray-300 opacity-0 transition-opacity hover:text-gray-500 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
 					aria-label="Reorder subtask (Arrow keys to move)"
 					onpointerdown={(e) => dragStart(i, e)}
 					onpointermove={dragMove}
@@ -205,7 +215,10 @@
 						autofocus
 						onkeydown={(e) => {
 							if (e.key === 'Enter') commitRename(subtask);
-							if (e.key === 'Escape') cancelRename();
+							if (e.key === 'Escape') {
+								e.stopPropagation();
+								cancelRename();
+							}
 						}}
 						onblur={() => commitRename(subtask)}
 					/>
@@ -324,6 +337,7 @@
 			onkeydown={(e) => {
 				if (e.key === 'Enter') void submit();
 				if (e.key === 'Escape') {
+					e.stopPropagation();
 					title = '';
 					e.currentTarget.blur();
 				}
