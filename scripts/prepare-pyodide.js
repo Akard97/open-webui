@@ -58,6 +58,20 @@ function initNetworkProxyFromEnv() {
 	console.log(`Initialized network proxy "${preferedProxy}" from env`);
 }
 
+// Antivirus on some machines briefly locks freshly-written files; a plain
+// writeFile then fails with EPERM/UNKNOWN. Retry with backoff.
+async function writeFileWithRetry(path, data, attempts = 5) {
+	for (let i = 1; ; i++) {
+		try {
+			return await writeFile(path, data);
+		} catch (err) {
+			if (i >= attempts) throw err;
+			console.warn(`Write to ${path} failed (${err.code}), retrying (${i}/${attempts})...`);
+			await new Promise((resolve) => setTimeout(resolve, 500 * i));
+		}
+	}
+}
+
 async function downloadPackages() {
 	console.log('Setting up pyodide + micropip');
 
@@ -71,8 +85,11 @@ async function downloadPackages() {
 		return;
 	}
 
-	const packageJson = JSON.parse(await readFile('package.json'));
-	const pyodideVersion = packageJson.dependencies.pyodide.replace('^', '');
+	// Compare against the actually-installed pyodide version, not the semver
+	// range in package.json ("^0.28.2" vs installed "0.28.3" would otherwise
+	// wipe the cache on every run).
+	const pyodidePkg = JSON.parse(await readFile('node_modules/pyodide/package.json'));
+	const pyodideVersion = pyodidePkg.version;
 
 	try {
 		const pyodidePackageJson = JSON.parse(await readFile('static/pyodide/package.json'));
@@ -93,21 +110,22 @@ async function downloadPackages() {
 		const micropip = pyodide.pyimport('micropip');
 		console.log('Downloading Pyodide packages:', packages);
 
-		try {
-			for (const pkg of packages) {
-				console.log(`Installing package: ${pkg}`);
+		// Install packages individually: one failed download must not abort the
+		// rest of the list or skip the lock-file freeze below.
+		for (const pkg of packages) {
+			console.log(`Installing package: ${pkg}`);
+			try {
 				await micropip.install(pkg);
+			} catch (err) {
+				console.error(`Failed to install ${pkg}, continuing:`, err.message ?? err);
 			}
-		} catch (err) {
-			console.error('Package installation failed:', err);
-			return;
 		}
 
 		console.log('Pyodide packages downloaded, freezing into lock file');
 
 		try {
 			const lockFile = await micropip.freeze();
-			await writeFile('static/pyodide/pyodide-lock.json', lockFile);
+			await writeFileWithRetry('static/pyodide/pyodide-lock.json', lockFile);
 		} catch (err) {
 			console.error('Failed to write lock file:', err);
 		}
@@ -140,58 +158,64 @@ async function downloadPyPIWheels() {
 	}
 
 	for (const pkg of pypiPackages) {
-		console.log(`Fetching PyPI metadata for: ${pkg}`);
-		const res = await fetch(`https://pypi.org/pypi/${pkg}/json`);
-		if (!res.ok) {
-			console.error(`Failed to fetch PyPI metadata for ${pkg}: ${res.status}`);
-			continue;
-		}
-		const meta = await res.json();
-		const version = meta.info.version;
-		const files = meta.urls || [];
-		// Find the pure-Python wheel (py3-none-any)
-		const wheel = files.find(
-			(f) => f.filename.endsWith('.whl') && f.filename.includes('py3-none-any')
-		);
-		if (!wheel) {
-			console.warn(`No pure-Python wheel found for ${pkg}==${version}, skipping`);
-			continue;
-		}
-		const dest = `static/pyodide/${wheel.filename}`;
-		// Download wheel if not already present
+		// A transient network failure here must not abort the whole script
+		// (this runs as a hard prerequisite of `npm run dev` / `npm run build`).
 		try {
-			await access(dest);
-			console.log(`  Already exists: ${wheel.filename}`);
-		} catch {
-			console.log(`  Downloading: ${wheel.filename}`);
-			const wheelRes = await fetch(wheel.url);
-			if (!wheelRes.ok) {
-				console.error(`  Failed to download ${wheel.filename}: ${wheelRes.status}`);
+			console.log(`Fetching PyPI metadata for: ${pkg}`);
+			const res = await fetch(`https://pypi.org/pypi/${pkg}/json`);
+			if (!res.ok) {
+				console.error(`Failed to fetch PyPI metadata for ${pkg}: ${res.status}`);
 				continue;
 			}
-			const buffer = Buffer.from(await wheelRes.arrayBuffer());
-			await writeFile(dest, buffer);
-			console.log(`  Saved: ${dest} (${buffer.length} bytes)`);
-		}
+			const meta = await res.json();
+			const version = meta.info.version;
+			const files = meta.urls || [];
+			// Find the pure-Python wheel (py3-none-any)
+			const wheel = files.find(
+				(f) => f.filename.endsWith('.whl') && f.filename.includes('py3-none-any')
+			);
+			if (!wheel) {
+				console.warn(`No pure-Python wheel found for ${pkg}==${version}, skipping`);
+				continue;
+			}
+			const dest = `static/pyodide/${wheel.filename}`;
+			// Download wheel if not already present
+			try {
+				await access(dest);
+				console.log(`  Already exists: ${wheel.filename}`);
+			} catch {
+				console.log(`  Downloading: ${wheel.filename}`);
+				const wheelRes = await fetch(wheel.url);
+				if (!wheelRes.ok) {
+					console.error(`  Failed to download ${wheel.filename}: ${wheelRes.status}`);
+					continue;
+				}
+				const buffer = Buffer.from(await wheelRes.arrayBuffer());
+				await writeFile(dest, buffer);
+				console.log(`  Saved: ${dest} (${buffer.length} bytes)`);
+			}
 
-		// Inject into pyodide-lock.json so micropip resolves locally
-		const normalizedName = pkg.replace(/-/g, '_');
-		if (!lockData.packages[normalizedName]) {
-			lockData.packages[normalizedName] = {
-				name: normalizedName,
-				version: version,
-				file_name: wheel.filename,
-				install_dir: 'site',
-				sha256: wheel.digests?.sha256 || '',
-				package_type: 'package',
-				imports: [normalizedName],
-				depends: []
-			};
-			console.log(`  Added ${normalizedName}==${version} to pyodide-lock.json`);
+			// Inject into pyodide-lock.json so micropip resolves locally
+			const normalizedName = pkg.replace(/-/g, '_');
+			if (!lockData.packages[normalizedName]) {
+				lockData.packages[normalizedName] = {
+					name: normalizedName,
+					version: version,
+					file_name: wheel.filename,
+					install_dir: 'site',
+					sha256: wheel.digests?.sha256 || '',
+					package_type: 'package',
+					imports: [normalizedName],
+					depends: []
+				};
+				console.log(`  Added ${normalizedName}==${version} to pyodide-lock.json`);
+			}
+		} catch (err) {
+			console.error(`Skipping ${pkg} after network error:`, err.message ?? err);
 		}
 	}
 
-	await writeFile(lockPath, JSON.stringify(lockData, null, 2));
+	await writeFileWithRetry(lockPath, JSON.stringify(lockData, null, 2));
 	console.log('Updated pyodide-lock.json with PyPI packages');
 }
 
