@@ -2,7 +2,8 @@ import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type {
 	Bootstrap, Team, Workspace, Workstream, Label, Task, Member, WorkosRules,
 	TaskStatus, TaskPriority, Visibility, TeamRole, WorkspaceRole,
-	Comment, Attachment, Activity, Notification, NotificationCounts, Subtask, WorkstreamFile
+	Comment, Attachment, Activity, Notification, NotificationCounts, Subtask, WorkstreamFile,
+	ReactionAggregate
 } from './types';
 
 const BASE = `${WEBUI_API_BASE_URL}/workos`;
@@ -132,12 +133,17 @@ export const updateAdminSettings = (token: string, body: Partial<WorkosRules>) =
 // Comments
 export const listComments = (token: string, taskId: string) =>
 	request<Comment[]>(token, `/tasks/${taskId}/comments`);
-export const createComment = (token: string, taskId: string, body: { body: string }) =>
-	request<Comment>(token, `/tasks/${taskId}/comments`, 'POST', body);
+export const createComment = (
+	token: string, taskId: string, body: { body: string; parent_id?: string }
+) => request<Comment>(token, `/tasks/${taskId}/comments`, 'POST', body);
 export const updateComment = (token: string, id: string, body: { body: string }) =>
 	request<Comment>(token, `/comments/${id}`, 'PATCH', body);
 export const deleteComment = (token: string, id: string) =>
 	request<{ deleted: boolean }>(token, `/comments/${id}`, 'DELETE');
+export const toggleReaction = (token: string, id: string, emoji: string) =>
+	request<{ added: boolean; reactions: ReactionAggregate[] }>(
+		token, `/comments/${id}/reactions`, 'POST', { emoji }
+	);
 
 // Activity
 export const listActivity = (token: string, taskId: string) =>

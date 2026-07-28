@@ -108,7 +108,8 @@ export const notifications: Writable<Notification[]> = writable([]);
 export const unreadCount: Writable<number> = writable(0);
 
 const EMPTY_COUNTS = (): NotificationCounts => ({
-	unread: 0, by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, commented: 0, status_changed: 0 }
+	unread: 0,
+	by_type: { assigned: 0, subtask_assigned: 0, mentioned: 0, replied: 0, commented: 0, status_changed: 0 }
 });
 export const notificationCounts: Writable<NotificationCounts> = writable(EMPTY_COUNTS());
 export const archivedNotifications: Writable<Notification[]> = writable([]);
@@ -410,10 +411,14 @@ export async function loadTaskDetail(taskId: string): Promise<void> {
 	subtasks.set(st);
 }
 
-export async function postComment(taskId: string, body: string): Promise<void> {
-	const saved = await api.createComment(token(), taskId, { body });
+export async function postComment(taskId: string, body: string, parentId?: string): Promise<Comment> {
+	const saved = await api.createComment(token(), taskId, {
+		body,
+		...(parentId ? { parent_id: parentId } : {})
+	});
 	comments.update((list) => (list.some((c) => c.id === saved.id) ? list : [...list, saved]));
 	void loadTaskDetail(taskId); // refresh activity (comment_added) too
+	return saved;
 }
 
 export async function editComment(id: string, body: string): Promise<void> {
@@ -424,6 +429,13 @@ export async function editComment(id: string, body: string): Promise<void> {
 export async function deleteCommentAction(id: string): Promise<void> {
 	comments.update((list) => list.filter((c) => c.id !== id));
 	await api.deleteComment(token(), id);
+}
+
+export async function toggleReactionAction(commentId: string, emoji: string): Promise<void> {
+	const res = await api.toggleReaction(token(), commentId, emoji);
+	comments.update((list) =>
+		list.map((c) => (c.id === commentId ? { ...c, reactions: res.reactions } : c))
+	);
 }
 
 export async function uploadFiles(taskId: string, files: FileList | File[], commentId?: string): Promise<void> {
@@ -990,6 +1002,10 @@ export function applyCollabEvent(event: string, payload: any): void {
 		comments.update((l) => l.map((c) => (c.id === payload.id ? { ...c, ...payload } : c)));
 	} else if (event === 'workos:comment.deleted') {
 		comments.update((l) => l.filter((c) => c.id !== payload.id));
+	} else if (event === 'workos:comment.reaction') {
+		comments.update((l) =>
+			l.map((c) => (c.id === payload.comment_id ? { ...c, reactions: payload.reactions } : c))
+		);
 	} else if (event === 'workos:activity.created') {
 		activity.update((l) => (l.some((a) => a.id === payload.id) ? l : [...l, payload]));
 	} else if (event === 'workos:attachment.created') {
@@ -1079,7 +1095,7 @@ const NAV_EVENTS = [
 	'workos:workstream.created', 'workos:workstream.updated', 'workos:workstream.deleted'
 ];
 const COLLAB_EVENTS = [
-	'workos:comment.created', 'workos:comment.updated', 'workos:comment.deleted',
+	'workos:comment.created', 'workos:comment.updated', 'workos:comment.deleted', 'workos:comment.reaction',
 	'workos:activity.created', 'workos:attachment.created', 'workos:attachment.deleted',
 	'workos:subtask.created', 'workos:subtask.updated', 'workos:subtask.deleted'
 ];

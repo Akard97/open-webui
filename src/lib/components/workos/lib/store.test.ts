@@ -147,6 +147,28 @@ describe('collab realtime', () => {
 		expect(get(comments)).toEqual([]);
 	});
 
+	it('comment.reaction event swaps the aggregate on the target comment', () => {
+		selectedTaskId.set('task-1');
+		comments.set([{ id: 'c1', task_id: 'task-1', user_id: 'u2', body: 'hi', mentions: [],
+			edited_at: null, created_at: 1, updated_at: 1, reactions: [] } as any]);
+		applyCollabEvent('workos:comment.reaction', {
+			task_id: 'task-1', comment_id: 'c1',
+			reactions: [{ emoji: '👍', count: 2, user_ids: ['u1', 'u2'] }]
+		});
+		expect(get(comments)[0].reactions).toEqual([{ emoji: '👍', count: 2, user_ids: ['u1', 'u2'] }]);
+	});
+
+	it('tombstone arrives as comment.updated and merges deleted_at', () => {
+		selectedTaskId.set('task-1');
+		comments.set([{ id: 'c1', task_id: 'task-1', user_id: 'u2', body: 'hi', mentions: [],
+			edited_at: null, created_at: 1, updated_at: 1 }]);
+		applyCollabEvent('workos:comment.updated', {
+			id: 'c1', task_id: 'task-1', body: '', mentions: [], deleted_at: 99
+		});
+		expect(get(comments)[0].deleted_at).toBe(99);
+		expect(get(comments)[0].body).toBe('');
+	});
+
 	it('increments unread on notification.created', () => {
 		unreadCount.set(0);
 		notifications.set([]);

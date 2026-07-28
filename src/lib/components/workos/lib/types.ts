@@ -89,12 +89,21 @@ export interface Bootstrap {
 	notifications_unread: number;
 }
 
+export interface ReactionAggregate {
+	emoji: string;
+	count: number;
+	user_ids: string[];
+}
+
 export interface Comment {
 	id: string;
 	task_id: string;
 	user_id: string;
 	body: string;
 	mentions: string[];
+	parent_id?: string | null;
+	deleted_at?: number | null;
+	reactions?: ReactionAggregate[];
 	edited_at?: number | null;
 	created_at: number;
 	updated_at: number;
@@ -149,7 +158,8 @@ export interface Activity {
 	created_at: number;
 }
 
-export type NotificationType = 'assigned' | 'subtask_assigned' | 'mentioned' | 'commented' | 'status_changed';
+export type NotificationType =
+	| 'assigned' | 'subtask_assigned' | 'mentioned' | 'replied' | 'commented' | 'status_changed';
 
 export interface Notification {
 	id: string;
