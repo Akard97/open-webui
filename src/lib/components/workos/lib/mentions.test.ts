@@ -15,8 +15,8 @@ describe('mentions', () => {
 		expect(mentionToken('u1', 'Lara')).toBe('@[Lara](mention:u1)');
 	});
 
-	it('renders tokens to @name using the resolver', () => {
-		const out = renderMentions('hey @[Lara](mention:u1)!', (id) => (id === 'u1' ? 'Lara' : id));
-		expect(out).toBe('hey **@Lara**!');
+	it('renders tokens as fragment mention links', () => {
+		const out = renderMentions('hi @[Felwa](mention:u1)!', () => 'Felwa');
+		expect(out).toBe('hi [@Felwa](#mention-u1)!');
 	});
 });

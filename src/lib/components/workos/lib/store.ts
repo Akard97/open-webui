@@ -427,8 +427,14 @@ export async function editComment(id: string, body: string): Promise<void> {
 }
 
 export async function deleteCommentAction(id: string): Promise<void> {
-	comments.update((list) => list.filter((c) => c.id !== id));
-	await api.deleteComment(token(), id);
+	const res = await api.deleteComment(token(), id);
+	if ((res as any).tombstoned) {
+		// Server soft-deleted: refetch swaps in the tombstone (realtime also emits comment.updated).
+		const open = get(selectedTaskId);
+		if (open) void loadTaskDetail(open);
+	} else {
+		comments.update((list) => list.filter((c) => c.id !== id));
+	}
 }
 
 export async function toggleReactionAction(commentId: string, emoji: string): Promise<void> {

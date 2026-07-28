@@ -12,7 +12,8 @@ export function mentionToken(id: string, name: string): string {
 	return `@[${name}](mention:${id})`;
 }
 
-/** Replace mention tokens with bold @name for markdown rendering. */
+/** Replace mention tokens with fragment links (`[@Name](#mention-ID)`) for markdown
+ * rendering. Fragment hrefs survive DOMPurify; CommentItem styles/intercepts them. */
 export function renderMentions(body: string, name: (id: string) => string): string {
-	return (body ?? '').replace(MENTION_RE, (_full, id) => `**@${name(id)}**`);
+	return (body ?? '').replace(MENTION_RE, (_full, id) => `[@${name(id)}](#mention-${id})`);
 }

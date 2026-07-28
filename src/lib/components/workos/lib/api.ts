@@ -139,7 +139,7 @@ export const createComment = (
 export const updateComment = (token: string, id: string, body: { body: string }) =>
 	request<Comment>(token, `/comments/${id}`, 'PATCH', body);
 export const deleteComment = (token: string, id: string) =>
-	request<{ deleted: boolean }>(token, `/comments/${id}`, 'DELETE');
+	request<{ deleted: boolean; tombstoned?: boolean }>(token, `/comments/${id}`, 'DELETE');
 export const toggleReaction = (token: string, id: string, emoji: string) =>
 	request<{ added: boolean; reactions: ReactionAggregate[] }>(
 		token, `/comments/${id}/reactions`, 'POST', { emoji }
