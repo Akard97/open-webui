@@ -42,7 +42,6 @@
 	// sorting here keeps display order canonical and makes sort_key edits
 	// (reorder, concurrent editors) re-flow automatically.
 	$: sorted = [...$subtasks].sort((a, b) => a.sort_key - b.sort_key);
-	$: doneCount = sorted.filter((s) => s.completed).length;
 
 	$: parentIds = task.assignee_ids ?? [];
 	$: members = Object.entries($directory).map(([id, u]) => ({ id, name: u.name }));
@@ -137,35 +136,6 @@
 </script>
 
 <div class="pt-4 space-y-2">
-	{#if sorted.length}
-		<div class="flex items-center gap-2.5">
-			{#if sorted.length <= 24}
-				<div class="flex flex-1 gap-[2px]" aria-hidden="true">
-					{#each sorted as s, i (s.id)}
-						<div
-							class="h-1 flex-1 rounded-[2px] transition-colors duration-300 {i < doneCount
-								? 'bg-primary'
-								: 'bg-gray-200 dark:bg-gray-800'}"
-						></div>
-					{/each}
-				</div>
-			{:else}
-				<div
-					class="h-1 flex-1 overflow-hidden rounded-[2px] bg-gray-200 dark:bg-gray-800"
-					aria-hidden="true"
-				>
-					<div
-						class="h-full rounded-[2px] bg-primary transition-[width] duration-300"
-						style="width:{(doneCount / sorted.length) * 100}%"
-					></div>
-				</div>
-			{/if}
-			<span class="wos-micro text-primary">
-				{doneCount}/{sorted.length} done
-			</span>
-		</div>
-	{/if}
-
 	<div class="divide-y divide-gray-100 dark:divide-gray-900">
 		{#each sorted as subtask, i (subtask.id)}
 			{#if dragIndex !== null && dropIndex === i}
@@ -173,7 +143,7 @@
 			{/if}
 			<div
 				bind:this={rowEls[i]}
-				class="group flex items-center gap-2 px-0.5 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 {dragIndex ===
+				class="group flex items-start gap-2 px-0.5 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 {dragIndex ===
 				i
 					? 'opacity-50'
 					: subtask.completed
@@ -202,7 +172,7 @@
 				{:else}
 				<button
 					type="button"
-					class="wos-drag -ml-0.5 shrink-0 cursor-grab touch-none text-gray-300 transition-colors hover:text-gray-500 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
+					class="wos-drag -ml-0.5 mt-[3px] shrink-0 cursor-grab touch-none text-gray-300 transition-colors hover:text-gray-500 active:cursor-grabbing dark:text-gray-600 dark:hover:text-gray-400"
 					aria-label="Reorder subtask (Arrow keys to move)"
 					onpointerdown={(e) => dragStart(i, e)}
 					onpointermove={dragMove}
@@ -217,7 +187,7 @@
 					role="checkbox"
 					aria-checked={subtask.completed}
 					aria-label="Toggle subtask completion"
-					class="flex size-[15px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors {subtask.completed
+					class="mt-[2px] flex size-[15px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors {subtask.completed
 						? 'border-primary bg-primary text-primary-foreground'
 						: 'border-gray-300 hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500'}"
 					onclick={() =>
@@ -246,7 +216,7 @@
 				{:else}
 					<button
 						type="button"
-						class="min-w-0 flex-1 truncate text-left text-[13px] {subtask.completed
+						class="min-w-0 flex-1 whitespace-normal break-words text-left text-[13px] leading-[19px] {subtask.completed
 							? 'text-gray-400 line-through'
 							: 'text-gray-900 dark:text-gray-100'}"
 						title="Click to rename"
