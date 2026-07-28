@@ -1115,6 +1115,39 @@ async def delete_comment(
     return {'deleted': deleted}
 
 
+REACTION_EMOJI = {'👍', '❤️', '🎉', '👀', '😂', '🚀'}
+
+
+class ReactionForm(BaseModel):
+    emoji: str
+
+
+@router.post('/comments/{comment_id}/reactions')
+async def toggle_reaction(
+    request: Request, comment_id: str, form: ReactionForm,
+    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session),
+):
+    """Toggle the caller's emoji reaction. Any task-visible user may react — no
+    capability entry (deliberate; reactions are lightweight, like viewing)."""
+    await require_workos(request, user, db)
+    existing = await Comments.get_by_id(comment_id, db=db)
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Comment not found.')
+    task, _ = await require_task_visible(user, existing.task_id, db)
+    if form.emoji not in REACTION_EMOJI:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Unsupported emoji.')
+    if existing.deleted_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment was deleted.')
+    added = await Reactions.toggle(comment_id, user.id, form.emoji, db=db)
+    agg = await Reactions.aggregate_for_comments([comment_id], db=db)
+    reactions = agg.get(comment_id, [])
+    await _emit_task_room('workos:comment.reaction', task,
+                          {'comment_id': comment_id, 'task_id': task.id,
+                           'workstream_id': task.workstream_id, 'reactions': reactions,
+                           'actor_id': user.id})
+    return {'added': added, 'reactions': reactions}
+
+
 @router.get('/tasks/{task_id}/activity')
 async def list_activity(
     request: Request, task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)

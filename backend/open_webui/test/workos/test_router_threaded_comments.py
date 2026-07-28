@@ -83,3 +83,39 @@ async def test_delete_childless_hard_deletes(monkeypatch):
         assert r.get('deleted') is True and 'tombstoned' not in r
         listed = (await c.get(f"/api/v1/workos/tasks/{t['id']}/comments")).json()
         assert all(x['id'] != com['id'] for x in listed)
+
+
+@pytest.mark.asyncio
+async def test_reaction_toggle_allowlist_and_list(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        com = await _comment(c, t['id'], 'react to me')
+        r = await c.post(f"/api/v1/workos/comments/{com['id']}/reactions", json={'emoji': '👍'})
+        assert r.status_code == 200, r.text
+        assert r.json()['added'] is True
+        assert r.json()['reactions'] == [{'emoji': '👍', 'count': 1, 'user_ids': ['u1']}]
+        # toggle off
+        r = await c.post(f"/api/v1/workos/comments/{com['id']}/reactions", json={'emoji': '👍'})
+        assert r.json() == {'added': False, 'reactions': []}
+        # allowlist
+        r = await c.post(f"/api/v1/workos/comments/{com['id']}/reactions", json={'emoji': '🦖'})
+        assert r.status_code == 400
+        # unknown comment
+        r = await c.post("/api/v1/workos/comments/nope/reactions", json={'emoji': '👍'})
+        assert r.status_code == 404
+        # reactions come back on GET
+        await c.post(f"/api/v1/workos/comments/{com['id']}/reactions", json={'emoji': '🎉'})
+        listed = (await c.get(f"/api/v1/workos/tasks/{t['id']}/comments")).json()
+        got = next(x for x in listed if x['id'] == com['id'])
+        assert got['reactions'] == [{'emoji': '🎉', 'count': 1, 'user_ids': ['u1']}]
+
+
+@pytest.mark.asyncio
+async def test_reaction_rejected_on_tombstone(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        root = await _comment(c, t['id'], 'root')
+        await _comment(c, t['id'], 'child', parent_id=root['id'])
+        await c.delete(f"/api/v1/workos/comments/{root['id']}")
+        r = await c.post(f"/api/v1/workos/comments/{root['id']}/reactions", json={'emoji': '👍'})
+        assert r.status_code == 400
