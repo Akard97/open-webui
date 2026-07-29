@@ -8,8 +8,7 @@
 	import AttachmentsPanel from './AttachmentsPanel.svelte';
 	import SubtasksPanel from './SubtasksPanel.svelte';
 	import { plannedProgress, actualProgress, taskHealth, HEALTH_LABEL, pointerToPercent, parsePercentInput } from '../../lib/progress';
-	import CommentItem from './CommentItem.svelte';
-	import CommentComposer from './CommentComposer.svelte';
+	import CommentsPanel from './CommentsPanel.svelte';
 	import ActivityItem from './ActivityItem.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -19,11 +18,10 @@
 	} from '../../lib/types';
 	import { formatDateLong } from '../../lib/format';
 	import { selectedTask, closeTask, editTask, labels, comments, activity, createLabel, attachments, currentTeam } from '../../lib/store';
-	import { highlightCommentId } from '../../lib/store';
 	import { STATUS_COLOR, statusShape } from '../../lib/colors';
 
 	$: t = $selectedTask;
-	$: sortedComments = [...$comments].sort((a, b) => a.created_at - b.created_at);
+	$: commentCount = $comments.length;
 	$: sortedActivity = [...$activity].sort((a, b) => a.created_at - b.created_at);
 	$: needsAttachment = !!t?.attachment_required && $attachments.length === 0;
 	$: foreignTeam = !!t && t.team_id !== ($currentTeam?.id ?? t.team_id);
@@ -533,7 +531,7 @@
 							<Tabs.Trigger value="subtasks">Subtasks</Tabs.Trigger>
 							<Tabs.Trigger value="comments" class="gap-1.5">
 								Comments
-								{#if sortedComments.length}<Badge variant="secondary" class="px-1.5 py-0">{sortedComments.length}</Badge>{/if}
+								{#if commentCount}<Badge variant="secondary" class="px-1.5 py-0">{commentCount}</Badge>{/if}
 							</Tabs.Trigger>
 							<Tabs.Trigger value="activities">Activities</Tabs.Trigger>
 						</Tabs.List>
@@ -541,11 +539,8 @@
 						<Tabs.Content value="subtasks"><SubtasksPanel task={t} /></Tabs.Content>
 
 						<Tabs.Content value="comments">
-							<div class="divide-y divide-gray-100 dark:divide-gray-900">
-								{#each sortedComments as c (c.id)}<CommentItem comment={c} highlight={c.id === $highlightCommentId} teamId={t.team_id} />{/each}
-							</div>
-							<div class="@max-[880px]:sticky @max-[880px]:bottom-0 @max-[880px]:bg-white @max-[880px]:dark:bg-gray-950 @max-[880px]:pb-[env(safe-area-inset-bottom)]">
-								<CommentComposer taskId={t.id} />
+							<div class="@max-[880px]:pb-[env(safe-area-inset-bottom)]">
+								<CommentsPanel taskId={t.id} teamId={t.team_id} />
 							</div>
 						</Tabs.Content>
 
