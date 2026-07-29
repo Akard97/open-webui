@@ -21,7 +21,7 @@
 
 	const VERB: Record<string, string> = {
 		assigned: 'assigned you', subtask_assigned: 'assigned you a subtask on',
-		mentioned: 'mentioned you in',
+		mentioned: 'mentioned you in', replied: 'replied to your comment on',
 		commented: 'commented on', status_changed: 'moved'
 	};
 	const who = (x: Notification) => x.data?.actor_name ?? displayName(x.actor_id);

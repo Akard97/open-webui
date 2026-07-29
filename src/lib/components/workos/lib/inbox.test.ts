@@ -22,6 +22,11 @@ describe('isNeedsYou', () => {
 		expect(isNeedsYou(mk({ type: 'subtask_assigned' }))).toBe(true);
 		expect(isNeedsYou(mk({ type: 'subtask_assigned', read: true }))).toBe(false);
 	});
+
+	it('replied notifications are needs-you when unread', () => {
+		expect(isNeedsYou(mk({ type: 'replied' }))).toBe(true);
+		expect(isNeedsYou(mk({ type: 'replied', read: true }))).toBe(false);
+	});
 });
 
 describe('dayLabelOf', () => {

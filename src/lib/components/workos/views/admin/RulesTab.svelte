@@ -70,7 +70,7 @@
 	</div>
 	<div class="pt-2 border-t border-gray-200 dark:border-gray-800">
 		<div class="text-sm font-medium mb-2">Notifications</div>
-		{#each ['assigned', 'mentioned', 'commented', 'status_changed'] as cat (cat)}
+		{#each ['assigned', 'mentioned', 'replied', 'commented', 'status_changed'] as cat (cat)}
 			<label class="flex items-center gap-2 h-8 text-sm">
 				<Checkbox
 					checked={rules.notifications?.[cat] !== false}
