@@ -1083,7 +1083,11 @@ async def update_comment(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Comment body required.')
     new_mentions = parse_mentions(body)
     updated = await Comments.update_body(comment_id, body, new_mentions, db=db)
-    payload = {**updated.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
+    # update_body's CommentModel never carries reactions (pydantic default []) — reattach the
+    # live aggregate so editing a comment doesn't clobber its reaction pills on other clients.
+    agg = await Reactions.aggregate_for_comments([comment_id], db=db)
+    result = {**updated.model_dump(), 'reactions': agg.get(comment_id, [])}
+    payload = {**result, 'workstream_id': task.workstream_id, 'actor_id': user.id}
     await _emit_task_room('workos:comment.updated', task, payload)
     # Only notify mentions that are newly added on this edit.
     fresh = set()
@@ -1092,7 +1096,7 @@ async def update_comment(
             fresh.add(m)
     await notify(request, db, recipients=fresh, actor=user, type='mentioned', task=task,
                  comment_id=comment_id, snippet=body)
-    return updated
+    return result
 
 
 @router.delete('/comments/{comment_id}')

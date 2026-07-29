@@ -129,4 +129,17 @@ async def test_counts_endpoint(monkeypatch):
         await c.post('/api/v1/workos/notifications/archive', json={'ids': [n.id]})
         counts = (await c.get('/api/v1/workos/notifications/counts')).json()
         assert counts['unread'] == 1
-        assert counts['by_type'] == {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 1, 'commented': 0, 'status_changed': 0}
+        assert counts['by_type'] == {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 1, 'replied': 0,
+                                      'commented': 0, 'status_changed': 0}
+
+
+@pytest.mark.asyncio
+async def test_counts_endpoint_includes_replied_key(monkeypatch):
+    from open_webui.models.workos import Notifications
+    async with _client(monkeypatch, user=U1) as c:
+        counts = (await c.get('/api/v1/workos/notifications/counts')).json()
+        assert 'replied' in counts['by_type'] and counts['by_type']['replied'] == 0
+        await Notifications.insert('u1', 'u2', 'replied', {}, task_id='t1')
+        counts = (await c.get('/api/v1/workos/notifications/counts')).json()
+        assert counts['by_type']['replied'] == 1
+        assert counts['unread'] == 1

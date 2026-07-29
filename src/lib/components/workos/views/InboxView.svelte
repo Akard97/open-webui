@@ -67,7 +67,10 @@
 	$: groups = groupInbox(filtered, now);
 
 	$: needsCount =
-		counts.by_type.mentioned + counts.by_type.assigned + (counts.by_type.subtask_assigned ?? 0);
+		counts.by_type.mentioned +
+		(counts.by_type.replied ?? 0) +
+		counts.by_type.assigned +
+		(counts.by_type.subtask_assigned ?? 0);
 	$: updatesCount = Math.max(0, counts.unread - needsCount);
 	$: oldestUnread = [...$notifications].reverse().find((n) => !n.read);
 

@@ -56,8 +56,23 @@ async def test_counts_for_user_by_type_unread_nonarchived_only():
     counts = await Notifications.counts_for_user('u1')
     assert counts == {
         'unread': 2,
-        'by_type': {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 2, 'commented': 0, 'status_changed': 0},
+        'by_type': {'assigned': 0, 'subtask_assigned': 0, 'mentioned': 2, 'replied': 0, 'commented': 0,
+                    'status_changed': 0},
     }
+
+
+@pytest.mark.asyncio
+async def test_counts_for_user_seeds_replied_and_counts_it():
+    counts = await Notifications.counts_for_user('u1')
+    assert 'replied' in counts['by_type']
+    assert counts['by_type']['replied'] == 0
+    n = await Notifications.insert('u1', 'u2', 'replied', {}, task_id='t1')
+    counts = await Notifications.counts_for_user('u1')
+    assert counts['by_type']['replied'] == 1
+    assert counts['unread'] == 1
+    await Notifications.mark_read('u1', ids=[n.id])
+    counts = await Notifications.counts_for_user('u1')
+    assert counts['by_type']['replied'] == 0
 
 
 @pytest.mark.asyncio

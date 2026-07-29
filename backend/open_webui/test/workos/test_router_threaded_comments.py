@@ -162,6 +162,24 @@ async def test_mention_beats_replied(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_edit_comment_preserves_reactions(monkeypatch):
+    async with _client(monkeypatch, user=U1) as c:
+        _, _, _, t = await _task(c)
+        com = await _comment(c, t['id'], 'react to me')
+        r = await c.post(f"/api/v1/workos/comments/{com['id']}/reactions", json={'emoji': '👍'})
+        assert r.status_code == 200, r.text
+        expected = [{'emoji': '👍', 'count': 1, 'user_ids': ['u1']}]
+        assert r.json()['reactions'] == expected
+        r = await c.patch(f"/api/v1/workos/comments/{com['id']}", json={'body': 'edited body'})
+        assert r.status_code == 200, r.text
+        assert r.json()['reactions'] == expected  # edit must not clobber the live aggregate
+        listed = (await c.get(f"/api/v1/workos/tasks/{t['id']}/comments")).json()
+        got = next(x for x in listed if x['id'] == com['id'])
+        assert got['body'] == 'edited body'
+        assert got['reactions'] == expected
+
+
+@pytest.mark.asyncio
 async def test_comment_attachment_must_be_image(monkeypatch):
     async with _client(monkeypatch, user=U1) as c:
         _, _, _, t = await _task(c)

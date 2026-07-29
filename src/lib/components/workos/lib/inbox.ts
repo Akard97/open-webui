@@ -16,7 +16,7 @@ export interface InboxGroups {
 	days: DayGroup[];
 }
 
-/** "Needs you" = unread mentions + assignments; read ones flow into the feed. */
+/** "Needs you" = unread mentioned/replied/assigned/subtask_assigned; read ones flow into the feed. */
 export function isNeedsYou(n: Notification): boolean {
 	return !n.read && (n.type === 'mentioned' || n.type === 'replied' || n.type === 'assigned' || n.type === 'subtask_assigned');
 }
