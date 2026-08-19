@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give admins visibility into user behavior across all Osool tools via an in-house event pipeline: `usage_event` table, batch ingest endpoint, frontend tracker, server-side emission at 14 action points, and a "Usage" tab in the admin Analytics page.
+**Goal:** Give admins visibility into user behavior across all Osool tools via an in-house event pipeline: `usage_event` table, batch ingest endpoint, frontend tracker, server-side emission at 15 action points (9 workos + 5 policy + 1 chat), and a "Usage" tab in the admin Analytics page.
 
 **Architecture:** One new table + DAO (`models/usage.py`), one new ingest router (`routers/usage.py`), five admin query endpoints appended to the existing `routers/analytics.py`, inline `UsageEvents.emit()` calls in `workos.py` / `policy_review.py` / `main.py`, a fire-and-forget frontend tracker (`src/lib/utils/usage.ts`) wired into the root layout and WorkOS app, and new Svelte components under `src/lib/components/admin/Analytics/`.
 
@@ -17,7 +17,8 @@
 - Properties hold ids only — never task titles, comment bodies, document content.
 - Admin query endpoints: `user=Depends(get_admin_user)` — same as existing analytics endpoints.
 - Client ingest: `user_id` ALWAYS from token; `source` forced to `'client'`; only server-kind allowlist events accepted from `emit()`, only client-kind from ingest.
-- Rate limit: 1,000 ingest requests/user/hour via existing `RateLimiter` (`utils/rate_limit.py`) — enforced per-request (batch), the practical equivalent of the spec's per-event wording.
+- Rate limit: 1,000 ingest **requests**/user/hour via existing `RateLimiter` (`utils/rate_limit.py`). Deliberately looser than spec §4.3's 1,000 *events*/hour (a request can carry 50 events, so ceiling is 50k events/hr) — acceptable for an internal tool; the cap exists to stop runaway loops, not abuse.
+- Spec drift, deliberate: allowlist is curated to 18 events (spec said "~35"); spec's `chat.new` / generic `search.used` client events and the overview-card "trend arrow" (spec §6) are dropped from v1 — add later if wanted.
 - Delivery on page leave uses `fetch(..., {keepalive: true})`, not `sendBeacon` — sendBeacon cannot carry the Authorization header (refinement of spec §4.1, same guarantee).
 - Migration chain head is `c2d3e4f5a6b7` — the new migration MUST set `down_revision = 'c2d3e4f5a6b7'`.
 - Backend tests run from `backend/`: `.venv/Scripts/python.exe -m pytest open_webui/test/usage/ -v`
@@ -158,8 +159,10 @@ async def test_emit_never_raises_on_unknown_or_client_event():
 
 
 def test_allowlist_shape():
-    assert all(kind in ('client', 'server') and tool in TOOLS or tool == 'app'
-               for tool, kind in EVENT_ALLOWLIST.values())
+    assert all(
+        kind in ('client', 'server') and (tool in TOOLS or tool == 'app')
+        for tool, kind in EVENT_ALLOWLIST.values()
+    )
 ```
 
 (`user_activity` is part of this task so the tests can read back rows — full aggregates come in Task 5.)
@@ -376,7 +379,7 @@ class UsageEventsDao:
 UsageEvents = UsageEventsDao()
 ```
 
-If Step 1 showed `CommentsDao.insert` does NOT call `await db.commit()` itself (the context manager commits), remove the explicit commits here to match.
+Commit semantics resolved at review time: `CommentsDao.insert` (models/workos.py:1059-1073) DOES call `await db.commit()` explicitly, and `get_async_db_context` never commits on exit (sessionmaker is `autocommit=False`) — keep the explicit commits above. Note `get_async_db_context(db)` only reuses a passed session when `DATABASE_ENABLE_SESSION_SHARING` is on (default off), so the threaded `db=` params are house-style consistency, not shared-transaction semantics.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -511,7 +514,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'open_webui.routers.usa
 
 - [ ] **Step 3: Write `backend/open_webui/routers/usage.py`**
 
-First check `backend/open_webui/routers/auths.py` around line 97 for the exact `get_redis_client` import path and `RateLimiter` constructor call, and copy both.
+Verified against auths.py: import is `from open_webui.utils.redis import get_redis_client` (auths.py:80), construction is module-level `RateLimiter(redis_client=get_redis_client(), ...)` (auths.py:97), `is_limited` is SYNC (do not await), and `RateLimiter` falls back to an in-memory store when `get_redis_client()` returns None (Redis unconfigured — e.g. in tests). The snippet below is safe as written.
 
 ```python
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -523,7 +526,7 @@ from open_webui.internal.db import get_async_session
 from open_webui.models.usage import UsageEvents
 from open_webui.utils.auth import get_verified_user
 from open_webui.utils.rate_limit import RateLimiter
-from open_webui.utils.redis import get_redis_client  # verify against auths.py import
+from open_webui.utils.redis import get_redis_client
 
 router = APIRouter()
 
@@ -641,12 +644,13 @@ git commit -m "feat(usage): ingest endpoint, ENABLE_USAGE_TRACKING flag, config 
 `backend/open_webui/test/workos/test_usage_emission.py` — reuse the existing minimal-app pattern (`_client`, `U1` from `test_router_teams`), monkeypatching `emit` so no usage table is needed in the workos conftest:
 
 ```python
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 import open_webui.routers.workos as wr
+from open_webui.test.workos.test_router_comments import _task
+from open_webui.test.workos.test_router_task import _stream
 from open_webui.test.workos.test_router_teams import U1, _client
 
 
@@ -664,11 +668,9 @@ def _emitted(spy):
 @pytest.mark.asyncio
 async def test_task_create_emits(monkeypatch, emit_spy):
     async with _client(monkeypatch, user=U1) as c:
-        team = (await c.post('/api/v1/workos/teams', json={'name': 'T'})).json()
-        ws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces", json={'name': 'W'})).json()
-        stream = (await c.post(f"/api/v1/workos/workspaces/{ws['id']}/workstreams", json={'name': 'S'})).json()
+        team, ws, s = await _stream(c)
         r = await c.post(
-            f"/api/v1/workos/workstreams/{stream['id']}/tasks",
+            f"/api/v1/workos/workstreams/{s['id']}/tasks",
             json={'title': 'task', 'assignee_ids': [U1.id]},
         )
         assert r.status_code == 200
@@ -678,13 +680,7 @@ async def test_task_create_emits(monkeypatch, emit_spy):
 @pytest.mark.asyncio
 async def test_task_complete_emits_only_on_transition_to_done(monkeypatch, emit_spy):
     async with _client(monkeypatch, user=U1) as c:
-        team = (await c.post('/api/v1/workos/teams', json={'name': 'T'})).json()
-        ws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces", json={'name': 'W'})).json()
-        stream = (await c.post(f"/api/v1/workos/workspaces/{ws['id']}/workstreams", json={'name': 'S'})).json()
-        task = (await c.post(
-            f"/api/v1/workos/workstreams/{stream['id']}/tasks",
-            json={'title': 'task', 'assignee_ids': [U1.id]},
-        )).json()
+        team, ws, s, task = await _task(c)
         await c.patch(f"/api/v1/workos/tasks/{task['id']}", json={'status': 'in_progress'})
         assert 'workos.task.complete' not in _emitted(emit_spy)
         await c.patch(f"/api/v1/workos/tasks/{task['id']}", json={'status': 'done'})
@@ -697,13 +693,7 @@ async def test_task_complete_emits_only_on_transition_to_done(monkeypatch, emit_
 @pytest.mark.asyncio
 async def test_task_delete_and_comment_emit(monkeypatch, emit_spy):
     async with _client(monkeypatch, user=U1) as c:
-        team = (await c.post('/api/v1/workos/teams', json={'name': 'T'})).json()
-        ws = (await c.post(f"/api/v1/workos/teams/{team['id']}/workspaces", json={'name': 'W'})).json()
-        stream = (await c.post(f"/api/v1/workos/workspaces/{ws['id']}/workstreams", json={'name': 'S'})).json()
-        task = (await c.post(
-            f"/api/v1/workos/workstreams/{stream['id']}/tasks",
-            json={'title': 'task', 'assignee_ids': [U1.id]},
-        )).json()
+        team, ws, s, task = await _task(c)
         await c.post(f"/api/v1/workos/tasks/{task['id']}/comments", json={'body': 'hi'})
         assert 'workos.comment.create' in _emitted(emit_spy)
         await c.delete(f"/api/v1/workos/tasks/{task['id']}")
@@ -713,14 +703,14 @@ async def test_task_delete_and_comment_emit(monkeypatch, emit_spy):
 @pytest.mark.asyncio
 async def test_membership_changes_emit(monkeypatch, emit_spy):
     async with _client(monkeypatch, user=U1) as c:
-        team = (await c.post('/api/v1/workos/teams', json={'name': 'T'})).json()
+        team = (await c.post('/api/v1/workos/teams', json={'name': 'T', 'key': 'T'})).json()
         await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
         assert 'workos.team.member_add' in _emitted(emit_spy)
         await c.delete(f"/api/v1/workos/teams/{team['id']}/members/u2")
         assert 'workos.team.member_remove' in _emitted(emit_spy)
 ```
 
-BEFORE running: open the existing workos router tests to confirm the exact request paths/verbs/json shapes used for team/workspace/workstream/task/comment/member creation (e.g. `test_router_teams.py`, `test_router_directory.py`, threaded-comment tests) and correct the calls above to match — the routes here are best-effort reconstructions and MUST be aligned with real test usage, not guessed.
+Hierarchy setup reuses verified existing helpers: `_stream(c) -> (team, ws, s)` from `test_router_task.py:6` and `_task(c) -> (team, ws, s, t)` from `test_router_comments.py:8`. `_client` signature verified: `_client(monkeypatch, *, user, allow=True, rules=None)` (test_router_teams.py:25), monkeypatching `wa.has_permission` — the `monkeypatch.setattr(wr, ...)` spy pattern matches existing precedent (`test_realtime.py:30` patches `wr.emit_event`). BEFORE running: eyeball the helpers' current return shapes and the team-create payload (existing tests pass `{'name', 'key'}`) in case they drifted.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -794,7 +784,7 @@ git commit -m "feat(usage): server-side event emission in workos router"
 **Files:**
 - Modify: `backend/open_webui/routers/policy_review.py`
 - Modify: `backend/open_webui/main.py` (`chat_completion`, ~line 2005)
-- Test: extend the existing policy router test file (find it: `Glob backend/open_webui/test/**/test*policy*.py`) with emission tests, same monkeypatch-spy pattern as Task 3.
+- Test: extend `backend/open_webui/test/policy_review/test_router_reviews.py` with emission tests, same monkeypatch-spy pattern as Task 3. (Do NOT glob for `test*policy*.py` — that matches only `test/workos/test_policy_module.py`, which is about `workos_access`, and misses the real suite under `test/policy_review/`.)
 
 **Interfaces:**
 - Consumes: `UsageEvents.emit` (Task 1).
@@ -802,7 +792,7 @@ git commit -m "feat(usage): server-side event emission in workos router"
 
 - [ ] **Step 1: Write failing tests for policy emission**
 
-Add to the existing policy router test file (reusing ITS existing client/fixture pattern — read the file first, mirror how it builds reviews and drives submit/approve):
+Add to `test/policy_review/test_router_reviews.py` (reusing ITS existing client/fixture pattern — read the file first, mirror how it builds reviews and drives submit/approve). Its conventions differ from workos: it patches `pr_router.has_permission` on the ROUTER module (not the utils module), offers `_client(monkeypatch, *, user, allow=True)` and `_client_keys(monkeypatch, *, user, keys=())` helpers, and has an autouse `_seed_active` fixture seeding an active checklist version. Note `test/policy_review/conftest.py` runs `Base.metadata.create_all` with NO table filter, so once `models/usage.py` exists its table is auto-created there — but keep the emit spy anyway for assertion access.
 
 ```python
 from unittest.mock import AsyncMock
@@ -825,7 +815,7 @@ Then one test each asserting `'policy.doc.upload' in _emitted(emit_spy)` after d
 
 - [ ] **Step 2: Run to verify they fail**
 
-`.venv/Scripts/python.exe -m pytest open_webui/test/ -k "policy and emission or usage_emission" -v` (adjust `-k` to the actual test names)
+`.venv/Scripts/python.exe -m pytest open_webui/test/policy_review/test_router_reviews.py -v -k emit`
 Expected: FAIL — no `UsageEvents` attribute on the policy router module.
 
 - [ ] **Step 3: Add import + 5 emit calls to policy_review.py**
@@ -860,7 +850,7 @@ In `chat_completion` (~line 1717), right after `request.state.metadata = metadat
     )
 ```
 
-Add `from open_webui.models.usage import UsageEvents` to main.py's imports. Verify the local variable names (`model_id`, `metadata`, `user`) against the actual function body before inserting. This hook fires once per user-sent message including multi-model chats (one request), and even if the model call later fails — that matches "message sent". No automated test (main.py monolith); verified at browser smoke.
+Add `from open_webui.models.usage import UsageEvents` to main.py's imports. Variable names verified in the current tree: `model_id` set at ~line 1725, `metadata` at ~1729, `user` is the endpoint param; user message IS persisted before line 2005 (new-chat path `Chats.insert_new_chat` ~1870, existing-chat `upsert_message_to_chat_by_id_and_message_id` ~1933). This hook fires once per user-sent message including multi-model chats (one request), and even if the model call later fails — that matches "message sent". Known accepted caveat: the custom-model fallback (~line 1767-1770) rewrites `form_data['model']` but NOT `model_id`, so properties record the originally requested model, which is fine for adoption analytics. No automated test (main.py monolith); verified at browser smoke.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -1120,7 +1110,7 @@ Expected: 4 PASS.
 
 - [ ] **Step 5: Append the 5 endpoints to analytics.py**
 
-At the end of `backend/open_webui/routers/analytics.py`, following its exact house style (pydantic response models, `get_admin_user`, `db` injection). Add import `from open_webui.models.usage import UsageEvents` and `import time`. Resolve display names for the users endpoint the same way analytics.py's existing per-user endpoint does (read how `UserUsage`-backing endpoint fetches names — reuse that helper/model).
+At the end of `backend/open_webui/routers/analytics.py`, following its exact house style (pydantic response models, `get_admin_user`, `db` injection). Add import `from open_webui.models.usage import UsageEvents` and `import time`. Display names: analytics.py already imports `Users` (line 11) and resolves batches via `Users.get_users_by_user_ids(ids, db=db)` (see line 94) — reuse exactly that.
 
 ```python
 def _since_ms(days: int) -> int:
@@ -1215,10 +1205,18 @@ async def get_usage_users(
     db: AsyncSession = Depends(get_async_session),
 ):
     res = await UsageEvents.user_rollup(_since_ms(days), sort=sort, page=page, db=db)
-    names = {}  # resolve via the same user-name lookup the existing /users endpoint uses
+    ids = [u['user_id'] for u in res['users']]
+    user_info = (
+        {u.id: u for u in await Users.get_users_by_user_ids(ids, db=db)} if ids else {}
+    )
     return UsageUsersResponse(
         users=[
-            UsageUserEntry(**u, name=names.get(u['user_id'], 'removed user'))
+            UsageUserEntry(
+                **u,
+                name=user_info[u['user_id']].name
+                if u['user_id'] in user_info
+                else 'removed user',
+            )
             for u in res['users']
         ],
         total=res['total'],
@@ -1253,7 +1251,7 @@ async def get_usage_user_activity(
     )
 ```
 
-Fill the `names` lookup with the real mechanism found in analytics.py (do not leave the empty-dict placeholder).
+(Name lookup above is the verified analytics.py:94 mechanism — `Users` import already present in that file.)
 
 - [ ] **Step 6: Add endpoint tests**
 
@@ -1517,9 +1515,12 @@ export const initUsageTracking = (authToken: string, isEnabled: boolean): void =
 					path: currentPage.path,
 					duration_ms: Date.now() - currentPage.since
 				});
-				currentPage.since = Date.now();
 			}
 			flushNow();
+		} else if (currentPage) {
+			// Reset on return so time spent hidden never counts into the
+			// next page.leave duration.
+			currentPage.since = Date.now();
 		}
 	});
 };
@@ -1552,7 +1553,8 @@ git commit -m "feat(usage): frontend tracker with batching and page-view lifecyc
 
 **Files:**
 - Modify: `src/routes/+layout.svelte` (init + afterNavigate, next to the existing `beforeNavigate` ~line 100)
-- Modify: `src/lib/components/workos/WorkOSApp.svelte` (view-switch + search events)
+- Modify: `src/lib/components/workos/WorkOSApp.svelte` (view-switch events)
+- Modify: `src/lib/components/workos/chrome/FilterBar.svelte` (search events)
 
 **Interfaces:**
 - Consumes: `initUsageTracking`, `pageEnter`, `track` (Task 7); `$config.features.enable_usage_tracking` (Task 2); WorkOS `view` store (`src/lib/components/workos/lib/store.ts:56`).
@@ -1601,29 +1603,36 @@ const unsubView = view.subscribe((v) => {
 onDestroy(unsubView);
 ```
 
-For `workos.search.used`: locate the search/query store the Phase-3a filter bar writes to (check `src/lib/components/workos/lib/store.ts` exports for a search/filter store; the filter bar component lives under `src/lib/components/workos/chrome/`). Subscribe next to the view subscription, debounced, firing at most once per continuous typing burst:
+For `workos.search.used`: there is NO dedicated search store (verified) — search text lives in the `text` field of the `TaskFilter` stores (`boardFilter`/`myWorkFilter`, store.ts:57-58), and `FilterBar.svelte` binds it via `bind:value={$filter.text}` (FilterBar.svelte:30). Instrument `FilterBar.svelte` directly (one spot covers board, list, and My Work) with a debounced reactive statement — do NOT subscribe to the filter stores in WorkOSApp, since those fire on every facet change (status/priority/labels/assignees), not just text:
 
 ```ts
-let searchTimer: ReturnType<typeof setTimeout> | null = null;
-const unsubSearch = searchStore.subscribe((q) => {
-	if (!q) return;
-	if (searchTimer) clearTimeout(searchTimer);
-	searchTimer = setTimeout(() => track('workos.search.used', {}), 2000);
-});
-onDestroy(unsubSearch);
-```
+// FilterBar.svelte <script>, alongside the existing helpers
+import { onDestroy } from 'svelte';
+import { track } from '$lib/utils/usage';
 
-(`searchStore` = the actual exported store name found in store.ts — substitute it. If search state turns out to be component-local rather than a store, put the debounced `track` call directly in the filter bar component's input handler instead.)
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+let lastTrackedText = '';
+$: if ($filter.text !== lastTrackedText) {
+	lastTrackedText = $filter.text;
+	if ($filter.text) {
+		if (searchTimer) clearTimeout(searchTimer);
+		searchTimer = setTimeout(() => track('workos.search.used', {}), 2000);
+	}
+}
+onDestroy(() => {
+	if (searchTimer) clearTimeout(searchTimer);
+});
+```
 
 - [ ] **Step 3: Static verification**
 
 `npm run test:frontend` — all pass.
-`npx svelte-check --threshold error 2>&1 | Select-String -Pattern "usage|WorkOSApp|\+layout" -Context 0,2` — no NEW errors in the touched files (the repo may have pre-existing warnings; compare against `git stash` state if unsure).
+`npx svelte-check --threshold error 2>&1 | Select-String -Pattern "usage|WorkOSApp|FilterBar|\+layout" -Context 0,2` — no NEW errors in the touched files (the repo may have pre-existing warnings; compare against `git stash` state if unsure).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/routes/+layout.svelte src/lib/components/workos/WorkOSApp.svelte
+git add src/routes/+layout.svelte src/lib/components/workos/WorkOSApp.svelte src/lib/components/workos/chrome/FilterBar.svelte
 git commit -m "feat(usage): wire tracker into root layout and WorkOS app"
 ```
 
@@ -1678,24 +1687,24 @@ Read `src/lib/components/admin/Analytics.svelte` first (it has an admin-role gat
 {/if}
 ```
 
-(Adjust `on:click` → `onclick` if the file is runes-mode.)
+(Verified: `Analytics.svelte` is legacy Svelte 4 — `on:click` as written is correct. FYI a route `/admin/analytics/[tab]` already exists and currently ignores its param; driving `tab` from it would give deep-linkable tabs, but that's optional polish, not part of this task.)
 
 - [ ] **Step 3: Usage.svelte**
 
 `src/lib/components/admin/Analytics/Usage.svelte` — follow `Dashboard.svelte`'s structure (read it first: period select persisted to localStorage, card grid, table styling — mirror its classes). Content:
 
 1. Period select: 7/30/90 days → `days` param, persisted as `localStorage.usageAnalyticsPeriod`.
-2. Overview cards: one card per tool from `getUsageOverview` — tool name, `active_users` large, `events` + `avg_page_ms` (rendered as `Xm Ys`) small.
-3. Daily chart: `<ChartLine data={dailyData} models={toolNames} colors={toolColors} />` where `dailyData = days.map((d) => ({ date: d.date, models: d.tools }))`, `toolNames` = union of tool keys, `toolColors` = the color array Dashboard already uses (copy it).
+2. Overview cards: one card per tool from `getUsageOverview` — tool name, `active_users` large, `events` + `avg_page_ms` (rendered as `Xm Ys`) small. Server-only tools (e.g. policy) legitimately have `sessions: 0` and `avg_page_ms: 0` (server events carry no session_id and no page.leave) — render a dash for zeros there, not a misleading `0m 0s`.
+3. Daily chart: `<ChartLine data={dailyData} models={toolNames} colors={toolColors} />` where `toolNames` = union of tool keys across all days, `toolColors` = the color array Dashboard already uses (copy the inline `chartColors` at Dashboard.svelte:264-273), and days are zero-filled so every entry has every tool key: `dailyData = days.map((d) => ({ date: d.date, models: Object.fromEntries(toolNames.map((t) => [t, d.tools[t] ?? 0])) }))`.
 4. Events table: event_name / tool / count / unique_users from `getUsageEventCounts`.
-5. Users table: name / last_seen (relative date) / sessions / events / top tool from `getUsageUsers`, sort toggle (events|last_seen), pagination buttons; row click sets `selectedUserId` → opens modal.
-6. `{#if selectedUserId}<UsageUserModal userId={selectedUserId} {days} on:close={() => (selectedUserId = null)} />{/if}` (event-dispatch vs callback-prop: match how `Dashboard.svelte` opens `AnalyticsModelModal` and copy that mechanism).
+5. Users table: name / last_seen (relative date) / sessions / events / top tool from `getUsageUsers`, sort toggle (events|last_seen), pagination buttons; row click sets `selectedUser` + `showUserModal = true`.
+6. Modal mechanism (verified): `Dashboard.svelte` uses two-way binding plus a callback prop, NOT events — `Modal.svelte` has no dispatcher, so `on:close` would silently never fire. Copy: `<UsageUserModal bind:show={showUserModal} user={selectedUser} {days} onClose={() => (selectedUser = null)} />` (same shape as `<AnalyticsModelModal bind:show=... onClose=.../>` at Dashboard.svelte:224-229).
 
 All data loads in `onMount` via `Promise.all`, token from `localStorage.token` (same as Dashboard).
 
 - [ ] **Step 4: UsageUserModal.svelte**
 
-Pattern after `AnalyticsModelModal.svelte` (read it first — reuse its modal shell/close mechanics). Content: the user's name as title, tool filter select, paginated list from `getUsageUserActivity`: rows of `created_at` (formatted datetime), `event_name`, `tool`, `source` badge. "Load more" button increments page and appends.
+Pattern after `AnalyticsModelModal.svelte` (read it first — reuse its modal shell/close mechanics: props `show` + `onClose: () => void = () => {}`, shell `<Modal size="md" bind:show>`, local `close()` that resets state then calls `onClose()`). Content: the user's name as title, tool filter select, paginated list from `getUsageUserActivity`: rows of `created_at` (formatted datetime), `event_name`, `tool`, `source` badge. "Load more" button increments page and appends.
 
 - [ ] **Step 5: Static verification**
 
