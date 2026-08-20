@@ -21,6 +21,7 @@ from open_webui.models.workos import (
     parse_mentions, task_change_activities,
 )
 from open_webui.models.users import Users
+from open_webui.models.usage import UsageEvents
 from open_webui.utils.workos_access import (
     TEAM_ROLES, WORKSPACE_ROLES,
     require_workos, require_workos_admin,
@@ -289,7 +290,9 @@ async def add_member(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
     if await TeamMembers.get(team_id, form.user_id, db=db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Already a member.')
-    return await TeamMembers.add(team_id, form.user_id, form.role, db=db)
+    member = await TeamMembers.add(team_id, form.user_id, form.role, db=db)
+    await UsageEvents.emit(user.id, 'workos.team.member_add', {'team_id': team_id, 'member_id': form.user_id, 'role': form.role})
+    return member
 
 
 @router.patch('/teams/{team_id}/members/{user_id}')
@@ -323,6 +326,8 @@ async def remove_member(
     if await is_last_owner(team_id, user_id, db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Cannot remove the last team owner.')
     removed = await TeamMembers.remove(team_id, user_id, db=db)
+    if removed:
+        await UsageEvents.emit(user.id, 'workos.team.member_remove', {'team_id': team_id, 'member_id': user_id})
     # Revocation eviction: drop the ex-member's live sockets from every room
     # under this team (app-admins retain access, so leave theirs alone).
     if removed and not await is_app_admin(user_id, db):
@@ -453,6 +458,9 @@ async def update_workspace(
     if 'visibility' in fields and fields['visibility'] not in {'team', 'restricted'}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid visibility.')
     updated = await Workspaces.update_fields(workspace_id, fields, db=db)
+    if before.visibility != updated.visibility:
+        await UsageEvents.emit(user.id, 'workos.workspace.visibility_change',
+                               {'workspace_id': workspace_id, 'from': before.visibility, 'to': updated.visibility})
     await _emit_workspace_updated(before, updated, db)
     return updated
 
@@ -496,7 +504,9 @@ async def add_workspace_member(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
     if await WorkspaceMembers.get(workspace_id, form.user_id, db=db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Already a member.')
-    return await WorkspaceMembers.add(workspace_id, form.user_id, form.role, db=db)
+    member = await WorkspaceMembers.add(workspace_id, form.user_id, form.role, db=db)
+    await UsageEvents.emit(user.id, 'workos.workspace.member_add', {'workspace_id': workspace_id, 'member_id': form.user_id})
+    return member
 
 
 @router.patch('/workspaces/{workspace_id}/members/{user_id}')
@@ -522,6 +532,8 @@ async def remove_workspace_member(
     await require_workos(request, user, db)
     ws = await require_workspace_manage(user, workspace_id, db)
     removed = await WorkspaceMembers.remove(workspace_id, user_id, db=db)
+    if removed:
+        await UsageEvents.emit(user.id, 'workos.workspace.member_remove', {'workspace_id': workspace_id, 'member_id': user_id})
     # Removal from a restricted workspace revokes visibility -> evict from its
     # workstream rooms (not the team room — the user is still a team member).
     # Removal from a team-visible workspace revokes nothing. The creator and
@@ -715,6 +727,7 @@ async def create_task(
     await emit_event('workos:task.created', f'workos:workstream:{workstream_id}', task.model_dump())
     if task.assignee_ids:
         await notify(request, db, recipients=set(task.assignee_ids), actor=user, type='assigned', task=task)
+    await UsageEvents.emit(user.id, 'workos.task.create', {'task_id': task.id, 'team_id': task.team_id, 'workstream_id': workstream_id})
     return task
 
 
@@ -785,6 +798,8 @@ async def update_task(
         await notify(request, db, recipients={updated.created_by_id, *(updated.assignee_ids or [])}, actor=user,
                      type='status_changed', task=updated,
                      extra={'from': before.get('status'), 'to': updated.status})
+        if updated.status == 'done':
+            await UsageEvents.emit(user.id, 'workos.task.complete', {'task_id': updated.id, 'team_id': updated.team_id})
     return {**updated.model_dump(), 'deleted_label_ids': deleted_label_ids}
 
 
@@ -797,6 +812,8 @@ async def delete_task(
     ws = await Workspaces.get_by_id(stream.workspace_id, db=db)
     await require_capability('task.delete', user, db, team_id=ws.team_id, creator_id=task.created_by_id)
     deleted = await Tasks.delete(task_id, db=db)
+    if deleted:
+        await UsageEvents.emit(user.id, 'workos.task.delete', {'task_id': task_id, 'team_id': task.team_id})
     # Auto-delete tags this task held that no surviving task references.
     deleted_label_ids = await Labels.prune_unused(task.team_id, task.labels or [], db=db)
     await emit_event('workos:task.deleted', f'workos:workstream:{task.workstream_id}', {'id': task_id, 'workstream_id': task.workstream_id})
@@ -1063,6 +1080,8 @@ async def create_comment(
                                 detail='Cannot reply to a deleted comment.')
     mentions = parse_mentions(body)
     comment = await Comments.insert(task_id, user.id, body, mentions, parent_id=form.parent_id, db=db)
+    await UsageEvents.emit(user.id, 'workos.comment.create',
+                           {'task_id': task_id, 'team_id': task.team_id, 'is_reply': bool(form.parent_id)})
     activity = await Activity.insert(task_id, task.team_id, user.id, 'comment_added', {}, db=db)
     payload = {**comment.model_dump(), 'workstream_id': task.workstream_id, 'actor_id': user.id}
     await _emit_task_room('workos:comment.created', task, payload)
