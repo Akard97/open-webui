@@ -14,6 +14,7 @@
 	import { user } from '$lib/stores';
 	import { addableUsers, isLastOwner } from '../../lib/members';
 	import { avatarColors } from '../../lib/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import type { Member, TeamRole } from '../../lib/types';
 
 	const ROLE_LABEL: Record<string, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
@@ -186,13 +187,15 @@
 						{#each members as m (m.user_id)}
 							{@const lastOwner = isLastOwner(ownerIds, m.user_id)}
 							{@const colors = avatarColors(m.user_id)}
+							{@const image = $directory[m.user_id]?.image ?? null}
 							<div class="flex items-center gap-3 py-3 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
-								<span
-									class="size-9 rounded-full text-[11px] font-semibold inline-flex items-center justify-center flex-none"
-									style="background:{colors.background};color:{colors.foreground}"
-								>
-									{initials(m.user_id)}
-								</span>
+								<Avatar class="size-9 flex-none">
+									{#if image}<AvatarImage src={image} alt="" />{/if}
+									<AvatarFallback
+										class="text-[11px] font-semibold"
+										style="background:{colors.background};color:{colors.foreground}"
+									>{initials(m.user_id)}</AvatarFallback>
+								</Avatar>
 								<span class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 truncate">{nameOf(m.user_id)}</span>
 								{#if lastOwner}
 									<span class="text-[13px] text-gray-400 flex items-center gap-1.5 px-1" title="The last owner cannot be demoted or removed">

@@ -5,8 +5,10 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { user } from '$lib/stores';
 	import {
-		displayName, deleteCommentAction, toggleReactionAction, roles, currentTeam, attachments
+		displayName, deleteCommentAction, toggleReactionAction, roles, currentTeam, attachments,
+		directory
 	} from '../../lib/store';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import { renderMentions } from '../../lib/mentions';
 	import { agoLong } from '../../lib/inboxFormat';
 	import { avatarColors } from '../../lib/avatar';
@@ -32,6 +34,7 @@
 	$: mine = comment.user_id === ($user?.id ?? '');
 	$: colors = avatarColors(comment.user_id);
 	$: initials = displayName(comment.user_id).slice(0, 2).toUpperCase();
+	$: image = tombstoned ? null : ($directory[comment.user_id]?.image ?? null);
 	$: images = $attachments.filter(
 		(a) => a.comment_id === comment.id && (a.content_type ?? '').startsWith('image/')
 	);
@@ -54,10 +57,13 @@
 
 <div bind:this={rootEl}
 	class="group flex gap-2.5 py-2.5 {highlight ? 'rounded-lg bg-primary/5 px-2 ring-1 ring-primary/20' : ''}">
-	<span class="flex flex-none items-center justify-center rounded-full font-bold {node.depth === 0 ? 'size-8 text-[12px]' : 'size-[26px] text-[10px]'}"
-		style="background:{tombstoned ? 'rgb(156 163 175)' : colors.background};color:{tombstoned ? '#fff' : colors.foreground}">
-		{tombstoned ? '?' : initials}
-	</span>
+	<Avatar class="flex-none {node.depth === 0 ? 'size-8' : 'size-[26px]'}">
+		{#if image}<AvatarImage src={image} alt="" />{/if}
+		<AvatarFallback class="font-bold {node.depth === 0 ? 'text-[12px]' : 'text-[10px]'}"
+			style="background:{tombstoned ? 'rgb(156 163 175)' : colors.background};color:{tombstoned ? '#fff' : colors.foreground}">
+			{tombstoned ? '?' : initials}
+		</AvatarFallback>
+	</Avatar>
 
 	<div class="min-w-0 flex-1">
 		{#if replyToName}

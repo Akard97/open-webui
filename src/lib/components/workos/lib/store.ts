@@ -58,7 +58,8 @@ export const boardFilter: Writable<TaskFilter> = writable(emptyFilter());
 export const myWorkFilter: Writable<TaskFilter> = writable(emptyFilter());
 export const selectedTaskId: Writable<string | null> = writable(null);
 export const loading: Writable<boolean> = writable(false);
-export const directory: Writable<Record<string, { name: string }>> = writable({});
+export const directory: Writable<Record<string, { name: string; image?: string | null }>> =
+	writable({});
 
 // Sidebar collapse, persisted like OWUI's own sidebar flag.
 const NAV_COLLAPSED_KEY = 'workos:nav-collapsed';
@@ -173,6 +174,11 @@ export function initials(id: string | null | undefined): string {
 	const n = displayName(id);
 	return n === 'Unassigned' ? '–' : n.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
+/** Uploaded profile image for a user, or null → callers fall back to initials. */
+export function avatarImage(id: string | null | undefined): string | null {
+	if (!id) return null;
+	return get(directory)[id]?.image ?? null;
+}
 
 export const currentTeam = derived([teams, currentTeamId], ([$t, $id]) => $t.find((x) => x.id === $id) ?? null);
 export const currentWorkstream = derived(
@@ -219,7 +225,9 @@ export async function loadBootstrap(opts: { selectDefaultWorkstream?: boolean } 
 		roles.set(b.roles);
 		unreadCount.set(b.notifications_unread ?? 0);
 		const dir = await api.getDirectory(token()).catch(() => []);
-		directory.set(Object.fromEntries(dir.map((u) => [u.id, { name: u.name }])));
+		directory.set(
+			Object.fromEntries(dir.map((u) => [u.id, { name: u.name, image: u.profile_image_url ?? null }]))
+		);
 		const savedTeam = get(currentTeamId);
 		if ((!savedTeam || !b.teams.some((t) => t.id === savedTeam)) && b.teams.length) {
 			currentTeamId.set(b.teams[0].id);
@@ -244,7 +252,9 @@ export async function loadBootstrap(opts: { selectDefaultWorkstream?: boolean } 
 // team membership changes, so newly added members become assignable immediately.
 export async function reloadDirectory(): Promise<void> {
 	const dir = await api.getDirectory(token()).catch(() => []);
-	directory.set(Object.fromEntries(dir.map((u) => [u.id, { name: u.name }])));
+	directory.set(
+		Object.fromEntries(dir.map((u) => [u.id, { name: u.name, image: u.profile_image_url ?? null }]))
+	);
 }
 
 export async function selectTeam(id: string): Promise<void> {

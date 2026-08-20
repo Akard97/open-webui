@@ -1,8 +1,9 @@
 <script lang="ts">
 	import Icon from '../ui/Icon.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { currentWorkstream, currentTeam, workspaces, view, tasks, initials } from '../lib/store';
+	import { currentWorkstream, currentTeam, workspaces, view, tasks, initials, directory } from '../lib/store';
 	import { avatarColors } from '../lib/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 
 	$: ws = $currentWorkstream;
 	$: parentWorkspace = ws ? $workspaces.find((w) => w.id === ws.workspace_id) : null;
@@ -41,13 +42,14 @@
 				<div class="flex -space-x-2">
 				{#each assignees as id (id)}
 					{@const colors = avatarColors(id)}
-					<span
-						class="size-7 rounded-full border-2 border-white dark:border-gray-950 text-[10px] font-semibold inline-flex items-center justify-center"
-						style="background:{colors.background};color:{colors.foreground}"
-						title={initials(id)}
-					>
-						{initials(id)}
-					</span>
+					{@const image = $directory[id]?.image ?? null}
+					<Avatar class="size-7 border-2 border-white dark:border-gray-950" title={initials(id)}>
+						{#if image}<AvatarImage src={image} alt="" />{/if}
+						<AvatarFallback
+							class="text-[10px] font-semibold"
+							style="background:{colors.background};color:{colors.foreground}"
+						>{initials(id)}</AvatarFallback>
+					</Avatar>
 				{/each}
 			</div>
 			<Button variant="ghost" size="sm" disabled><Icon name="share-2" size={14} /> Share</Button>

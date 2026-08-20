@@ -522,12 +522,13 @@
 				</div>
 			</div>
 
-			<!-- RIGHT: tabs -->
-			<div class="w-full @[880px]:flex-1 @[880px]:min-w-0 @[880px]:min-h-0 @[880px]:overflow-y-auto px-4 py-4 @[880px]:px-7 @[880px]:py-5">
-				<!-- Tabs -->
-				<div>
-					<Tabs.Root value="comments">
-						<Tabs.List variant="line" class="w-full justify-start gap-4 border-b border-gray-200 dark:border-gray-800 bg-transparent p-0">
+			<!-- RIGHT: tabs.
+			     ≥880px: the tab bar is pinned (flex-none) and only the active panel scrolls,
+			     so the tabs — and the comment composer — never scroll out of view. -->
+			<div class="flex w-full flex-col @[880px]:flex-1 @[880px]:min-w-0 @[880px]:min-h-0 @[880px]:overflow-hidden">
+				<Tabs.Root value="comments" class="@[880px]:flex-1 @[880px]:min-h-0 @[880px]:overflow-hidden">
+					<div class="flex-none border-b border-gray-200 dark:border-gray-800 px-4 pt-4 @[880px]:px-7 @[880px]:pt-5">
+						<Tabs.List variant="line" class="w-full justify-start gap-4 bg-transparent p-0">
 							<Tabs.Trigger value="subtasks">Subtasks</Tabs.Trigger>
 							<Tabs.Trigger value="comments" class="gap-1.5">
 								Comments
@@ -535,23 +536,25 @@
 							</Tabs.Trigger>
 							<Tabs.Trigger value="activities">Activities</Tabs.Trigger>
 						</Tabs.List>
+					</div>
 
-						<Tabs.Content value="subtasks"><SubtasksPanel task={t} /></Tabs.Content>
+					<Tabs.Content value="subtasks" class="px-4 pb-4 @[880px]:px-7 @[880px]:pb-5 @[880px]:min-h-0 @[880px]:overflow-y-auto">
+						<SubtasksPanel task={t} />
+					</Tabs.Content>
 
-						<Tabs.Content value="comments">
-							<div class="@max-[880px]:pb-[env(safe-area-inset-bottom)]">
-								<CommentsPanel taskId={t.id} teamId={t.team_id} />
-							</div>
-						</Tabs.Content>
+					<Tabs.Content value="comments" class="px-4 pb-4 @[880px]:px-7 @[880px]:pb-5 @[880px]:min-h-0 @[880px]:overflow-hidden">
+						<div class="@max-[880px]:pb-[env(safe-area-inset-bottom)] @[880px]:flex @[880px]:h-full @[880px]:flex-col">
+							<CommentsPanel taskId={t.id} teamId={t.team_id} />
+						</div>
+					</Tabs.Content>
 
-						<Tabs.Content value="activities">
-							<div class="pt-2">
-								{#each sortedActivity as a (a.id)}<ActivityItem activity={a} />{/each}
-								{#if !sortedActivity.length}<div class="text-xs text-gray-400 py-4 text-center">No activity yet</div>{/if}
-							</div>
-						</Tabs.Content>
-					</Tabs.Root>
-				</div>
+					<Tabs.Content value="activities" class="px-4 pb-4 @[880px]:px-7 @[880px]:pb-5 @[880px]:min-h-0 @[880px]:overflow-y-auto">
+						<div class="pt-2">
+							{#each sortedActivity as a (a.id)}<ActivityItem activity={a} />{/each}
+							{#if !sortedActivity.length}<div class="text-xs text-gray-400 py-4 text-center">No activity yet</div>{/if}
+						</div>
+					</Tabs.Content>
+				</Tabs.Root>
 			</div>
 		</div>
 	</div>

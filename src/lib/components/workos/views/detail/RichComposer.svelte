@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { directory, postComment, editComment, uploadFiles } from '../../lib/store';
 	import { avatarColors } from '../../lib/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import { bodyToEditorHtml, mentionChipHtml, serializeEditor } from '../../lib/richText';
 
 	export let taskId: string;
@@ -167,14 +168,18 @@
 	{#if taOpen && taMatches.length}
 		<div class="absolute bottom-full left-0 z-20 mb-1.5 w-60 rounded-xl border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
 			{#each taMatches as m, i (m.id)}
+				{@const image = $directory[m.id]?.image ?? null}
 				<button
 					class="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left {i === taIndex ? 'bg-primary/10' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}"
 					onmousedown={(e) => { e.preventDefault(); pickMention(m); }}
 				>
-					<span class="flex size-6 flex-none items-center justify-center rounded-full text-[10px] font-bold"
-						style="background:{avatarColors(m.id).background};color:{avatarColors(m.id).foreground}">
-						{m.name.slice(0, 2).toUpperCase()}
-					</span>
+					<Avatar class="size-6 flex-none">
+						{#if image}<AvatarImage src={image} alt="" />{/if}
+						<AvatarFallback class="text-[10px] font-bold"
+							style="background:{avatarColors(m.id).background};color:{avatarColors(m.id).foreground}">
+							{m.name.slice(0, 2).toUpperCase()}
+						</AvatarFallback>
+					</Avatar>
 					<span class="text-sm font-medium">{m.name}</span>
 				</button>
 			{/each}

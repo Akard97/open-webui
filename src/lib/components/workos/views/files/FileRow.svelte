@@ -6,8 +6,9 @@
 	import { attachmentUrl } from '../../lib/api';
 	import { fileKind, isImage, formatBytes, formatFileDate } from '../../lib/files';
 	import { STATUS_COLOR, statusShape, tint } from '../../lib/colors';
-	import { openTask, displayName, initials } from '../../lib/store';
+	import { openTask, displayName, initials, directory } from '../../lib/store';
 	import { avatarColors } from '../../lib/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import type { WorkstreamFile } from '../../lib/types';
 
 	export let file: WorkstreamFile;
@@ -15,6 +16,7 @@
 
 	$: kind = fileKind(file.name, file.content_type);
 	$: av = avatarColors(file.created_by_id ?? '');
+	$: uploaderImage = file.created_by_id ? ($directory[file.created_by_id]?.image ?? null) : null;
 </script>
 
 <div
@@ -69,10 +71,13 @@
 
 	<!-- Uploader (≥xl) -->
 	<span class="hidden xl:flex items-center gap-2 min-w-0 text-xs text-gray-500 dark:text-gray-400">
-		<span
-			class="size-[22px] rounded-full flex-none grid place-items-center text-[9px] font-bold"
-			style="background:{av.background};color:{av.foreground}"
-		>{initials(file.created_by_id)}</span>
+		<Avatar class="size-[22px] flex-none">
+			{#if uploaderImage}<AvatarImage src={uploaderImage} alt="" />{/if}
+			<AvatarFallback
+				class="text-[9px] font-bold"
+				style="background:{av.background};color:{av.foreground}"
+			>{initials(file.created_by_id)}</AvatarFallback>
+		</Avatar>
 		<span class="truncate">{displayName(file.created_by_id)}</span>
 	</span>
 

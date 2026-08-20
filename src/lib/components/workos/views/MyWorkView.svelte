@@ -10,7 +10,7 @@
 	import workosLogoLight from '../assets/workos-logo-light.png';
 	import StatusBadge from '../ui/StatusBadge.svelte';
 	import PriorityFlag from '../ui/PriorityFlag.svelte';
-	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import { avatarColors } from '../lib/avatar';
 	import TaskHoverCard from './TaskHoverCard.svelte';
 	import * as HoverCard from '$lib/components/ui/hover-card';
@@ -22,7 +22,7 @@
 	import { computeStats } from '../lib/stats';
 	import { summarizeNotification } from '../lib/notifications';
 	import {
-		myTasks, workstreams, notifications,
+		myTasks, workstreams, notifications, directory,
 		loadMyWork, teardownMyWork, loadNotifications, openTask, openNotification
 	} from '../lib/store';
 
@@ -32,10 +32,11 @@
 
 	const fmtDue = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-	// Activity/mentions rails only have a free-text actor name (not a directory
-	// id), so they render a one-off Avatar+AvatarFallback instead of going through
+	// Activity/mentions rails key colors/initials off the free-text actor name, so
+	// they render a one-off Avatar+AvatarFallback instead of going through
 	// AssigneeAvatars (which is id-keyed). Same clean/initials rule as the deleted
-	// per-user avatar component so colors and initials don't shuffle.
+	// per-user avatar component so colors and initials don't shuffle. Uploaded
+	// photos DO come from the directory via the notification's actor_id when set.
 	const cleanName = (name: string) => (name || '?').trim();
 	const initialsOf = (name: string) =>
 		cleanName(name).split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
@@ -391,8 +392,10 @@
 						{#each activity as a (a.n.id)}
 							{@const actorName = cleanName(a.who)}
 							{@const colors = avatarColors(actorName)}
+							{@const image = a.n.actor_id ? ($directory[a.n.actor_id]?.image ?? null) : null}
 							<button type="button" onclick={() => openNotification(a.n)} class="w-full text-left flex items-start gap-2.5 py-1.5">
 								<Avatar style="width:24px;height:24px" title={actorName}>
+									{#if image}<AvatarImage src={image} alt="" />{/if}
 									<AvatarFallback
 										class="font-semibold"
 										style="background:{colors.background};color:{colors.foreground};font-size:10px"
@@ -419,8 +422,10 @@
 						{#each mentions as m (m.id)}
 							{@const actorName = cleanName(m.data?.actor_name ?? '?')}
 							{@const colors = avatarColors(actorName)}
+							{@const image = m.actor_id ? ($directory[m.actor_id]?.image ?? null) : null}
 							<button type="button" onclick={() => openNotification(m)} class="w-full text-left flex items-start gap-2.5 py-[7px]">
 								<Avatar style="width:24px;height:24px" title={actorName}>
+									{#if image}<AvatarImage src={image} alt="" />{/if}
 									<AvatarFallback
 										class="font-semibold"
 										style="background:{colors.background};color:{colors.foreground};font-size:10px"

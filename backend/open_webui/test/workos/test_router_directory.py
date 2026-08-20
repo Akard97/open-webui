@@ -4,6 +4,69 @@ import open_webui.routers.workos as wr
 from open_webui.test.workos.test_router_teams import _client, U1
 
 
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        ('data:image/png;base64,AAAA', 'data:image/png;base64,AAAA'),
+        ('https://example.com/pic.jpg', 'https://example.com/pic.jpg'),
+        ('http://example.com/pic.jpg', 'http://example.com/pic.jpg'),
+        ('/user.png', None),
+        ('/api/v1/users/u1/profile/image', None),
+        ('', None),
+        (None, None),
+    ],
+)
+def test_sanitize_profile_image_url(raw, expected):
+    # Only genuine custom images (data URLs, OAuth http urls) pass through;
+    # the '/user.png' and per-user endpoint defaults mean "no upload" → None,
+    # so the UI keeps its initials fallback.
+    assert wr.sanitize_profile_image_url(raw) == expected
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_names_includes_profile_image(monkeypatch):
+    from types import SimpleNamespace
+
+    from open_webui.models.users import Users
+
+    stub = {
+        'u1': SimpleNamespace(id='u1', name='Lara', profile_image_url='data:image/png;base64,AAAA'),
+        'u2': SimpleNamespace(id='u2', name='Yusuf', profile_image_url='/user.png'),
+    }
+
+    async def _fake_get(uid):
+        return stub.get(uid)
+
+    monkeypatch.setattr(Users, 'get_user_by_id', staticmethod(_fake_get))
+    rows = await wr.resolve_user_names(['u1', 'u2', 'missing'])
+    assert rows == [
+        {'id': 'u1', 'name': 'Lara', 'profile_image_url': 'data:image/png;base64,AAAA'},
+        {'id': 'u2', 'name': 'Yusuf', 'profile_image_url': None},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_all_users_includes_profile_image(monkeypatch):
+    from types import SimpleNamespace
+
+    from open_webui.models.users import Users
+
+    async def _fake_get_users():
+        return {
+            'users': [
+                SimpleNamespace(id='u1', name='Lara', profile_image_url='https://cdn.example/a.jpg'),
+                SimpleNamespace(id='u2', name='Yusuf', profile_image_url='/api/v1/users/u2/profile/image'),
+            ]
+        }
+
+    monkeypatch.setattr(Users, 'get_users', staticmethod(_fake_get_users))
+    rows = await wr.list_all_users()
+    assert rows == [
+        {'id': 'u1', 'name': 'Lara', 'profile_image_url': 'https://cdn.example/a.jpg'},
+        {'id': 'u2', 'name': 'Yusuf', 'profile_image_url': None},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_directory_returns_team_member_names(monkeypatch):
     async def _fake_names(ids):

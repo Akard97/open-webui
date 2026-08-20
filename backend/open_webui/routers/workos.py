@@ -107,6 +107,16 @@ class MemberRoleForm(BaseModel):
 # ──────────────────────────────── directory ────────────────────────────────
 
 
+def sanitize_profile_image_url(url) -> str | None:
+    # Only genuine custom images travel to the client: uploaded avatars are
+    # data: URLs and OAuth pictures are http(s). The '/user.png' default and
+    # the per-user '/api/v1/users/{id}/profile/image' placeholder both mean
+    # "no upload" — mapped to None so the UI keeps its initials fallback.
+    if url and (url.startswith('data:') or url.startswith('http')):
+        return url
+    return None
+
+
 async def resolve_user_names(ids: list) -> list:
     # Wrapper around the Users DAO so tests can monkeypatch a fast stub.
     from open_webui.models.users import Users
@@ -115,7 +125,11 @@ async def resolve_user_names(ids: list) -> list:
     for uid in ids:
         u = await Users.get_user_by_id(uid)
         if u:
-            out.append({'id': u.id, 'name': u.name})
+            out.append({
+                'id': u.id,
+                'name': u.name,
+                'profile_image_url': sanitize_profile_image_url(u.profile_image_url),
+            })
     return out
 
 
@@ -124,7 +138,14 @@ async def list_all_users() -> list:
     from open_webui.models.users import Users
 
     result = await Users.get_users()
-    return [{'id': u.id, 'name': u.name} for u in result['users']]
+    return [
+        {
+            'id': u.id,
+            'name': u.name,
+            'profile_image_url': sanitize_profile_image_url(u.profile_image_url),
+        }
+        for u in result['users']
+    ]
 
 
 @router.get('/directory')

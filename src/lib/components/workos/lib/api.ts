@@ -118,7 +118,8 @@ export const updateLabel = (token: string, id: string, body: { name?: string; co
 export const deleteLabel = (token: string, id: string) => request<{ deleted: boolean }>(token, `/labels/${id}`, 'DELETE');
 
 // Directory
-export const getDirectory = (token: string) => request<{ id: string; name: string }[]>(token, '/directory');
+export const getDirectory = (token: string) =>
+	request<{ id: string; name: string; profile_image_url?: string | null }[]>(token, '/directory');
 // All app users — for the team-member "Add a user…" picker (bootstraps membership).
 export const listAllUsers = (token: string, teamId: string) =>
 	request<{ id: string; name: string }[]>(token, `/users?team_id=${encodeURIComponent(teamId)}`);

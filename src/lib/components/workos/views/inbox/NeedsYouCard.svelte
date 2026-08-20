@@ -2,9 +2,9 @@
 	// "Needs you" card — flat rounded-lg card with a 2px primary inset (mockup V4).
 	import Icon from '../../ui/Icon.svelte';
 	import TypeGlyph from './TypeGlyph.svelte';
-	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import { avatarColors } from '../../lib/avatar';
-	import { displayName } from '../../lib/store';
+	import { displayName, directory } from '../../lib/store';
 	import { agoShort } from '../../lib/inboxFormat';
 	import type { Notification } from '../../lib/types';
 
@@ -16,6 +16,7 @@
 
 	$: who = n.data?.actor_name ?? displayName(n.actor_id);
 	$: initialsOf = (who || '?').trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+	$: image = n.actor_id ? ($directory[n.actor_id]?.image ?? null) : null;
 	$: verb =
 		n.type === 'assigned' ? 'assigned you' :
 		n.type === 'subtask_assigned' ? 'assigned you a subtask on' :
@@ -35,6 +36,7 @@
 		onclick={onopen}
 	></button>
 	<Avatar class="size-7 flex-none">
+		{#if image}<AvatarImage src={image} alt="" />{/if}
 		<AvatarFallback class="text-[10px] font-semibold text-white" style="background:{avatarColors(n.actor_id ?? who).background}">
 			{initialsOf}
 		</AvatarFallback>

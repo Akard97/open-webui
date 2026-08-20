@@ -24,8 +24,9 @@
 	$: if ($highlightCommentId && tree.length > shown) shown = tree.length;
 </script>
 
-<div class="pt-3">
-	<div class="mb-1.5 flex items-center gap-2">
+<!-- ≥880px: header and composer are flex-none rails; only the thread list scrolls. -->
+<div class="flex flex-col pt-3 @[880px]:min-h-0 @[880px]:flex-1">
+	<div class="mb-1.5 flex flex-none items-center gap-2">
 		<h3 class="text-[15px] font-bold">Comments</h3>
 		{#if $comments.length}
 			<Badge class="bg-primary px-2 py-0 text-white hover:bg-primary">{$comments.length}</Badge>
@@ -45,28 +46,30 @@
 		</DropdownMenu.Root>
 	</div>
 
-	{#if !tree.length}
-		<p class="py-6 text-center text-[13px] text-gray-400">No comments yet — start the conversation.</p>
-	{/if}
+	<div class="@[880px]:min-h-0 @[880px]:flex-1 @[880px]:overflow-y-auto">
+		{#if !tree.length}
+			<p class="py-6 text-center text-[13px] text-gray-400">No comments yet — start the conversation.</p>
+		{/if}
 
-	{#each visible as node (node.comment.id)}
-		<CommentThread
-			{node} {taskId} {teamId}
-			highlightId={$highlightCommentId}
-			{replyingToId}
-			onReply={(id) => (replyingToId = replyingToId === id ? null : id)}
-			onCloseReply={() => (replyingToId = null)}
-		/>
-	{/each}
+		{#each visible as node (node.comment.id)}
+			<CommentThread
+				{node} {taskId} {teamId}
+				highlightId={$highlightCommentId}
+				{replyingToId}
+				onReply={(id) => (replyingToId = replyingToId === id ? null : id)}
+				onCloseReply={() => (replyingToId = null)}
+			/>
+		{/each}
 
-	{#if hidden > 0}
-		<button
-			class="mx-auto block py-2 text-[12.5px] font-bold text-primary hover:underline"
-			onclick={() => (shown += PAGE)}
-		>Show {Math.min(hidden, PAGE)} more ↓</button>
-	{/if}
+		{#if hidden > 0}
+			<button
+				class="mx-auto block py-2 text-[12.5px] font-bold text-primary hover:underline"
+				onclick={() => (shown += PAGE)}
+			>Show {Math.min(hidden, PAGE)} more ↓</button>
+		{/if}
+	</div>
 
-	<div class="mt-3 border-t border-gray-200 pt-3 dark:border-gray-800">
+	<div class="mt-3 flex-none border-t border-gray-200 bg-white pt-3 dark:border-gray-800 dark:bg-gray-950">
 		<RichComposer {taskId} />
 	</div>
 </div>

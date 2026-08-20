@@ -12,6 +12,7 @@
 	} from '../../lib/store';
 	import { addableWorkspaceMembers } from '../../lib/members';
 	import { avatarColors } from '../../lib/avatar';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import type { Member, WorkspaceRole } from '../../lib/types';
 
 	const ROLE_LABEL: Record<string, string> = { admin: 'Admin', member: 'Member' };
@@ -218,13 +219,15 @@
 						{:else}
 							{#each wsMembers as m (m.user_id)}
 								{@const colors = avatarColors(m.user_id)}
+								{@const image = $directory[m.user_id]?.image ?? null}
 								<div class="flex items-center gap-3 py-2.5 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
-									<span
-										class="size-7 rounded-full text-[11px] font-semibold inline-flex items-center justify-center flex-none"
-										style="background:{colors.background};color:{colors.foreground}"
-									>
-										{initials(m.user_id)}
-									</span>
+									<Avatar class="size-7 flex-none">
+										{#if image}<AvatarImage src={image} alt="" />{/if}
+										<AvatarFallback
+											class="text-[11px] font-semibold"
+											style="background:{colors.background};color:{colors.foreground}"
+										>{initials(m.user_id)}</AvatarFallback>
+									</Avatar>
 									<span class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 truncate">{nameOf(m.user_id)}</span>
 									<Select.Root
 										type="single"

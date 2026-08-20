@@ -985,3 +985,31 @@ describe('loadBootstrap selectDefaultWorkstream option', () => {
 		expect(get(currentWorkstreamId)).toBe('w1');
 	});
 });
+
+describe('directory avatar images', () => {
+	it('avatarImage returns the stored image, null when absent', async () => {
+		const { directory, avatarImage } = await import('./store');
+		directory.set({
+			u1: { name: 'Lara', image: 'data:image/png;base64,AAAA' },
+			u2: { name: 'Yusuf' }
+		});
+		expect(avatarImage('u1')).toBe('data:image/png;base64,AAAA');
+		expect(avatarImage('u2')).toBeNull();
+		expect(avatarImage(null)).toBeNull();
+		expect(avatarImage('missing')).toBeNull();
+	});
+
+	it('reloadDirectory keeps profile_image_url from the API', async () => {
+		const api = await import('./api');
+		const { directory, reloadDirectory } = await import('./store');
+		(api.getDirectory as any).mockResolvedValueOnce([
+			{ id: 'u1', name: 'Lara', profile_image_url: 'https://cdn.example/a.jpg' },
+			{ id: 'u2', name: 'Yusuf', profile_image_url: null }
+		]);
+		await reloadDirectory();
+		expect(get(directory)).toEqual({
+			u1: { name: 'Lara', image: 'https://cdn.example/a.jpg' },
+			u2: { name: 'Yusuf', image: null }
+		});
+	});
+});

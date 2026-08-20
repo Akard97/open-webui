@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from '$lib/components/ui/avatar';
+	import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '$lib/components/ui/avatar';
 	import { avatarColors } from '../lib/avatar';
-	import { initials, displayName } from '../lib/store';
+	import { initials, displayName, directory } from '../lib/store';
 
 	export let ids: string[] = [];
 	export let max = 4;
@@ -28,7 +28,9 @@
 	<AvatarGroup class="-space-x-[7px]">
 		{#each shown as id (id)}
 			{@const colors = avatarColors(id)}
+			{@const image = $directory[id]?.image ?? null}
 			<Avatar style="width:{px}px;height:{px}px" title={displayName(id)}>
+				{#if image}<AvatarImage src={image} alt="" />{/if}
 				<AvatarFallback
 					class="font-semibold"
 					style="background:{colors.background};color:{colors.foreground};font-size:{fontSize}px"

@@ -8,7 +8,8 @@
 		barGeometry, applyMove, applyResize, dayToTs,
 		type TimelineItem, type TimelineWindow
 	} from '../../lib/timeline';
-	import { openTask, editTask, initials, currentWorkstream } from '../../lib/store';
+	import { openTask, editTask, initials, currentWorkstream, directory } from '../../lib/store';
+	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import * as HoverCard from '$lib/components/ui/hover-card';
 	import TaskHoverCard from '../TaskHoverCard.svelte';
 	import { toast } from 'svelte-sonner';
@@ -156,12 +157,16 @@
 					{#if geom.width >= 64}<span class="flex-none overflow-hidden">{stateText}</span>{/if}
 					{#if geom.width >= 48 && t.assignee_ids?.length}
 						{@const colors = avatarColors(t.assignee_ids[0])}
-						<span
-							class="ml-auto flex-none size-[18px] rounded-full text-[8px] font-bold inline-flex items-center justify-center"
-							style="background:{colors.background};color:{colors.foreground}"
-						>
-							{initials(t.assignee_ids[0])}
-						</span>
+						{@const image = $directory[t.assignee_ids[0]]?.image ?? null}
+						<!-- pointer-events-none: pointerdown must keep landing on the bar
+						     itself so drag-to-move keeps working with a photo present. -->
+						<Avatar class="ml-auto flex-none size-[18px] pointer-events-none">
+							{#if image}<AvatarImage src={image} alt="" draggable={false} />{/if}
+							<AvatarFallback
+								class="text-[8px] font-bold"
+								style="background:{colors.background};color:{colors.foreground}"
+							>{initials(t.assignee_ids[0])}</AvatarFallback>
+						</Avatar>
 					{/if}
 					{#if !disabled}
 						<span aria-hidden="true" class="{GRIP} -left-[3px]" onpointerdown={(e) => down(e, 'start')}></span>
