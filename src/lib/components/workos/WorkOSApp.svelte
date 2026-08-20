@@ -26,6 +26,7 @@
 		view, selectedTask, teams, loading, mobileNavOpen, inboxSplit
 	} from './lib/store';
 	import { hydrateFromUrl, initUrlSync, destroyUrlSync, urlHasWorkstream } from './lib/urlSync';
+	import { track } from '$lib/utils/usage';
 
 	// Guard: snap non-admins away from the admin view.
 	$: if ($view === 'admin' && !canUseAdmin($user)) view.set('board');
@@ -38,6 +39,19 @@
 	// continuation must not call initUrlSync()/connectRealtime() on a route
 	// nobody is looking at anymore.
 	let destroyed = false;
+
+	// Tracks WorkOS view switches (board/list/calendar/etc.) once the view
+	// store settles past its initial value — skips the emission that fires
+	// merely from subscribing.
+	let firstView = true;
+	const unsubView = view.subscribe((v) => {
+		if (firstView) {
+			firstView = false;
+			return;
+		}
+		track('workos.view.switch', { view: v });
+	});
+	onDestroy(unsubView);
 
 	onMount(async () => {
 		// Deep link present → hydrateFromUrl performs the one workstream

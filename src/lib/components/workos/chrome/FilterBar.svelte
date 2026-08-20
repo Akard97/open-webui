@@ -1,11 +1,13 @@
 <script lang="ts">
 	import type { Writable } from 'svelte/store';
+	import { onDestroy } from 'svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { STATUS_ORDER, STATUS_LABEL, PRIORITY_ORDER, type TaskFilter } from '../lib/types';
 	import { labels, directory } from '../lib/store';
+	import { track } from '$lib/utils/usage';
 
 	export let filter: Writable<TaskFilter>;
 	export let showAssignee = true;
@@ -19,6 +21,21 @@
 	}
 	const count = (n: number) => (n ? ` · ${n}` : '');
 	$: dirEntries = Object.entries($directory);
+
+	// Debounced usage event: only fires 2s after the search text last changed,
+	// and only while there's text to search on (clearing the box tracks nothing).
+	let searchTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastTrackedText = '';
+	$: if ($filter.text !== lastTrackedText) {
+		lastTrackedText = $filter.text;
+		if ($filter.text) {
+			if (searchTimer) clearTimeout(searchTimer);
+			searchTimer = setTimeout(() => track('workos.search.used', {}), 2000);
+		}
+	}
+	onDestroy(() => {
+		if (searchTimer) clearTimeout(searchTimer);
+	});
 </script>
 
 <div class="flex-none flex flex-col md:flex-row md:items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">

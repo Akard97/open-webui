@@ -303,6 +303,7 @@ type Config = {
 		enable_version_update_check: boolean;
 		enable_widgets?: boolean;
 		enable_avatar_generation?: boolean;
+		enable_usage_tracking?: boolean;
 		folder_max_file_count?: number;
 	};
 	oauth: {

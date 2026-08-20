@@ -42,8 +42,9 @@
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, afterNavigate } from '$app/navigation';
 	import { updated } from '$app/state';
+	import { initUsageTracking, pageEnter } from '$lib/utils/usage';
 
 	import i18n, { initI18n, getLanguages, changeLanguage } from '$lib/i18n';
 
@@ -102,6 +103,10 @@
 			await unregisterServiceWorkers();
 			location.href = to.url.href;
 		}
+	});
+
+	afterNavigate((nav) => {
+		if (nav.to?.url) pageEnter(nav.to.url.pathname);
 	});
 
 	setContext('i18n', i18n);
@@ -1050,6 +1055,15 @@
 						} catch (error) {
 							console.error('Error refreshing backend config:', error);
 						}
+
+						// Authenticated session established — start usage tracking
+						// (no-op internally if the backend flag is off) and record
+						// the current page view.
+						initUsageTracking(
+							localStorage.token ?? '',
+							$config?.features?.enable_usage_tracking ?? false
+						);
+						pageEnter(window.location.pathname);
 
 						// Keep user timezone in sync on every app load/refresh
 						const timezone = getUserTimezone();
