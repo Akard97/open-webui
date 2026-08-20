@@ -13,6 +13,7 @@ from open_webui.internal.db import get_async_session
 from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.policy_review.scoring import compute_scores
+from open_webui.models.usage import UsageEvents
 from open_webui.models.policy_review import (
     PolicyChecklistVersions,
     PolicyReviews,
@@ -336,6 +337,7 @@ async def create_review(
 
     await PolicyAudits.insert('review', review.id, 'created', user.id, user.name, None, db=db)
     await PolicyAudits.insert('review', review.id, 'document_uploaded', user.id, user.name, {'filename': file.filename}, db=db)
+    await UsageEvents.emit(user.id, 'policy.doc.upload', {'review_id': review.id})
     return review
 
 
@@ -446,6 +448,7 @@ async def replace_review_document(
 
     updated = await PolicyReviews.update_fields(review_id, fields, db=db)
     await PolicyAudits.insert('review', review_id, 'document_replaced', user.id, user.name, {'filename': file.filename}, db=db)
+    await UsageEvents.emit(user.id, 'policy.doc.upload', {'review_id': review_id})
     return updated
 
 
@@ -469,6 +472,7 @@ async def submit_review(
     approval = {**(review.approval or {}), 'status': 'pending', 'sentAt': _audit_now(), 'note': note}
     updated = await PolicyReviews.update_fields(review_id, {'status': 'pending', 'approval': approval}, db=db)
     await PolicyAudits.insert('review', review_id, 'submitted', user.id, user.name, None, db=db)
+    await UsageEvents.emit(user.id, 'policy.review.submit', {'review_id': review_id})
     return updated
 
 
@@ -540,6 +544,7 @@ async def approve_review(
     updated = await PolicyReviews.update_fields(review_id, {'status': 'approved', 'approval': approval}, db=db)
     await PolicyAudits.insert('review', review_id, 'approved', user.id, user.name, {'score': score['overall']}, db=db)
     await PolicyAudits.insert('review', review_id, 'published', user.id, user.name, {'code': meta.get('code')}, db=db)
+    await UsageEvents.emit(user.id, 'policy.review.approve', {'review_id': review_id})
     return updated
 
 
@@ -564,6 +569,7 @@ async def reject_review(
     }
     updated = await PolicyReviews.update_fields(review_id, {'status': 'rejected', 'approval': approval}, db=db)
     await PolicyAudits.insert('review', review_id, 'rejected', user.id, user.name, {'note': form.note.strip()}, db=db)
+    await UsageEvents.emit(user.id, 'policy.review.reject', {'review_id': review_id})
     return updated
 
 

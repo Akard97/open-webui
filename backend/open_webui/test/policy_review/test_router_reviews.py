@@ -2,6 +2,7 @@ import json
 import pytest
 import pytest_asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 from httpx import ASGITransport
@@ -10,6 +11,17 @@ from fastapi import FastAPI
 import open_webui.routers.policy_review as pr_router
 from open_webui.utils.auth import get_verified_user
 from open_webui.models.policy_review import PolicyChecklistVersions, PolicyLibrary
+
+
+@pytest.fixture()
+def emit_spy(monkeypatch):
+    spy = AsyncMock()
+    monkeypatch.setattr(pr_router.UsageEvents, 'emit', spy)
+    return spy
+
+
+def _emitted(spy):
+    return [c.args[1] for c in spy.await_args_list]
 
 # One theme, one item -> compliant => fully resolved, score 100, gates pass.
 ACTIVE_DATA = {
@@ -492,3 +504,69 @@ async def test_approve_publish_failure_leaves_review_pending_and_cleans_storage(
     assert deleted == ['fake-copy://policy.pdf']  # orphaned copy removed
     # Nothing was published to the library.
     assert await PolicyLibrary.get_by_code('C-TEST') is None
+
+
+# ──────────────────────────── usage event emission ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_review_emits_doc_upload(monkeypatch, emit_spy):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        await _create(c)
+    assert 'policy.doc.upload' in _emitted(emit_spy)
+
+
+@pytest.mark.asyncio
+async def test_replace_review_document_emits_doc_upload(monkeypatch, emit_spy):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = await _create(c)
+        emit_spy.reset_mock()
+        replaced = await c.put(
+            f'/api/v1/policy/reviews/{rid}/document',
+            files={'file': ('policy2.pdf', b'%PDF-1.4 dummy2', 'application/pdf')},
+        )
+        assert replaced.status_code == 200
+    assert 'policy.doc.upload' in _emitted(emit_spy)
+
+
+@pytest.mark.asyncio
+async def test_submit_review_emits_submit(monkeypatch, emit_spy):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        submitted = await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+        assert submitted.status_code == 200
+    assert 'policy.review.submit' in _emitted(emit_spy)
+
+
+@pytest.mark.asyncio
+async def test_approve_review_emits_approve(monkeypatch, emit_spy):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+    emit_spy.reset_mock()
+    async with _client(monkeypatch, user=approver) as c:
+        approved = await c.post(f'/api/v1/policy/reviews/{rid}/approve', json={'note': 'ok'})
+        assert approved.status_code == 200
+    assert 'policy.review.approve' in _emitted(emit_spy)
+
+
+@pytest.mark.asyncio
+async def test_reject_review_emits_reject(monkeypatch, emit_spy):
+    reviewer = SimpleNamespace(id='rev1', role='user', name='Reviewer', email='r@x.io')
+    approver = SimpleNamespace(id='app1', role='user', name='Approver', email='a@x.io')
+    async with _client(monkeypatch, user=reviewer) as c:
+        rid = await _create(c)
+        await c.patch(f'/api/v1/policy/reviews/{rid}/results', json={'results': {'S1-1': {'result': 'compliant'}}})
+        await c.post(f'/api/v1/policy/reviews/{rid}/submit')
+    emit_spy.reset_mock()
+    async with _client(monkeypatch, user=approver) as c:
+        rejected = await c.post(f'/api/v1/policy/reviews/{rid}/reject', json={'note': 'fix it'})
+        assert rejected.status_code == 200
+    assert 'policy.review.reject' in _emitted(emit_spy)

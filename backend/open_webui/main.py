@@ -128,6 +128,7 @@ from open_webui.models.functions import Functions
 from open_webui.models.models import Models
 from open_webui.models.users import UserModel, Users
 from open_webui.models.chats import Chats, ChatForm
+from open_webui.models.usage import UsageEvents
 
 from open_webui.config import (
     # Ollama
@@ -2007,6 +2008,9 @@ async def chat_completion(
                             )
 
         request.state.metadata = metadata
+        await UsageEvents.emit(
+            user.id, 'chat.message.sent', {'model': model_id, 'chat_id': metadata.get('chat_id')}
+        )
         form_data['metadata'] = metadata
 
     except HTTPException:
