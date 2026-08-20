@@ -698,6 +698,21 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(periodic_usage_pool_cleanup())
     asyncio.create_task(periodic_session_pool_cleanup())
 
+    async def periodic_usage_events_cleanup():
+        from open_webui.models.usage import UsageEvents
+
+        while True:
+            try:
+                cutoff = int(time.time() * 1000) - 365 * 86_400_000
+                deleted = await UsageEvents.delete_before(cutoff)
+                if deleted:
+                    log.info(f'usage cleanup: removed {deleted} events older than 365d')
+            except Exception:
+                log.exception('usage cleanup failed')
+            await asyncio.sleep(24 * 3600)
+
+    asyncio.create_task(periodic_usage_events_cleanup())
+
     from open_webui.utils.automations import scheduler_worker_loop
 
     asyncio.create_task(scheduler_worker_loop(app))
