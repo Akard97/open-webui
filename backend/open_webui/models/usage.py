@@ -311,7 +311,10 @@ class UsageEventsDao:
                 )
                 .filter(UsageEvent.created_at >= since_ms)
                 .group_by(UsageEvent.user_id)
-                .order_by(desc('last_seen' if sort == 'last_seen' else 'events'))
+                .order_by(
+                    desc('last_seen' if sort == 'last_seen' else 'events'),
+                    UsageEvent.user_id,
+                )
                 .limit(limit)
                 .offset((page - 1) * limit)
             )

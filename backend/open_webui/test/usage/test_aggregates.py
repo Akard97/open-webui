@@ -8,7 +8,7 @@ from httpx import ASGITransport
 import open_webui.routers.analytics as ar
 from open_webui.models.usage import UsageEvents, _now
 from open_webui.models.users import Users
-from open_webui.utils.auth import get_admin_user
+from open_webui.utils.auth import get_admin_user, get_current_user
 
 
 async def _seed():
@@ -82,6 +82,23 @@ async def test_usage_endpoint_requires_admin():
     # No get_admin_user override: real auth dependency runs with no
     # credentials on the request and must reject before reaching the DAO.
     async with _client(admin=False) as c:
+        r = await c.get('/api/v1/analytics/usage/overview')
+    assert r.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_usage_endpoint_requires_admin_role():
+    # Authenticated as a real (non-admin) user: get_current_user is
+    # overridden so auth succeeds, but get_admin_user is NOT overridden,
+    # so its own role check must reject a non-admin user.
+    app = FastAPI()
+    app.include_router(ar.router, prefix='/api/v1/analytics')
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id='u1', name='User', role='user'
+    )
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as c:
         r = await c.get('/api/v1/analytics/usage/overview')
     assert r.status_code in (401, 403)
 
