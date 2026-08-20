@@ -137,8 +137,7 @@
 		showUserModal = true;
 	};
 
-	$: toolNames = [...new Set(dailyRaw.flatMap((d) => Object.keys(d.tools || {})))];
-	$: toolColors = [
+	const toolColors = [
 		'#3b82f6',
 		'#10b981',
 		'#f59e0b',
@@ -148,10 +147,29 @@
 		'#06b6d4',
 		'#84cc16'
 	];
-	$: dailyData = dailyRaw.map((d) => ({
-		date: d.date,
-		models: Object.fromEntries(toolNames.map((t) => [t, d.tools[t] ?? 0]))
-	}));
+
+	// Zero-fill the full requested date range client-side so the chart always
+	// spans `days` days (not just the days that happened to have events).
+	const buildDateRange = (numDays: number): string[] => {
+		const out: string[] = [];
+		const today = new Date();
+		const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+		for (let i = numDays - 1; i >= 0; i--) {
+			const d = new Date(todayUtc - i * 86_400_000);
+			out.push(d.toISOString().slice(0, 10));
+		}
+		return out;
+	};
+
+	$: toolNames = [...new Set(dailyRaw.flatMap((d) => Object.keys(d.tools || {})))];
+	$: dailyByDate = new Map(dailyRaw.map((d) => [d.date, d]));
+	$: dailyData = buildDateRange(days).map((date) => {
+		const d = dailyByDate.get(date);
+		return {
+			date,
+			models: Object.fromEntries(toolNames.map((t) => [t, d?.tools?.[t] ?? 0]))
+		};
+	});
 	$: chartPeriod = (days === 7 ? 'week' : days === 90 ? 'year' : 'month') as
 		| 'hour'
 		| 'week'
@@ -211,7 +229,10 @@
 				<div class="text-xs text-gray-400 mb-2">{$i18n.t('Active Users')}</div>
 				<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
 					<span>{t.events.toLocaleString()} {$i18n.t('events')}</span>
-					<span>{formatMs(t.avg_page_ms)}</span>
+					<span
+						>{formatMs(t.avg_page_ms)}
+						<span class="text-gray-400">{$i18n.t('avg time')}</span></span
+					>
 				</div>
 			</div>
 		{/each}
@@ -221,7 +242,7 @@
 	</div>
 
 	<!-- Daily usage chart -->
-	{#if dailyData.length > 1}
+	{#if dailyData.length > 0}
 		<div class="mb-4">
 			<div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 px-0.5">
 				{$i18n.t('Daily Usage')}

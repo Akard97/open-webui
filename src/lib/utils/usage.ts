@@ -58,11 +58,16 @@ export const pageEnter = (pathname: string): void => {
 export const flushNow = (): void => {
 	if (!enabled || !queue.length) return;
 	const events = queue.splice(0, MAX_BATCH);
+	// Resolve the token at send time rather than trusting the value captured
+	// at init: localStorage.token can change (e.g. re-login) after tracking
+	// started. Falls back to the captured token when localStorage isn't
+	// available (node-safe for tests, which don't stub localStorage).
+	const authToken = (typeof localStorage !== 'undefined' && localStorage.token) || token;
 	// keepalive lets the request survive tab close and, unlike sendBeacon,
 	// carries the Authorization header.
 	fetch(`${WEBUI_API_BASE_URL}/usage/events`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json', authorization: `Bearer ${token}` },
+		headers: { 'Content-Type': 'application/json', authorization: `Bearer ${authToken}` },
 		body: JSON.stringify({ events }),
 		keepalive: true
 	}).catch(() => {

@@ -699,8 +699,6 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(periodic_session_pool_cleanup())
 
     async def periodic_usage_events_cleanup():
-        from open_webui.models.usage import UsageEvents
-
         while True:
             try:
                 cutoff = int(time.time() * 1000) - 365 * 86_400_000

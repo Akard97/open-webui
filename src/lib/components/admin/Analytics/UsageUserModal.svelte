@@ -21,25 +21,22 @@
 		created_at: number;
 	};
 
+	// Static list matching the backend TOOLS set (models/usage.py), so the
+	// filter isn't limited to whatever tools happen to appear on the loaded
+	// page of activity.
+	const TOOLS = ['chat', 'workos', 'policy', 'home', 'admin', 'settings', 'notes', 'other'];
+
 	let selectedTool: string | null = null;
 	let activity: ActivityEntry[] = [];
-	let knownTools: string[] = [];
 	let total = 0;
 	let page = 1;
 	let loading = false;
 	let allLoaded = false;
 
-	const mergeKnownTools = (events: ActivityEntry[]) => {
-		const set = new Set(knownTools);
-		events.forEach((e) => set.add(e.tool));
-		knownTools = [...set];
-	};
-
 	const close = () => {
 		show = false;
 		selectedTool = null;
 		activity = [];
-		knownTools = [];
 		total = 0;
 		page = 1;
 		allLoaded = false;
@@ -61,7 +58,6 @@
 			activity = res?.events ?? [];
 			total = res?.total ?? 0;
 			allLoaded = activity.length >= total;
-			mergeKnownTools(activity);
 		} catch (err) {
 			console.error('Failed to load user activity:', err);
 			activity = [];
@@ -88,7 +84,6 @@
 			total = res?.total ?? total;
 			page = nextPage;
 			allLoaded = activity.length >= total;
-			mergeKnownTools(newEvents);
 		} catch (err) {
 			console.error('Failed to load more activity:', err);
 		}
@@ -104,7 +99,6 @@
 	$: if (show && user?.user_id) {
 		selectedTool = null;
 		activity = [];
-		knownTools = [];
 		total = 0;
 		page = 1;
 		allLoaded = false;
@@ -134,7 +128,7 @@
 					class="w-fit pr-8 rounded-sm px-2 text-xs bg-transparent outline-none text-right"
 				>
 					<option value="">{$i18n.t('All Tools')}</option>
-					{#each knownTools as t}
+					{#each TOOLS as t}
 						<option value={t}>{t}</option>
 					{/each}
 				</select>

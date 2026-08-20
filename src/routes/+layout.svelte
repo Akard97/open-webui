@@ -83,6 +83,18 @@
 		$page.url.pathname.startsWith('/s/') ||
 		$page.url.pathname === '/watch';
 
+	// Usage tracking must init reactively, not just in onMount: login completes
+	// via a soft `goto()` from /auth (no reload), so onMount has already run
+	// with no token by the time $user/$config are populated. Guard so this
+	// only fires once per session, whichever path (reload or soft nav) fills
+	// the stores first.
+	let usageInitDone = false;
+	$: if ($user?.id && $config?.features && !usageInitDone) {
+		usageInitDone = true;
+		initUsageTracking(localStorage.token ?? '', $config?.features?.enable_usage_tracking ?? false);
+		pageEnter(window.location.pathname);
+	}
+
 	const unregisterServiceWorkers = async () => {
 		if ('serviceWorker' in navigator) {
 			try {
@@ -1055,15 +1067,6 @@
 						} catch (error) {
 							console.error('Error refreshing backend config:', error);
 						}
-
-						// Authenticated session established — start usage tracking
-						// (no-op internally if the backend flag is off) and record
-						// the current page view.
-						initUsageTracking(
-							localStorage.token ?? '',
-							$config?.features?.enable_usage_tracking ?? false
-						);
-						pageEnter(window.location.pathname);
 
 						// Keep user timezone in sync on every app load/refresh
 						const timezone = getUserTimezone();

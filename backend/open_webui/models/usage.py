@@ -55,7 +55,7 @@ MAX_PROPERTIES_BYTES = 2048
 class UsageEvent(Base):
     __tablename__ = 'usage_event'
 
-    id = Column(Text, primary_key=True, unique=True)
+    id = Column(Text, primary_key=True)
     user_id = Column(Text, nullable=False)
     event_name = Column(Text, nullable=False)
     tool = Column(Text, nullable=False)

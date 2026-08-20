@@ -136,3 +136,9 @@ Styling matches the existing admin Analytics area (not the bold WorkOS look — 
 - Non-admin visibility (team leads, self-view).
 - Auto-capture of arbitrary clicks.
 - Real-time dashboard updates; dashboards query on load.
+
+## 11. Metric caveats
+
+- `workos.task.complete` fires only on the transition into the done state. A task created directly as done (e.g. via an API/import path that skips the normal create-then-complete flow) counts only as a `workos.task.create`, not as a completion.
+- Per-tool `sessions` counts must not be summed across tools to get a "total sessions" figure — a single browser session generates a distinct `session_id`-per-tool grouping in the DAO's aggregate queries, so one real user session can legitimately count once per tool the user visited in it. Summing overstates session volume.
+- `duration_ms` and `session_id` are client-reported (from `src/lib/utils/usage.ts`). They are bounds-checked and shape-validated server-side (`_validate_client_event` in `backend/open_webui/models/usage.py`) to reject obviously bad values, but a hostile or modified client can still submit misleading-but-in-range numbers. Treat these fields as indicative, not authoritative, for anything adversarial (e.g. abuse investigations).
