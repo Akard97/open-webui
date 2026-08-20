@@ -2,6 +2,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
+import time
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
@@ -10,6 +11,7 @@ from open_webui.models.chats import Chats
 from open_webui.models.groups import Groups
 from open_webui.models.users import Users
 from open_webui.models.feedbacks import Feedbacks
+from open_webui.models.usage import UsageEvents
 from open_webui.utils.auth import get_admin_user
 from open_webui.internal.db import get_async_session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -440,3 +442,146 @@ async def get_model_overview(
     tags = [TagEntry(tag=tag, count=count) for tag, count in sorted(tag_counts.items(), key=lambda x: -x[1])[:10]]
 
     return ModelOverviewResponse(history=history, tags=tags)
+
+
+####################
+# Usage Analytics
+####################
+
+
+def _since_ms(days: int) -> int:
+    return int(time.time() * 1000) - days * 86_400_000
+
+
+class UsageToolOverview(BaseModel):
+    tool: str
+    active_users: int
+    sessions: int
+    events: int
+    avg_page_ms: int
+
+
+class UsageOverviewResponse(BaseModel):
+    tools: list[UsageToolOverview]
+
+
+@router.get('/usage/overview', response_model=UsageOverviewResponse)
+async def get_usage_overview(
+    days: int = Query(30, ge=1, le=365),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    tools = await UsageEvents.overview(_since_ms(days), db=db)
+    return UsageOverviewResponse(tools=[UsageToolOverview(**t) for t in tools])
+
+
+class UsageDailyEntry(BaseModel):
+    date: str
+    tools: dict[str, int]
+    events: int
+
+
+class UsageDailyResponse(BaseModel):
+    days: list[UsageDailyEntry]
+
+
+@router.get('/usage/daily', response_model=UsageDailyResponse)
+async def get_usage_daily(
+    days: int = Query(30, ge=1, le=365),
+    tool: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    rows = await UsageEvents.daily(_since_ms(days), tool=tool, db=db)
+    return UsageDailyResponse(days=[UsageDailyEntry(**r) for r in rows])
+
+
+class UsageEventEntry(BaseModel):
+    event_name: str
+    tool: str
+    count: int
+    unique_users: int
+
+
+class UsageEventsResponse(BaseModel):
+    events: list[UsageEventEntry]
+
+
+@router.get('/usage/events', response_model=UsageEventsResponse)
+async def get_usage_event_counts(
+    days: int = Query(30, ge=1, le=365),
+    tool: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    rows = await UsageEvents.event_counts(_since_ms(days), tool=tool, db=db)
+    return UsageEventsResponse(events=[UsageEventEntry(**r) for r in rows])
+
+
+class UsageUserEntry(BaseModel):
+    user_id: str
+    name: str
+    last_seen: int
+    sessions: int
+    events: int
+    tools: dict[str, int]
+
+
+class UsageUsersResponse(BaseModel):
+    users: list[UsageUserEntry]
+    total: int
+
+
+@router.get('/usage/users', response_model=UsageUsersResponse)
+async def get_usage_users(
+    days: int = Query(30, ge=1, le=365),
+    sort: str = Query('events', pattern='^(events|last_seen)$'),
+    page: int = Query(1, ge=1),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    res = await UsageEvents.user_rollup(_since_ms(days), sort=sort, page=page, db=db)
+    ids = [u['user_id'] for u in res['users']]
+    user_info = (
+        {u.id: u for u in await Users.get_users_by_user_ids(ids, db=db)} if ids else {}
+    )
+    return UsageUsersResponse(
+        users=[
+            UsageUserEntry(
+                **u,
+                name=user_info[u['user_id']].name
+                if u['user_id'] in user_info
+                else 'removed user',
+            )
+            for u in res['users']
+        ],
+        total=res['total'],
+    )
+
+
+class UsageActivityEntry(BaseModel):
+    event_name: str
+    tool: str
+    properties: dict
+    source: str
+    created_at: int
+
+
+class UsageActivityResponse(BaseModel):
+    events: list[UsageActivityEntry]
+    total: int
+
+
+@router.get('/usage/users/{user_id}/activity', response_model=UsageActivityResponse)
+async def get_usage_user_activity(
+    user_id: str,
+    days: int = Query(30, ge=1, le=365),
+    page: int = Query(1, ge=1),
+    tool: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    res = await UsageEvents.user_activity(user_id, _since_ms(days), page=page, tool=tool, db=db)
+    return UsageActivityResponse(
+        events=[UsageActivityEntry(**e) for e in res['events']], total=res['total']
+    )

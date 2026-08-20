@@ -2,10 +2,11 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from open_webui.internal.db import Base, get_async_db_context
-from sqlalchemy import BigInteger, Column, JSON, Text, desc, func, select
+from sqlalchemy import BigInteger, Column, JSON, Text, delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
@@ -196,6 +197,156 @@ class UsageEventsDao:
                 for r in res.scalars().all()
             ]
             return {'events': events, 'total': total}
+
+    async def overview(self, since_ms: int, db: Optional[AsyncSession] = None) -> list[dict]:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(
+                select(
+                    UsageEvent.tool,
+                    func.count(func.distinct(UsageEvent.user_id)),
+                    func.count(func.distinct(UsageEvent.session_id)),
+                    func.count(UsageEvent.id),
+                )
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(UsageEvent.tool)
+            )
+            rows = res.all()
+            dres = await db.execute(
+                select(UsageEvent.tool, func.avg(UsageEvent.duration_ms))
+                .filter(
+                    UsageEvent.created_at >= since_ms,
+                    UsageEvent.event_name == 'page.leave',
+                )
+                .group_by(UsageEvent.tool)
+            )
+            durations = dict(dres.all())
+            return [
+                {
+                    'tool': t,
+                    'active_users': u,
+                    'sessions': s,
+                    'events': e,
+                    'avg_page_ms': int(durations.get(t) or 0),
+                }
+                for t, u, s, e in rows
+            ]
+
+    async def daily(
+        self, since_ms: int, tool: Optional[str] = None, db: Optional[AsyncSession] = None
+    ) -> list[dict]:
+        day = (UsageEvent.created_at.op('/')(86_400_000)).label('day')
+        async with get_async_db_context(db) as db:
+            q = (
+                select(
+                    day,
+                    UsageEvent.tool,
+                    func.count(func.distinct(UsageEvent.user_id)),
+                    func.count(UsageEvent.id),
+                )
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(day, UsageEvent.tool)
+                .order_by(day)
+            )
+            if tool:
+                q = q.filter(UsageEvent.tool == tool)
+            out: dict[int, dict] = {}
+            for d, t, dau, cnt in (await db.execute(q)).all():
+                d = int(d)
+                bucket = out.setdefault(
+                    d,
+                    {
+                        'date': datetime.fromtimestamp(d * 86400, tz=timezone.utc).strftime('%Y-%m-%d'),
+                        'tools': {},
+                        'events': 0,
+                    },
+                )
+                bucket['tools'][t] = dau
+                bucket['events'] += cnt
+            return [out[k] for k in sorted(out)]
+
+    async def event_counts(
+        self, since_ms: int, tool: Optional[str] = None, db: Optional[AsyncSession] = None
+    ) -> list[dict]:
+        async with get_async_db_context(db) as db:
+            q = (
+                select(
+                    UsageEvent.event_name,
+                    UsageEvent.tool,
+                    func.count(UsageEvent.id).label('count'),
+                    func.count(func.distinct(UsageEvent.user_id)),
+                )
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(UsageEvent.event_name, UsageEvent.tool)
+                .order_by(desc('count'))
+            )
+            if tool:
+                q = q.filter(UsageEvent.tool == tool)
+            return [
+                {'event_name': n, 'tool': t, 'count': c, 'unique_users': u}
+                for n, t, c, u in (await db.execute(q)).all()
+            ]
+
+    async def user_rollup(
+        self,
+        since_ms: int,
+        sort: str = 'events',
+        page: int = 1,
+        limit: int = 25,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
+        async with get_async_db_context(db) as db:
+            total = (
+                await db.execute(
+                    select(func.count(func.distinct(UsageEvent.user_id))).filter(
+                        UsageEvent.created_at >= since_ms
+                    )
+                )
+            ).scalar() or 0
+            base = (
+                select(
+                    UsageEvent.user_id,
+                    func.max(UsageEvent.created_at).label('last_seen'),
+                    func.count(func.distinct(UsageEvent.session_id)).label('sessions'),
+                    func.count(UsageEvent.id).label('events'),
+                )
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(UsageEvent.user_id)
+                .order_by(desc('last_seen' if sort == 'last_seen' else 'events'))
+                .limit(limit)
+                .offset((page - 1) * limit)
+            )
+            rows = (await db.execute(base)).all()
+            ids = [r[0] for r in rows]
+            tool_counts: dict[str, dict[str, int]] = {}
+            if ids:
+                tres = await db.execute(
+                    select(UsageEvent.user_id, UsageEvent.tool, func.count(UsageEvent.id))
+                    .filter(UsageEvent.created_at >= since_ms, UsageEvent.user_id.in_(ids))
+                    .group_by(UsageEvent.user_id, UsageEvent.tool)
+                )
+                for uid, t, c in tres.all():
+                    tool_counts.setdefault(uid, {})[t] = c
+            return {
+                'users': [
+                    {
+                        'user_id': uid,
+                        'last_seen': last_seen,
+                        'sessions': sessions,
+                        'events': events,
+                        'tools': tool_counts.get(uid, {}),
+                    }
+                    for uid, last_seen, sessions, events in rows
+                ],
+                'total': total,
+            }
+
+    async def delete_before(
+        self, cutoff_ms: int, db: Optional[AsyncSession] = None
+    ) -> int:
+        async with get_async_db_context(db) as db:
+            res = await db.execute(delete(UsageEvent).filter(UsageEvent.created_at < cutoff_ms))
+            await db.commit()
+            return res.rowcount or 0
 
 
 UsageEvents = UsageEventsDao()
