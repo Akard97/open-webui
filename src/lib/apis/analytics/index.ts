@@ -284,6 +284,189 @@ export const getModelChats = async (
 	return res;
 };
 
+export const getUsageOverview = async (token: string = '', days: number = 30) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/overview?${searchParams.toString()}`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageDaily = async (
+	token: string = '',
+	days: number = 30,
+	tool: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	if (tool) searchParams.append('tool', tool);
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/daily?${searchParams.toString()}`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageEventCounts = async (
+	token: string = '',
+	days: number = 30,
+	tool: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	if (tool) searchParams.append('tool', tool);
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/events?${searchParams.toString()}`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageUsers = async (
+	token: string = '',
+	days: number = 30,
+	sort: string = 'events',
+	page: number = 1
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	searchParams.append('sort', sort);
+	searchParams.append('page', page.toString());
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/users?${searchParams.toString()}`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageUserActivity = async (
+	token: string = '',
+	userId: string,
+	days: number = 30,
+	page: number = 1,
+	tool: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	searchParams.append('page', page.toString());
+	if (tool) searchParams.append('tool', tool);
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/users/${encodeURIComponent(userId)}/activity?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const getModelOverview = async (token: string = '', modelId: string, days: number = 30) => {
 	let error = null;
 
