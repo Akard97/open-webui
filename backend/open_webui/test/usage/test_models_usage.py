@@ -47,6 +47,16 @@ async def test_emit_never_raises_on_unknown_or_client_event():
     assert rows['total'] == 0
 
 
+@pytest.mark.asyncio
+async def test_emit_swallows_exception_from_db_context(monkeypatch):
+    def _boom(*args, **kwargs):
+        raise RuntimeError('db unavailable')
+
+    monkeypatch.setattr('open_webui.models.usage.get_async_db_context', _boom)
+    result = await UsageEvents.emit('u9', 'workos.task.create', {'task_id': 't'})
+    assert result is None
+
+
 def test_allowlist_shape():
     assert all(
         kind in ('client', 'server') and (tool in TOOLS or tool == 'app')
