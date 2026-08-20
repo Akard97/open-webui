@@ -6,11 +6,21 @@ import { initUsageTracking, track, pageEnter, routeToTool, flushNow, _resetForTe
 
 const fetchMock = vi.fn(async () => ({ ok: true }));
 
+let capturedHandler: (() => void) | undefined;
+let documentStub: { addEventListener: ReturnType<typeof vi.fn>; visibilityState: string };
+
 beforeEach(() => {
 	vi.useFakeTimers();
 	vi.stubGlobal('fetch', fetchMock);
 	vi.stubGlobal('navigator', {});
-	vi.stubGlobal('document', { addEventListener: vi.fn(), visibilityState: 'visible' });
+	capturedHandler = undefined;
+	documentStub = {
+		addEventListener: vi.fn((_evt: string, cb: () => void) => {
+			capturedHandler = cb;
+		}),
+		visibilityState: 'visible'
+	};
+	vi.stubGlobal('document', documentStub);
 	vi.stubGlobal('sessionStorage', {
 		store: {} as Record<string, string>,
 		getItem(k: string) { return this.store[k] ?? null; },
@@ -76,5 +86,34 @@ describe('tracker', () => {
 		initUsageTracking('tok', true);
 		track('workos.view.switch', { view: 'board' });
 		expect(() => flushNow()).not.toThrow();
+	});
+
+	it('flushes page.leave on hidden and excludes hidden time from the next duration', () => {
+		initUsageTracking('tok', true);
+		pageEnter('/workos');
+		vi.advanceTimersByTime(5_000);
+
+		documentStub.visibilityState = 'hidden';
+		capturedHandler?.();
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const hiddenEvents = JSON.parse(fetchMock.mock.calls[0][1].body).events;
+		const hiddenLeave = hiddenEvents.find((e: { name: string }) => e.name === 'page.leave');
+		expect(hiddenLeave.properties.duration_ms).toBeGreaterThanOrEqual(5000);
+
+		vi.advanceTimersByTime(60_000);
+		documentStub.visibilityState = 'visible';
+		capturedHandler?.();
+
+		vi.advanceTimersByTime(3_000);
+		pageEnter('/home');
+		flushNow();
+
+		const allLeaves = fetchMock.mock.calls
+			.flatMap((call) => JSON.parse(call[1].body).events)
+			.filter((e: { name: string }) => e.name === 'page.leave');
+		const secondLeave = allLeaves[1];
+		expect(secondLeave.properties.duration_ms).toBeGreaterThanOrEqual(3000);
+		expect(secondLeave.properties.duration_ms).toBeLessThan(60_000);
 	});
 });
