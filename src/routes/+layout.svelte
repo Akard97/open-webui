@@ -89,10 +89,12 @@
 	// only fires once per session, whichever path (reload or soft nav) fills
 	// the stores first.
 	let usageInitDone = false;
-	$: if ($user?.id && $config?.features && !usageInitDone) {
+	$: if ($user?.id && $config?.features?.enable_usage_tracking !== undefined && !usageInitDone) {
 		usageInitDone = true;
 		initUsageTracking(localStorage.token ?? '', $config?.features?.enable_usage_tracking ?? false);
-		pageEnter(window.location.pathname);
+		if (!isPublicRoute) {
+			pageEnter(window.location.pathname);
+		}
 	}
 
 	const unregisterServiceWorkers = async () => {
