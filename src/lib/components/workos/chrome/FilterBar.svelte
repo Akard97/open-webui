@@ -31,6 +31,9 @@
 		if ($filter.text) {
 			if (searchTimer) clearTimeout(searchTimer);
 			searchTimer = setTimeout(() => track('workos.search.used', {}), 2000);
+		} else if (searchTimer) {
+			clearTimeout(searchTimer);
+			searchTimer = null;
 		}
 	}
 	onDestroy(() => {
