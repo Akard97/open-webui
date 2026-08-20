@@ -60,5 +60,11 @@ async def test_membership_changes_emit(monkeypatch, emit_spy):
         team = (await c.post('/api/v1/workos/teams', json={'name': 'T', 'key': 'T'})).json()
         await c.post(f"/api/v1/workos/teams/{team['id']}/members", json={'user_id': 'u2', 'role': 'member'})
         assert 'workos.team.member_add' in _emitted(emit_spy)
+        call = emit_spy.await_args_list[-1]
+        assert call.args[0] == U1.id
+        assert call.args[2]['member_id'] == 'u2'
         await c.delete(f"/api/v1/workos/teams/{team['id']}/members/u2")
         assert 'workos.team.member_remove' in _emitted(emit_spy)
+        call = emit_spy.await_args_list[-1]
+        assert call.args[0] == U1.id
+        assert call.args[2]['member_id'] == 'u2'
