@@ -53,6 +53,67 @@ async def test_user_rollup_and_sort():
 
 
 @pytest.mark.asyncio
+async def test_daily_tool_filter():
+    await _seed()
+    days = await UsageEvents.daily(since_ms=0, tool='workos')
+    assert len(days) == 1
+    assert days[0]['tools'] == {'workos': 1}
+    assert days[0]['events'] == 3  # u1's page.view + page.leave + task.create
+    assert await UsageEvents.daily(since_ms=0, tool='notes') == []
+
+
+@pytest.mark.asyncio
+async def test_event_counts_tool_filter():
+    await _seed()
+    counts = await UsageEvents.event_counts(since_ms=0, tool='chat')
+    assert [(e['event_name'], e['count']) for e in counts] == [('chat.message.sent', 1)]
+    names = {e['event_name'] for e in await UsageEvents.event_counts(since_ms=0, tool='workos')}
+    assert names == {'page.view', 'page.leave', 'workos.task.create'}
+
+
+@pytest.mark.asyncio
+async def test_user_activity_tool_filter():
+    await _seed()
+    # Give u1 a second tool so the filter has something to exclude.
+    await UsageEvents.emit('u1', 'chat.message.sent', {'model': 'm2'})
+    res = await UsageEvents.user_activity('u1', since_ms=0, tool='workos')
+    assert res['total'] == 3
+    assert {e['tool'] for e in res['events']} == {'workos'}
+    assert (await UsageEvents.user_activity('u1', since_ms=0))['total'] == 4
+    assert (await UsageEvents.user_activity('u1', since_ms=0, tool='policy'))['total'] == 0
+
+
+@pytest.mark.asyncio
+async def test_user_rollup_sort_last_seen(monkeypatch):
+    await _seed()
+    # u2 acts again a minute later: fewer events than u1 but most recent.
+    later = _now() + 60_000
+    monkeypatch.setattr('open_webui.models.usage._now', lambda: later)
+    await UsageEvents.emit('u2', 'chat.message.sent', {'model': 'm1'})
+    res = await UsageEvents.user_rollup(since_ms=0, sort='last_seen', page=1, limit=10)
+    assert [u['user_id'] for u in res['users']] == ['u2', 'u1']
+    assert res['users'][0]['last_seen'] == later
+    res = await UsageEvents.user_rollup(since_ms=0, sort='events', page=1, limit=10)
+    assert [u['user_id'] for u in res['users']] == ['u1', 'u2']
+
+
+@pytest.mark.asyncio
+async def test_user_rollup_pagination():
+    await _seed()
+    page1 = await UsageEvents.user_rollup(since_ms=0, sort='events', page=1, limit=1)
+    assert page1['total'] == 2
+    assert [u['user_id'] for u in page1['users']] == ['u1']
+    page2 = await UsageEvents.user_rollup(since_ms=0, sort='events', page=2, limit=1)
+    assert page2['total'] == 2
+    assert [u['user_id'] for u in page2['users']] == ['u2']
+    # Per-user tool counts must be computed for the page actually returned.
+    assert page2['users'][0]['tools'] == {'chat': 1}
+    page3 = await UsageEvents.user_rollup(since_ms=0, sort='events', page=3, limit=1)
+    assert page3['users'] == []
+    assert page3['total'] == 2
+
+
+@pytest.mark.asyncio
 async def test_delete_before():
     await _seed()
     deleted = await UsageEvents.delete_before(_now() + 1000)
