@@ -51,6 +51,12 @@
 
 	let loading = true;
 
+	// Request-generation counters: responses are applied only if no newer
+	// request for the same data slice has started since, so a slow stale
+	// response can never clobber newer state.
+	let loadSeq = 0; // overview/daily/events (full dashboard loads)
+	let usersSeq = 0; // users table (bumped by full loads too)
+
 	let userSort: 'events' | 'last_seen' = 'events';
 	let userPage = 1;
 
@@ -72,6 +78,8 @@
 	};
 
 	const load = async () => {
+		const seq = ++loadSeq;
+		const uSeq = ++usersSeq;
 		loading = true;
 		try {
 			const [overviewRes, dailyRes, eventsRes, usersRes] = await Promise.all([
@@ -81,20 +89,28 @@
 				getUsageUsers(localStorage.token, days, userSort, userPage)
 			]);
 
-			overview = overviewRes?.tools ?? [];
-			dailyRaw = dailyRes?.days ?? [];
-			eventCounts = eventsRes?.events ?? [];
-			users = usersRes?.users ?? [];
-			usersTotal = usersRes?.total ?? 0;
+			if (seq === loadSeq) {
+				overview = overviewRes?.tools ?? [];
+				dailyRaw = dailyRes?.days ?? [];
+				eventCounts = eventsRes?.events ?? [];
+			}
+			if (uSeq === usersSeq) {
+				users = usersRes?.users ?? [];
+				usersTotal = usersRes?.total ?? 0;
+			}
 		} catch (err) {
 			console.error('Usage dashboard load failed:', err);
 		}
-		loading = false;
+		if (seq === loadSeq) {
+			loading = false;
+		}
 	};
 
 	const loadUsers = async () => {
+		const uSeq = ++usersSeq;
 		try {
 			const usersRes = await getUsageUsers(localStorage.token, days, userSort, userPage);
+			if (uSeq !== usersSeq) return;
 			users = usersRes?.users ?? [];
 			usersTotal = usersRes?.total ?? 0;
 		} catch (err) {

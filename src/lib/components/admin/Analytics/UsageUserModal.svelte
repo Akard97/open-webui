@@ -33,18 +33,26 @@
 	let loading = false;
 	let allLoaded = false;
 
+	// Request-generation counter: a response is applied only if no newer
+	// request has started since, so a slow stale response (old tool filter,
+	// old user, closed modal) can never clobber newer state.
+	let reqSeq = 0;
+
 	const close = () => {
 		show = false;
+		reqSeq++; // invalidate any in-flight request
 		selectedTool = null;
 		activity = [];
 		total = 0;
 		page = 1;
 		allLoaded = false;
+		loading = false;
 		onClose();
 	};
 
 	const load = async () => {
 		if (!user?.user_id) return;
+		const seq = ++reqSeq;
 		loading = true;
 		page = 1;
 		try {
@@ -55,10 +63,12 @@
 				page,
 				selectedTool
 			);
+			if (seq !== reqSeq) return;
 			activity = res?.events ?? [];
 			total = res?.total ?? 0;
-			allLoaded = activity.length >= total;
+			allLoaded = activity.length === 0 || activity.length >= total;
 		} catch (err) {
+			if (seq !== reqSeq) return;
 			console.error('Failed to load user activity:', err);
 			activity = [];
 			total = 0;
@@ -69,6 +79,7 @@
 
 	const loadMore = async () => {
 		if (!user?.user_id || loading || allLoaded) return;
+		const seq = ++reqSeq;
 		loading = true;
 		try {
 			const nextPage = page + 1;
@@ -79,12 +90,17 @@
 				nextPage,
 				selectedTool
 			);
+			if (seq !== reqSeq) return;
 			const newEvents = res?.events ?? [];
 			activity = [...activity, ...newEvents];
 			total = res?.total ?? total;
 			page = nextPage;
-			allLoaded = activity.length >= total;
+			// Latch when a page comes back empty: the server has nothing more
+			// for this window even if `total` suggests otherwise (e.g. events
+			// pruned between requests) — prevents an infinite Load more loop.
+			allLoaded = newEvents.length === 0 || activity.length >= total;
 		} catch (err) {
+			if (seq !== reqSeq) return;
 			console.error('Failed to load more activity:', err);
 		}
 		loading = false;
