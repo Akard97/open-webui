@@ -92,6 +92,7 @@ from open_webui.routers import (
     policy_review,
     workos,
     workos_internal,
+    usage,
     folders,
     configs,
     groups,
@@ -423,6 +424,7 @@ from open_webui.config import (
     BYPASS_ADMIN_ACCESS_CONTROL,
     USER_PERMISSIONS,
     WORKOS_RULES,
+    ENABLE_USAGE_TRACKING,
     DEFAULT_USER_ROLE,
     DEFAULT_GROUP_ID,
     PENDING_USER_OVERLAY_CONTENT,
@@ -935,6 +937,7 @@ app.state.config.RESPONSE_WATERMARK = RESPONSE_WATERMARK
 
 app.state.config.USER_PERMISSIONS = USER_PERMISSIONS
 app.state.config.WORKOS_RULES = WORKOS_RULES
+app.state.config.ENABLE_USAGE_TRACKING = ENABLE_USAGE_TRACKING
 app.state.config.WEBHOOK_URL = WEBHOOK_URL
 app.state.config.BANNERS = WEBUI_BANNERS
 
@@ -1478,6 +1481,7 @@ app.include_router(workos.router, prefix='/api/v1/workos', tags=['workos'])
 # Service-to-service WorkOS read API for the Osool AI backend. Mounts only
 # when WORKOS_SERVICE_SECRET is set (fail closed).
 workos_internal.mount(app)
+app.include_router(usage.router, prefix='/api/v1/usage', tags=['usage'])
 app.include_router(avatar.router, prefix='/api/v1/avatar', tags=['avatar'])
 
 
@@ -2433,6 +2437,7 @@ async def get_app_config(request: Request):
                     'enable_admin_export': ENABLE_ADMIN_EXPORT,
                     'enable_admin_chat_access': ENABLE_ADMIN_CHAT_ACCESS,
                     'enable_admin_analytics': ENABLE_ADMIN_ANALYTICS,
+                    'enable_usage_tracking': app.state.config.ENABLE_USAGE_TRACKING,
                     'enable_google_drive_integration': app.state.config.ENABLE_GOOGLE_DRIVE_INTEGRATION,
                     'enable_onedrive_integration': app.state.config.ENABLE_ONEDRIVE_INTEGRATION,
                     'enable_memories': app.state.config.ENABLE_MEMORIES,

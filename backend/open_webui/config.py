@@ -1684,6 +1684,12 @@ WORKOS_RULES = PersistentConfig(
     ),
 )
 
+ENABLE_USAGE_TRACKING = PersistentConfig(
+    'ENABLE_USAGE_TRACKING',
+    'usage.enable_tracking',
+    os.environ.get('ENABLE_USAGE_TRACKING', 'True').lower() == 'true',
+)
+
 ENABLE_FOLDERS = PersistentConfig(
     'ENABLE_FOLDERS',
     'folders.enable',
