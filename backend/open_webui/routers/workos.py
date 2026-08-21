@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from open_webui.env import ENABLE_PROFILE_IMAGE_URL_FORWARDING
 from open_webui.internal.db import get_async_session
 from open_webui.utils.auth import get_verified_user
 from open_webui.storage.provider import Storage
@@ -113,8 +114,14 @@ def sanitize_profile_image_url(url) -> str | None:
     # data: URLs and OAuth pictures are http(s). The '/user.png' default and
     # the per-user '/api/v1/users/{id}/profile/image' placeholder both mean
     # "no upload" — mapped to None so the UI keeps its initials fallback.
-    if url and (url.startswith('data:') or url.startswith('http')):
-        return url
+    # External http(s) URLs additionally honour the same forwarding policy as
+    # the profile-image endpoint: when forwarding is disabled the URL is
+    # dropped so viewer browsers never fetch a third-party origin.
+    if url:
+        if url.startswith('data:'):
+            return url
+        if url.startswith('http') and ENABLE_PROFILE_IMAGE_URL_FORWARDING:
+            return url
     return None
 
 

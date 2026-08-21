@@ -42,7 +42,7 @@ A curated allowlist of roughly 35 named events, maintained in one backend module
   - `page.view` — properties: `tool`, `view`, `path`; `duration_ms` delivered on leave.
   - `workos.view.switch` — board / list / timeline / calendar / files / my-work / inbox.
   - `chat.new`, `search.used`, and similar behavior-only signals.
-- **Server-emitted** (inside backend routers; spoof-proof, never missed; doubles as the compliance trail):
+- **Server-emitted** (inside backend routers; spoof-proof; doubles as the compliance trail. Best-effort by design: the insert runs in its own transaction and failures are logged and swallowed so telemetry can never break or roll back the real action — a rare emit failure loses that one event):
   - `workos.task.create` / `workos.task.complete` / `workos.task.delete`
   - `workos.comment.create`
   - `policy.review.submit` / `policy.review.approve` / `policy.review.reject`
@@ -67,7 +67,7 @@ New app-wide module `src/lib/utils/usage.ts`:
 
 ### 4.2 Server-side emission
 
-Helper `UsageEvents.emit(user_id, event_name, tool, properties)` called inline (not middleware) at ~12 spots in existing routers (`workos.py`, policy router, chats router). Synchronous insert in the request's existing DB session, wrapped in try/except so a telemetry failure can never break the real action.
+Helper `UsageEvents.emit(user_id, event_name, tool, properties)` called inline (not middleware) at ~12 spots in existing routers (`workos.py`, policy router, chats router). Synchronous insert in its own DB session (never the caller's), wrapped in try/except so a telemetry failure can never break or roll back the real action.
 
 Emission points that live in access-control code paths (membership changes) must follow the access-control reference doc (`docs/superpowers/specs/2026-06-26-workos-access-control.md`); emission observes those actions, it must not alter their logic.
 
@@ -78,7 +78,7 @@ Emission points that live in access-control code paths (membership changes) must
 - Auth: any logged-in user. `user_id` always taken from the auth token — a payload-supplied user id is ignored.
 - `event_name` validated against the allowlist; unknown names rejected.
 - `source` forced to `client`; only the backend helper writes `source='server'`.
-- Caps: max 50 events per batch; each `properties` JSON ≤ 2 KB. Per-user rate limit of 1,000 accepted events per hour (far above normal use); excess batches rejected with 429.
+- Caps: max 50 events per batch; each `properties` JSON ≤ 2 KB. Per-user rate limit of 1,000 ingest **requests** per hour (far above normal use — the tracker flushes at most every 10 s ≈ 360 req/hr); excess requests rejected with 429. Deliberately counts requests, not events, so the theoretical ceiling is 50k events/hr — acceptable for an internal tool where the cap exists to stop runaway loops, not abuse (see the implementation plan).
 - Invalid items in a batch are skipped individually; valid ones are stored. Response reports accepted/rejected counts.
 
 ### 4.4 Configuration

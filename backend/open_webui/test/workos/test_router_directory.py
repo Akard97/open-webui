@@ -23,6 +23,26 @@ def test_sanitize_profile_image_url(raw, expected):
     assert wr.sanitize_profile_image_url(raw) == expected
 
 
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        # External http(s) URLs are suppressed so viewer browsers never fetch
+        # a third-party origin while forwarding is disabled (IP/UA/Referer
+        # leak prevention — same policy as the profile-image endpoint).
+        ('https://example.com/pic.jpg', None),
+        ('http://example.com/pic.jpg', None),
+        # Uploaded avatars are data: URLs served inline — no external fetch,
+        # so they still pass through.
+        ('data:image/png;base64,AAAA', 'data:image/png;base64,AAAA'),
+        ('/user.png', None),
+        (None, None),
+    ],
+)
+def test_sanitize_profile_image_url_forwarding_disabled(monkeypatch, raw, expected):
+    monkeypatch.setattr(wr, 'ENABLE_PROFILE_IMAGE_URL_FORWARDING', False)
+    assert wr.sanitize_profile_image_url(raw) == expected
+
+
 @pytest.mark.asyncio
 async def test_resolve_user_names_includes_profile_image(monkeypatch):
     from types import SimpleNamespace

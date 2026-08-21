@@ -50,6 +50,10 @@
 	let usersTotal = 0;
 
 	let loading = true;
+	// A failed load keeps whatever data was already on screen, so surface an
+	// explicit banner instead of silently showing stale results under a
+	// freshly-changed period/sort/page label.
+	let loadError = false;
 
 	// Request-generation counters: responses are applied only if no newer
 	// request for the same data slice has started since, so a slow stale
@@ -93,6 +97,7 @@
 				overview = overviewRes?.tools ?? [];
 				dailyRaw = dailyRes?.days ?? [];
 				eventCounts = eventsRes?.events ?? [];
+				loadError = false;
 			}
 			if (uSeq === usersSeq) {
 				users = usersRes?.users ?? [];
@@ -100,6 +105,9 @@
 			}
 		} catch (err) {
 			console.error('Usage dashboard load failed:', err);
+			if (seq === loadSeq) {
+				loadError = true;
+			}
 		}
 		if (seq === loadSeq) {
 			loading = false;
@@ -113,8 +121,12 @@
 			if (uSeq !== usersSeq) return;
 			users = usersRes?.users ?? [];
 			usersTotal = usersRes?.total ?? 0;
+			loadError = false;
 		} catch (err) {
 			console.error('Failed to load users:', err);
+			if (uSeq === usersSeq) {
+				loadError = true;
+			}
 		}
 	};
 
@@ -223,6 +235,22 @@
 		</select>
 	</div>
 </div>
+
+{#if loadError && !loading}
+	<div
+		class="mb-3 flex items-center justify-between gap-2 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+	>
+		<span>
+			{$i18n.t('Failed to load usage data. The results below may be stale.')}
+		</span>
+		<button
+			class="shrink-0 font-medium underline underline-offset-2"
+			on:click={() => load()}
+		>
+			{$i18n.t('Retry')}
+		</button>
+	</div>
+{/if}
 
 {#if loading}
 	<div class="my-10 flex justify-center">
