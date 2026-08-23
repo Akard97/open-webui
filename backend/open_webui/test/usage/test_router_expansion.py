@@ -243,3 +243,82 @@ async def test_empty_group_zeros(monkeypatch):
         assert r.json()['tools'] == []
         r = await c.get('/api/v1/analytics/usage/active?days=30&group_id=g1')
         assert r.json()['dau'] == {'current': 0, 'previous': 0}
+
+
+import time as _time
+
+
+def _pool(monkeypatch, entries, timeout=120):
+    monkeypatch.setattr(ar, '_get_session_pool', lambda: (entries, timeout))
+
+
+def _stub_users(monkeypatch, existing_ids):
+    async def _get_users_by_user_ids(user_ids, db=None):
+        return [SimpleNamespace(id=i) for i in user_ids if i in existing_ids]
+
+    from open_webui.models.users import Users
+    monkeypatch.setattr(
+        Users, 'get_users_by_user_ids', staticmethod(_get_users_by_user_ids)
+    )
+
+
+@pytest.mark.asyncio
+async def test_presence_dedupes_and_skips_stale(monkeypatch):
+    now = int(_time.time())
+    _stub_users(monkeypatch, {'u1', 'u3'})
+    _pool(monkeypatch, {
+        'sid1': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},
+        'sid2': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},   # 2nd tab
+        'sid3': {'id': 'u2', 'name': 'Omar', 'last_seen_at': now - 999},  # stale
+        'sid4': {'id': 'u3', 'name': 'Zed', 'last_seen_at': now},
+    })
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/presence')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['online'] == 2
+    assert [u['id'] for u in data['users']] == ['u1', 'u3']  # sorted by name
+
+
+@pytest.mark.asyncio
+async def test_presence_group_intersection(monkeypatch):
+    now = int(_time.time())
+    _stub_group(monkeypatch, ['u1'])
+    _stub_users(monkeypatch, {'u1', 'u2'})
+    _pool(monkeypatch, {
+        'sid1': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},
+        'sid2': {'id': 'u2', 'name': 'Omar', 'last_seen_at': now},
+    })
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/presence?group_id=g1')
+    assert r.json() == {'online': 1, 'users': [{'id': 'u1', 'name': 'Lara'}]}
+
+
+@pytest.mark.asyncio
+async def test_presence_deleted_user_shows_removed(monkeypatch):
+    now = int(_time.time())
+    _stub_users(monkeypatch, {'u1'})  # 'ghost' no longer exists in the user table
+    _pool(monkeypatch, {
+        'sid1': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},
+        'sid2': {'id': 'ghost', 'name': 'Ghost', 'last_seen_at': now},
+    })
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/presence')
+    names = {u['id']: u['name'] for u in r.json()['users']}
+    assert names == {'u1': 'Lara', 'ghost': 'removed user'}
+
+
+@pytest.mark.asyncio
+async def test_presence_unknown_group_404(monkeypatch):
+    _stub_group(monkeypatch, [])
+    _pool(monkeypatch, {})
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/presence?group_id=nope')
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_presence_requires_admin():
+    async with _client(admin=False) as c:
+        r = await c.get('/api/v1/analytics/usage/presence')
+    assert r.status_code in (401, 403)

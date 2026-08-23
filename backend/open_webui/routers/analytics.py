@@ -774,3 +774,57 @@ async def get_usage_user_summary(
 ):
     res = await UsageEvents.user_summary(user_id, _since_ms(days), db=db)
     return UsageUserSummaryResponse(**res)
+
+
+def _get_session_pool():
+    # Lazy import keeps socket machinery out of router import time and gives
+    # tests a clean monkeypatch seam.
+    from open_webui.socket.main import SESSION_POOL, SESSION_POOL_TIMEOUT
+
+    return SESSION_POOL, SESSION_POOL_TIMEOUT
+
+
+class UsagePresenceUser(BaseModel):
+    id: str
+    name: str
+
+
+class UsagePresenceResponse(BaseModel):
+    online: int
+    users: list[UsagePresenceUser]
+
+
+@router.get('/usage/presence', response_model=UsagePresenceResponse)
+async def get_usage_presence(
+    group_id: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    member_ids = await _group_user_ids(group_id, db)
+    members = set(member_ids) if member_ids is not None else None
+    pool, timeout = _get_session_pool()
+    now = int(time.time())
+    online: dict[str, str] = {}
+    for entry in list(pool.values()):
+        if not entry:
+            continue
+        uid = entry.get('id')
+        if not uid or now - entry.get('last_seen_at', 0) > timeout:
+            continue
+        if members is not None and uid not in members:
+            continue
+        online[uid] = entry.get('name') or 'removed user'
+    # Pool entries cache the user's name from connect time, so a deleted user
+    # keeps their real name there; cross-check existence like the users table.
+    if online:
+        existing = {
+            u.id for u in await Users.get_users_by_user_ids(list(online), db=db)
+        }
+        for uid in online:
+            if uid not in existing:
+                online[uid] = 'removed user'
+    users = [
+        UsagePresenceUser(id=uid, name=name)
+        for uid, name in sorted(online.items(), key=lambda kv: kv[1].lower())
+    ]
+    return UsagePresenceResponse(online=len(users), users=users)
