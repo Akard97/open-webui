@@ -142,3 +142,10 @@ Styling matches the existing admin Analytics area (not the bold WorkOS look — 
 - `workos.task.complete` fires only on the transition into the done state. A task created directly as done (e.g. via an API/import path that skips the normal create-then-complete flow) counts only as a `workos.task.create`, not as a completion.
 - Per-tool `sessions` counts must not be summed across tools to get a "total sessions" figure — a single browser session generates a distinct `session_id`-per-tool grouping in the DAO's aggregate queries, so one real user session can legitimately count once per tool the user visited in it. Summing overstates session volume.
 - `duration_ms` and `session_id` are client-reported (from `src/lib/utils/usage.ts`). They are bounds-checked and shape-validated server-side (`_validate_client_event` in `backend/open_webui/models/usage.py`) to reject obviously bad values, but a hostile or modified client can still submit misleading-but-in-range numbers. Treat these fields as indicative, not authoritative, for anything adversarial (e.g. abuse investigations).
+
+The dashboard expansion (`2026-08-23-usage-dashboard-expansion-design.md`) adds:
+
+- Group-scoped numbers reflect **current** group membership, applied retroactively over historical events — moving a user between groups moves their whole event history into the group's view, including events recorded before the move.
+- DAU/WAU/MAU count *usage-event activity*, not logins. A user who logs in but triggers no tracked event does not count toward any of the three.
+- "Online now" counts live `SESSION_POOL` websocket connections, not open tabs — a tab left open after the socket drops is not counted — and it is a point-in-time snapshot taken on load/refresh, not a live figure.
+- The dashboard's session-length metrics (`/usage/sessions/daily`, per-user average session length) reuse `session_id` and timestamps and so inherit the caveat above: client-reported, indicative rather than authoritative.

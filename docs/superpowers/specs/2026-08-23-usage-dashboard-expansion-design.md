@@ -57,7 +57,7 @@ All endpoints live in the existing `analytics.py` router (admin-only, registered
 
 ### 3.1 Group filtering
 
-Every existing usage endpoint (`overview`, `daily`, `events`, `users`, `users/{id}/activity`) and every new aggregate endpoint gains an optional `group_id` query param. When set, the DAO adds `WHERE user_id IN (<member ids>)`; member ids are fetched once per request via `Groups.get_group_user_ids_by_id`. A `group_id` referencing a deleted group returns 404; the frontend resets scope to Everyone.
+Every existing usage endpoint (`overview`, `daily`, `events`, `users`) and every new aggregate endpoint gains an optional `group_id` query param. When set, the DAO adds `WHERE user_id IN (<member ids>)`; member ids are fetched once per request via `Groups.get_group_user_ids_by_id`. A `group_id` referencing a deleted group returns 404; the frontend resets scope to Everyone. `users/{id}/activity` deliberately does not gain a `group_id` param — it is already scoped to a single user, so a group filter would be redundant.
 
 ### 3.2 New endpoints
 
@@ -65,11 +65,11 @@ Every existing usage endpoint (`overview`, `daily`, `events`, `users`, `users/{i
 |---|---|
 | `GET /usage/presence?group_id=` | `{online: n, users: [{id, name}]}` — reads `SESSION_POOL` (websocket heartbeat pool in `socket/main.py`), dedupes multi-tab entries by user id, intersects with group members when scoped. No DB events involved. |
 | `GET /usage/active?days=&group_id=` | `{dau: {current, previous}, wau: {…}, mau: {…}, new_users: {…}}` — DAU/WAU/MAU use fixed 1/7/30-day windows; `new_users` uses the `days` param (the dashboard's selected period). Previous = equal-length window immediately before each. |
-| `GET /usage/heatmap?days=&group_id=` | 7×24 matrix of event counts bucketed in **UTC** by SQL. The frontend rotates the 168-hour week vector by the browser's timezone offset (whole-hour offsets only — fine for our region, which has no DST). |
-| `GET /usage/models?days=&group_id=` | Top 10 `{model, messages, unique_users}` from `chat.message.sent`. Model id extracted from the JSON `properties` column via SQLAlchemy `properties['model'].as_string()`, which compiles per-dialect (SQLite `json_extract`, Postgres `->>`). |
+| `GET /usage/heatmap?days=&group_id=` | `{matrix: [[...]]}` — a 7×24 matrix of event counts bucketed in **UTC** by SQL, wrapped in a `matrix` envelope key. The frontend rotates the 168-hour week vector by the browser's timezone offset (whole-hour offsets only — fine for our region, which has no DST). |
+| `GET /usage/models?days=&group_id=` | `{models: [...]}` — top 10 `{model, messages, unique_users}` from `chat.message.sent`, wrapped in a `models` envelope key. Model id extracted from the JSON `properties` column via SQLAlchemy `properties['model'].as_string()`, which compiles per-dialect (SQLite `json_extract`, Postgres `->>`). |
 | `GET /usage/sessions/daily?days=&group_id=` | Per-day distinct `session_id` count, plus overall average session length (`max(created_at) − min(created_at)` per session, averaged). |
-| `GET /usage/groups?days=` | Per-group rollup: `{group_id, name, members, active_users, events, top_tool}`. Adoption % is computed client-side. |
-| `GET /usage/users/{id}/summary?days=` | The whole user-modal stats payload in one call: first_seen (all-time), last_seen, sessions, avg_session_ms, busiest_hour, per-day counts (sparkline), tool split, top models. |
+| `GET /usage/groups?days=` | `{groups: [...]}` — per-group rollup `{group_id, name, members, active_users, events, top_tool}`, wrapped in a `groups` envelope key. Adoption % is computed client-side. |
+| `GET /usage/users/{id}/summary?days=` | The whole user-modal stats payload in one call: first_seen (all-time), last_seen, sessions, avg_session_ms, `hours[24]` (event counts per UTC hour), per-day counts (sparkline), tool split, top models. `busiest_hour` is not returned by the server — the frontend derives it from `hours[24]` in the browser's local time, since a server-side computation would be wrong for any admin outside UTC. |
 
 ### 3.3 Changed endpoints
 
@@ -79,8 +79,8 @@ Every existing usage endpoint (`overview`, `daily`, `events`, `users`, `users/{i
 
 - **Previous period** — the equal-length window immediately before the selected one. Two aggregates per metric; no schema change, no pre-aggregation.
 - **New user** — `MIN(created_at)` over the user's entire event history falls inside the window (subquery over `usage_event`, not the user table's `created_at`) — measures first *activity*, so pre-existing accounts that only now start using the platform count as new.
-- **Session length** — `max(created_at) − min(created_at)` per `session_id`. Single-event sessions (length 0) are excluded from the average so they do not drag it toward zero.
-- **Online now** — distinct user ids in `SESSION_POOL`. Entries carry a `last_seen_at` heartbeat and a reaper already evicts stale ones, so the count is trustworthy as-is.
+- **Session length** — `max(created_at) − min(created_at)` per `session_id`. Single-event sessions (length 0) are excluded from the average so they do not drag it toward zero. Session-based aggregates (this metric and `/usage/sessions/daily`) also exclude rows where `session_id IS NULL` — server-emitted events carry no client session id and would otherwise be miscounted as one-off sessions of their own.
+- **Online now** — distinct user ids in `SESSION_POOL` whose `last_seen_at` heartbeat is within `SESSION_POOL_TIMEOUT` (120 s) of the request time; the presence endpoint applies this staleness filter itself rather than assuming the pool only ever holds live entries. It has to: the background reaper only sweeps every `SESSION_POOL_TIMEOUT` (120 s), so a dead entry can sit in the pool for up to ~240 s before the reaper actually deletes it. Even with the endpoint's own filter, treat the count as an indicative snapshot, not as trustworthy to the second.
 
 No new tables and no migration. Everything reads off the existing `usage_event` and `group_member` tables plus the in-memory/Redis `SESSION_POOL`.
 
@@ -94,7 +94,7 @@ No new tables and no migration. Everything reads off the existing `usage_event` 
 
 - Empty group (0 members): all zeros; adoption % renders `—` (no divide-by-zero).
 - Group membership is **current** membership — events by ex-members drop out of the group view retroactively. Documented caveat (§7), not a bug.
-- Deleted users appearing in the online list render as "removed user" (same convention as the users table).
+- Deleted users appearing in the online list render as "removed user" (same convention as the users table) — implemented via a `Users.get_users_by_user_ids` existence cross-check inside the presence endpoint. This is necessary because `SESSION_POOL` entries cache the display name captured at connect time, so a deleted user's pool entry keeps showing their real name on its own; the cross-check against the current user table is what actually flips it to "removed user".
 - Heatmap with fewer than 7 days of data still renders the full grid, empty cells zero-shaded.
 - `chat.message.sent` rows missing the `model` property bucket as `unknown`.
 - Timezone rotation is a single browser-offset rotation of the 168-hour vector; DST-mid-period drift is accepted (target region has no DST).
@@ -103,7 +103,7 @@ No new tables and no migration. Everything reads off the existing `usage_event` 
 
 - **Backend (pytest, `.venv` python, existing usage test suite):**
   - Each new DAO aggregate against seeded fixture events with known expected counts.
-  - `group_id` filtering on both old and new endpoints.
+  - `group_id` filtering on both old and new endpoints (`users/{id}/activity` excepted — it stays single-user scoped and never took a `group_id` param).
   - Presence endpoint with a monkeypatched `SESSION_POOL`: multi-tab same-user dedupe, group intersection.
   - New-user boundary: first event just inside vs just outside the window.
   - Single-event-session exclusion from the session-length average.
