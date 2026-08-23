@@ -439,6 +439,74 @@ class UsageEventsDao:
                 'total': total,
             }
 
+    async def heatmap(
+        self,
+        since_ms: int,
+        user_ids: Optional[list[str]] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> list[list[int]]:
+        # UTC buckets; epoch day 0 (1970-01-01) was a Thursday, so +4 makes
+        # row index 0 = Sunday. The frontend rotates to local time.
+        # precedence=8 forces SQLAlchemy to parenthesize the (day + 4) operand:
+        # the default (precedence 0) renders `day + 4 % 7`, which SQL evaluates
+        # as `day + (4 % 7)` — verified empirically on this repo's SQLAlchemy.
+        dow = (
+            (UsageEvent.created_at.op('/')(86_400_000) + 4).op('%', precedence=8)(7)
+        ).label('dow')
+        hour = ((UsageEvent.created_at.op('/')(3_600_000)).op('%')(24)).label('hour')
+        async with get_async_db_context(db) as db:
+            q = (
+                select(dow, hour, func.count(UsageEvent.id))
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(dow, hour)
+            )
+            matrix = [[0] * 24 for _ in range(7)]
+            for d, h, c in (await db.execute(_apply_user_filter(q, user_ids))).all():
+                matrix[int(d)][int(h)] = c
+            return matrix
+
+    async def sessions_daily(
+        self,
+        since_ms: int,
+        user_ids: Optional[list[str]] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
+        day = (UsageEvent.created_at.op('/')(86_400_000)).label('day')
+        async with get_async_db_context(db) as db:
+            q = (
+                select(day, func.count(func.distinct(UsageEvent.session_id)))
+                .filter(
+                    UsageEvent.created_at >= since_ms,
+                    UsageEvent.session_id.isnot(None),
+                )
+                .group_by(day)
+                .order_by(day)
+            )
+            days_out = [
+                {
+                    'date': datetime.fromtimestamp(int(d) * 86400, tz=timezone.utc).strftime('%Y-%m-%d'),
+                    'sessions': c,
+                }
+                for d, c in (await db.execute(_apply_user_filter(q, user_ids))).all()
+            ]
+            sess_q = (
+                select(
+                    UsageEvent.session_id,
+                    (func.max(UsageEvent.created_at) - func.min(UsageEvent.created_at)).label('length'),
+                )
+                .filter(
+                    UsageEvent.created_at >= since_ms,
+                    UsageEvent.session_id.isnot(None),
+                )
+                .group_by(UsageEvent.session_id)
+            )
+            sess = _apply_user_filter(sess_q, user_ids).subquery()
+            # Single-event sessions (length 0) would drag the average to 0.
+            avg_ms = (
+                await db.execute(select(func.avg(sess.c.length)).filter(sess.c.length > 0))
+            ).scalar()
+            return {'days': days_out, 'avg_session_ms': int(avg_ms or 0)}
+
     async def delete_before(
         self, cutoff_ms: int, db: Optional[AsyncSession] = None
     ) -> int:
