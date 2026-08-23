@@ -171,3 +171,58 @@ async def test_sessions_daily_counts_and_avg():
 async def test_sessions_daily_empty():
     res = await UsageEvents.sessions_daily(0)
     assert res == {'days': [], 'avg_session_ms': 0}
+
+
+@pytest.mark.asyncio
+async def test_model_counts():
+    now = _now()
+    for uid in ('u1', 'u2'):
+        await _insert(uid, now - 1000, name='chat.message.sent', tool='chat',
+                      properties={'model': 'm1'}, source='server')
+    await _insert('u1', now - 900, name='chat.message.sent', tool='chat',
+                  properties={'model': 'm2'}, source='server')
+    await _insert('u1', now - 800, name='chat.message.sent', tool='chat',
+                  properties={}, source='server')  # no model -> 'unknown'
+    await _insert('u1', now - 700)  # page.view: not a chat message, ignored
+    rows = await UsageEvents.model_counts(0)
+    assert rows[0] == {'model': 'm1', 'messages': 2, 'unique_users': 2}
+    assert {r['model'] for r in rows} == {'m1', 'm2', 'unknown'}
+
+
+@pytest.mark.asyncio
+async def test_model_counts_user_ids_filter():
+    now = _now()
+    await _insert('u1', now - 1000, name='chat.message.sent', tool='chat',
+                  properties={'model': 'm1'}, source='server')
+    await _insert('u2', now - 1000, name='chat.message.sent', tool='chat',
+                  properties={'model': 'm2'}, source='server')
+    rows = await UsageEvents.model_counts(0, user_ids=['u2'])
+    assert [r['model'] for r in rows] == ['m2']
+
+
+@pytest.mark.asyncio
+async def test_user_summary():
+    day0 = 10 * 86_400_000
+    old = day0 - 5 * 86_400_000
+    await _insert('u1', old, session_id='old')  # before window: only first_seen
+    await _insert('u1', day0 + 10 * 3_600_000, session_id='s1', tool='workos')
+    await _insert('u1', day0 + 10 * 3_600_000 + 120_000, session_id='s1', tool='workos')
+    await _insert('u1', day0 + 11 * 3_600_000, name='chat.message.sent', tool='chat',
+                  properties={'model': 'm1'}, source='server')
+    res = await UsageEvents.user_summary('u1', since_ms=day0)
+    assert res['first_seen'] == old
+    assert res['last_seen'] == day0 + 11 * 3_600_000
+    assert res['sessions'] == 1          # 'old' session outside window
+    assert res['avg_session_ms'] == 120_000
+    assert res['hours'][10] == 2 and res['hours'][11] == 1
+    assert res['daily'] == [{'date': '1970-01-11', 'events': 3}]
+    assert res['tools'] == {'workos': 2, 'chat': 1}
+    assert res['models'] == [{'model': 'm1', 'messages': 1}]
+
+
+@pytest.mark.asyncio
+async def test_user_summary_no_events():
+    res = await UsageEvents.user_summary('ghost', since_ms=0)
+    assert res['first_seen'] == 0 and res['last_seen'] == 0
+    assert res['sessions'] == 0 and res['hours'] == [0] * 24
+    assert res['daily'] == [] and res['tools'] == {} and res['models'] == []

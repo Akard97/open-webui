@@ -507,6 +507,115 @@ class UsageEventsDao:
             ).scalar()
             return {'days': days_out, 'avg_session_ms': int(avg_ms or 0)}
 
+    async def model_counts(
+        self,
+        since_ms: int,
+        user_ids: Optional[list[str]] = None,
+        limit: int = 10,
+        db: Optional[AsyncSession] = None,
+    ) -> list[dict]:
+        model = UsageEvent.properties['model'].as_string().label('model')
+        async with get_async_db_context(db) as db:
+            q = (
+                select(
+                    model,
+                    func.count(UsageEvent.id).label('messages'),
+                    func.count(func.distinct(UsageEvent.user_id)),
+                )
+                .filter(
+                    UsageEvent.created_at >= since_ms,
+                    UsageEvent.event_name == 'chat.message.sent',
+                )
+                .group_by(model)
+                .order_by(desc('messages'))
+                .limit(limit)
+            )
+            return [
+                {'model': m or 'unknown', 'messages': c, 'unique_users': u}
+                for m, c, u in (await db.execute(_apply_user_filter(q, user_ids))).all()
+            ]
+
+    async def user_summary(
+        self, user_id: str, since_ms: int, db: Optional[AsyncSession] = None
+    ) -> dict:
+        async with get_async_db_context(db) as db:
+            bounds = (
+                await db.execute(
+                    select(
+                        func.min(UsageEvent.created_at),
+                        func.max(UsageEvent.created_at),
+                    ).filter(UsageEvent.user_id == user_id)
+                )
+            ).one()
+            base = [UsageEvent.user_id == user_id, UsageEvent.created_at >= since_ms]
+            sessions = (
+                await db.execute(
+                    select(func.count(func.distinct(UsageEvent.session_id))).filter(
+                        *base, UsageEvent.session_id.isnot(None)
+                    )
+                )
+            ).scalar() or 0
+            sess = (
+                select(
+                    UsageEvent.session_id,
+                    (func.max(UsageEvent.created_at) - func.min(UsageEvent.created_at)).label('length'),
+                )
+                .filter(*base, UsageEvent.session_id.isnot(None))
+                .group_by(UsageEvent.session_id)
+                .subquery()
+            )
+            avg_ms = (
+                await db.execute(select(func.avg(sess.c.length)).filter(sess.c.length > 0))
+            ).scalar()
+            hour = ((UsageEvent.created_at.op('/')(3_600_000)).op('%')(24)).label('hour')
+            hours = [0] * 24
+            for h, c in (
+                await db.execute(select(hour, func.count(UsageEvent.id)).filter(*base).group_by(hour))
+            ).all():
+                hours[int(h)] = c
+            day = (UsageEvent.created_at.op('/')(86_400_000)).label('day')
+            daily = [
+                {
+                    'date': datetime.fromtimestamp(int(d) * 86400, tz=timezone.utc).strftime('%Y-%m-%d'),
+                    'events': c,
+                }
+                for d, c in (
+                    await db.execute(
+                        select(day, func.count(UsageEvent.id)).filter(*base).group_by(day).order_by(day)
+                    )
+                ).all()
+            ]
+            tools = dict(
+                (
+                    await db.execute(
+                        select(UsageEvent.tool, func.count(UsageEvent.id)).filter(*base).group_by(UsageEvent.tool)
+                    )
+                ).all()
+            )
+            model = UsageEvent.properties['model'].as_string().label('model')
+            models = [
+                {'model': m or 'unknown', 'messages': c}
+                for m, c in (
+                    await db.execute(
+                        select(model, func.count(UsageEvent.id).label('messages'))
+                        .filter(*base, UsageEvent.event_name == 'chat.message.sent')
+                        .group_by(model)
+                        .order_by(desc('messages'))
+                        .limit(5)
+                    )
+                ).all()
+            ]
+            return {
+                'first_seen': bounds[0] or 0,
+                'last_seen': bounds[1] or 0,
+                'sessions': sessions,
+                'avg_session_ms': int(avg_ms or 0),
+                'hours': hours,
+                'daily': daily,
+                'tools': tools,
+                'models': models,
+            }
+
     async def delete_before(
         self, cutoff_ms: int, db: Optional[AsyncSession] = None
     ) -> int:
