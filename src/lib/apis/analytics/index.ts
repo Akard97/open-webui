@@ -284,11 +284,16 @@ export const getModelChats = async (
 	return res;
 };
 
-export const getUsageOverview = async (token: string = '', days: number = 30) => {
+export const getUsageOverview = async (
+	token: string = '',
+	days: number = 30,
+	groupId: string | null = null
+) => {
 	let error = null;
 
 	const searchParams = new URLSearchParams();
 	searchParams.append('days', days.toString());
+	if (groupId) searchParams.append('group_id', groupId);
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/overview?${searchParams.toString()}`, {
 		method: 'GET',
@@ -318,13 +323,15 @@ export const getUsageOverview = async (token: string = '', days: number = 30) =>
 export const getUsageDaily = async (
 	token: string = '',
 	days: number = 30,
-	tool: string | null = null
+	tool: string | null = null,
+	groupId: string | null = null
 ) => {
 	let error = null;
 
 	const searchParams = new URLSearchParams();
 	searchParams.append('days', days.toString());
 	if (tool) searchParams.append('tool', tool);
+	if (groupId) searchParams.append('group_id', groupId);
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/daily?${searchParams.toString()}`, {
 		method: 'GET',
@@ -354,13 +361,15 @@ export const getUsageDaily = async (
 export const getUsageEventCounts = async (
 	token: string = '',
 	days: number = 30,
-	tool: string | null = null
+	tool: string | null = null,
+	groupId: string | null = null
 ) => {
 	let error = null;
 
 	const searchParams = new URLSearchParams();
 	searchParams.append('days', days.toString());
 	if (tool) searchParams.append('tool', tool);
+	if (groupId) searchParams.append('group_id', groupId);
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/events?${searchParams.toString()}`, {
 		method: 'GET',
@@ -391,7 +400,8 @@ export const getUsageUsers = async (
 	token: string = '',
 	days: number = 30,
 	sort: string = 'events',
-	page: number = 1
+	page: number = 1,
+	groupId: string | null = null
 ) => {
 	let error = null;
 
@@ -399,6 +409,7 @@ export const getUsageUsers = async (
 	searchParams.append('days', days.toString());
 	searchParams.append('sort', sort);
 	searchParams.append('page', page.toString());
+	if (groupId) searchParams.append('group_id', groupId);
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/usage/users?${searchParams.toString()}`, {
 		method: 'GET',
@@ -441,6 +452,268 @@ export const getUsageUserActivity = async (
 
 	const res = await fetch(
 		`${WEBUI_API_BASE_URL}/analytics/usage/users/${encodeURIComponent(userId)}/activity?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsagePresence = async (token: string = '', groupId: string | null = null) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	if (groupId) searchParams.append('group_id', groupId);
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/presence?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageActive = async (
+	token: string = '',
+	days: number = 30,
+	groupId: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	if (groupId) searchParams.append('group_id', groupId);
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/active?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageHeatmap = async (
+	token: string = '',
+	days: number = 30,
+	groupId: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	if (groupId) searchParams.append('group_id', groupId);
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/heatmap?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageModels = async (
+	token: string = '',
+	days: number = 30,
+	groupId: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	if (groupId) searchParams.append('group_id', groupId);
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/models?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageSessionsDaily = async (
+	token: string = '',
+	days: number = 30,
+	groupId: string | null = null
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+	if (groupId) searchParams.append('group_id', groupId);
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/sessions/daily?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageGroups = async (token: string = '', days: number = 30) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/groups?${searchParams.toString()}`,
+		{
+			method: 'GET',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getUsageUserSummary = async (
+	token: string = '',
+	userId: string,
+	days: number = 30
+) => {
+	let error = null;
+
+	const searchParams = new URLSearchParams();
+	searchParams.append('days', days.toString());
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/analytics/usage/users/${userId}/summary?${searchParams.toString()}`,
 		{
 			method: 'GET',
 			headers: {
