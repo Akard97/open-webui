@@ -2,9 +2,15 @@
 	import Modal from '$lib/components/common/Modal.svelte';
 	import { getContext } from 'svelte';
 	import dayjs from 'dayjs';
-	import { getUsageUserActivity } from '$lib/apis/analytics';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { getUsageUserActivity, getUsageUserSummary } from '$lib/apis/analytics';
+	import { busiestHour } from '$lib/utils/usageStats';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
+	import UsageBars from './UsageBars.svelte';
+	import ChartLine from './ChartLine.svelte';
+
+	dayjs.extend(relativeTime);
 
 	export let show = false;
 	export let user: { user_id: string; name: string } | null = null;
@@ -38,6 +44,49 @@
 	// old user, closed modal) can never clobber newer state.
 	let reqSeq = 0;
 
+	type Summary = {
+		first_seen: number;
+		last_seen: number;
+		sessions: number;
+		avg_session_ms: number;
+		hours: number[];
+		daily: { date: string; events: number }[];
+		tools: Record<string, number>;
+		models: { model: string; messages: number }[];
+	};
+
+	let summary: Summary | null = null;
+
+	const tzOffset = -new Date().getTimezoneOffset() / 60;
+
+	const formatMs = (ms: number): string => {
+		if (!ms) return '—';
+		const totalSeconds = Math.round(ms / 1000);
+		const m = Math.floor(totalSeconds / 60);
+		const s = totalSeconds % 60;
+		return `${m}m ${s}s`;
+	};
+
+	const loadSummary = async () => {
+		if (!user?.user_id) return;
+		const seq = reqSeq; // ride the same invalidation counter
+		try {
+			const res = await getUsageUserSummary(localStorage.token, user.user_id, days);
+			if (seq !== reqSeq) return;
+			summary = res;
+		} catch (err) {
+			if (seq !== reqSeq) return;
+			console.error('Failed to load user summary:', err);
+			summary = null;
+		}
+	};
+
+	$: sparklineData = (summary?.daily ?? []).map((d) => ({
+		date: d.date,
+		models: { events: d.events }
+	}));
+	$: hour = summary ? busiestHour(summary.hours, tzOffset) : null;
+
 	const close = () => {
 		show = false;
 		reqSeq++; // invalidate any in-flight request
@@ -47,6 +96,7 @@
 		page = 1;
 		allLoaded = false;
 		loading = false;
+		summary = null;
 		onClose();
 	};
 
@@ -118,7 +168,9 @@
 		total = 0;
 		page = 1;
 		allLoaded = false;
+		summary = null;
 		load();
+		loadSummary();
 	}
 </script>
 
@@ -131,6 +183,76 @@
 			<button class="self-center" on:click={close} aria-label="Close">
 				<XMark className={'size-5'} />
 			</button>
+		</div>
+
+		<div class="px-5 pb-2">
+			{#if summary}
+				<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3 text-xs">
+					<div>
+						<div class="text-gray-400">{$i18n.t('First seen')}</div>
+						<div class="font-medium text-gray-900 dark:text-white">
+							{summary.first_seen ? dayjs(summary.first_seen).format('MMM D, YYYY') : '—'}
+						</div>
+					</div>
+					<div>
+						<div class="text-gray-400">{$i18n.t('Last Seen')}</div>
+						<div class="font-medium text-gray-900 dark:text-white">
+							{summary.last_seen ? dayjs(summary.last_seen).fromNow() : '—'}
+						</div>
+					</div>
+					<div>
+						<div class="text-gray-400">{$i18n.t('Sessions')}</div>
+						<div class="font-medium text-gray-900 dark:text-white">
+							{summary.sessions.toLocaleString()}
+						</div>
+					</div>
+					<div>
+						<div class="text-gray-400">{$i18n.t('Avg session')}</div>
+						<div class="font-medium text-gray-900 dark:text-white">
+							{formatMs(summary.avg_session_ms)}
+						</div>
+					</div>
+					<div>
+						<div class="text-gray-400">{$i18n.t('Busiest hour')}</div>
+						<div class="font-medium text-gray-900 dark:text-white">
+							{hour !== null ? `${hour}:00` : '—'}
+						</div>
+					</div>
+				</div>
+
+				{#if sparklineData.length > 1}
+					<div class="mb-3">
+						<ChartLine
+							data={sparklineData}
+							models={['events']}
+							colors={['#3b82f6']}
+							height={80}
+							period={days === 7 ? 'week' : days === 90 ? 'year' : 'month'}
+						/>
+					</div>
+				{/if}
+
+				<div class="grid sm:grid-cols-2 gap-4 mb-1">
+					{#if Object.keys(summary.tools).length > 0}
+						<div>
+							<div class="text-xs text-gray-400 mb-1">{$i18n.t('Tools')}</div>
+							<UsageBars
+								items={Object.entries(summary.tools)
+									.sort((a, b) => b[1] - a[1])
+									.map(([label, value]) => ({ label, value }))}
+							/>
+						</div>
+					{/if}
+					{#if summary.models.length > 0}
+						<div>
+							<div class="text-xs text-gray-400 mb-1">{$i18n.t('Top Models')}</div>
+							<UsageBars
+								items={summary.models.map((m) => ({ label: m.model, value: m.messages }))}
+							/>
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<div class="px-5 pb-4 dark:text-gray-200">
