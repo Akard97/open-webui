@@ -8,11 +8,23 @@
 		getUsageOverview,
 		getUsageDaily,
 		getUsageEventCounts,
-		getUsageUsers
+		getUsageUsers,
+		getUsagePresence,
+		getUsageActive,
+		getUsageHeatmap,
+		getUsageModels,
+		getUsageSessionsDaily,
+		getUsageGroups
 	} from '$lib/apis/analytics';
+	import { getGroups } from '$lib/apis/groups';
+	import { delta } from '$lib/utils/usageStats';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ChartLine from './ChartLine.svelte';
 	import UsageUserModal from './UsageUserModal.svelte';
+	import UsageStatCard from './UsageStatCard.svelte';
+	import UsageHeatmap from './UsageHeatmap.svelte';
+	import UsageBars from './UsageBars.svelte';
+	import UsageGroupsTable from './UsageGroupsTable.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -24,6 +36,7 @@
 		sessions: number;
 		events: number;
 		avg_page_ms: number;
+		prev_active_users: number;
 	};
 	type DailyEntry = { date: string; tools: Record<string, number>; events: number };
 	type EventEntry = { event_name: string; tool: string; count: number; unique_users: number };
@@ -35,6 +48,21 @@
 		events: number;
 		tools: Record<string, number>;
 	};
+	type PeriodCount = { current: number; previous: number };
+	type ActiveCounts = {
+		dau: PeriodCount;
+		wau: PeriodCount;
+		mau: PeriodCount;
+		new_users: PeriodCount;
+	};
+	type GroupRollupEntry = {
+		group_id: string;
+		name: string;
+		members: number;
+		active_users: number;
+		events: number;
+		top_tool: string | null;
+	};
 
 	// Time period - persist in localStorage
 	const storedPeriod =
@@ -43,11 +71,25 @@
 			: NaN;
 	let days = [7, 30, 90].includes(storedPeriod) ? storedPeriod : 30;
 
+	let groupId: string | null = null;
+	let groupOptions: { id: string; name: string }[] = [];
+
 	let overview: ToolOverview[] = [];
 	let dailyRaw: DailyEntry[] = [];
 	let eventCounts: EventEntry[] = [];
 	let users: UserEntry[] = [];
 	let usersTotal = 0;
+
+	let presence: { online: number; users: { id: string; name: string }[] } | null = null;
+	let active: ActiveCounts | null = null;
+	let heatmapMatrix: number[][] = [];
+	let models: { model: string; messages: number; unique_users: number }[] = [];
+	let sessionsDaily: { days: { date: string; sessions: number }[]; avg_session_ms: number } = {
+		days: [],
+		avg_session_ms: 0
+	};
+	let groupsRollup: GroupRollupEntry[] = [];
+	let showOnlineList = false;
 
 	let loading = true;
 	// A failed load keeps whatever data was already on screen, so surface an
@@ -85,39 +127,77 @@
 		const seq = ++loadSeq;
 		const uSeq = ++usersSeq;
 		loading = true;
-		try {
-			const [overviewRes, dailyRes, eventsRes, usersRes] = await Promise.all([
-				getUsageOverview(localStorage.token, days),
-				getUsageDaily(localStorage.token, days),
-				getUsageEventCounts(localStorage.token, days),
-				getUsageUsers(localStorage.token, days, userSort, userPage)
-			]);
+		showOnlineList = false;
+		const results = await Promise.allSettled([
+			getUsageOverview(localStorage.token, days, groupId),
+			getUsageDaily(localStorage.token, days, null, groupId),
+			getUsageEventCounts(localStorage.token, days, null, groupId),
+			getUsageUsers(localStorage.token, days, userSort, userPage, groupId),
+			getUsageActive(localStorage.token, days, groupId),
+			getUsageHeatmap(localStorage.token, days, groupId),
+			getUsageModels(localStorage.token, days, groupId),
+			getUsageSessionsDaily(localStorage.token, days, groupId),
+			groupId ? Promise.resolve(null) : getUsageGroups(localStorage.token, days),
+			getUsagePresence(localStorage.token, groupId)
+		]);
+		if (seq !== loadSeq) return;
 
-			if (seq === loadSeq) {
-				overview = overviewRes?.tools ?? [];
-				dailyRaw = dailyRes?.days ?? [];
-				eventCounts = eventsRes?.events ?? [];
-				loadError = false;
-			}
-			if (uSeq === usersSeq) {
-				users = usersRes?.users ?? [];
-				usersTotal = usersRes?.total ?? 0;
-			}
-		} catch (err) {
-			console.error('Usage dashboard load failed:', err);
-			if (seq === loadSeq) {
-				loadError = true;
+		// A scoped load against a deleted group: drop back to Everyone.
+		if (
+			groupId &&
+			results.some((r) => r.status === 'rejected' && `${r.reason}` === 'Group not found')
+		) {
+			groupId = null;
+			load();
+			return;
+		}
+
+		const value = <T,>(r: PromiseSettledResult<T>): T | null =>
+			r.status === 'fulfilled' ? r.value : null;
+
+		const [
+			overviewRes,
+			dailyRes,
+			eventsRes,
+			usersRes,
+			activeRes,
+			heatmapRes,
+			modelsRes,
+			sessionsRes,
+			groupsRes,
+			presenceRes
+		] = results;
+
+		overview = (value(overviewRes) as any)?.tools ?? overview;
+		dailyRaw = (value(dailyRes) as any)?.days ?? dailyRaw;
+		eventCounts = (value(eventsRes) as any)?.events ?? eventCounts;
+		if (uSeq === usersSeq) {
+			const u = value(usersRes) as any;
+			if (u) {
+				users = u.users ?? [];
+				usersTotal = u.total ?? 0;
 			}
 		}
-		if (seq === loadSeq) {
-			loading = false;
+		active = (value(activeRes) as any) ?? active;
+		heatmapMatrix = (value(heatmapRes) as any)?.matrix ?? heatmapMatrix;
+		models = (value(modelsRes) as any)?.models ?? models;
+		sessionsDaily = (value(sessionsRes) as any) ?? sessionsDaily;
+		if (!groupId) {
+			groupsRollup = (value(groupsRes) as any)?.groups ?? groupsRollup;
 		}
+		// Presence is the least-critical number: on failure show — without
+		// escalating to the banner.
+		presence = (value(presenceRes) as any) ?? null;
+
+		// Banner covers every fetch except presence (the last entry).
+		loadError = results.slice(0, -1).some((r) => r.status === 'rejected');
+		loading = false;
 	};
 
 	const loadUsers = async () => {
 		const uSeq = ++usersSeq;
 		try {
-			const usersRes = await getUsageUsers(localStorage.token, days, userSort, userPage);
+			const usersRes = await getUsageUsers(localStorage.token, days, userSort, userPage, groupId);
 			if (uSeq !== usersSeq) return;
 			users = usersRes?.users ?? [];
 			usersTotal = usersRes?.total ?? 0;
@@ -128,6 +208,12 @@
 				loadError = true;
 			}
 		}
+	};
+
+	const selectScope = (id: string | null) => {
+		groupId = id;
+		userPage = 1;
+		load();
 	};
 
 	const selectPeriod = (value: number) => {
@@ -205,7 +291,24 @@
 		| 'year'
 		| 'all';
 
-	onMount(load);
+	$: sessionsByDate = new Map(sessionsDaily.days.map((d) => [d.date, d.sessions]));
+	$: sessionsData = buildDateRange(days).map((date) => ({
+		date,
+		models: { sessions: sessionsByDate.get(date) ?? 0 }
+	}));
+
+	onMount(async () => {
+		load();
+		try {
+			const res = await getGroups(localStorage.token);
+			groupOptions = (res ?? []).map((g: { id: string; name: string }) => ({
+				id: g.id,
+				name: g.name
+			}));
+		} catch (err) {
+			console.error('Failed to load groups:', err);
+		}
+	});
 </script>
 
 <!-- User activity modal -->
@@ -225,6 +328,16 @@
 	</div>
 	<div class="flex items-center gap-2 flex-wrap justify-end min-w-0">
 		<select
+			value={groupId ?? ''}
+			on:change={(e) => selectScope((e.target as HTMLSelectElement).value || null)}
+			class="w-fit pr-8 rounded-sm px-2 text-xs bg-transparent outline-none text-right max-w-[180px] truncate"
+		>
+			<option value="">{$i18n.t('Everyone')}</option>
+			{#each groupOptions as g (g.id)}
+				<option value={g.id}>{g.name}</option>
+			{/each}
+		</select>
+		<select
 			value={days}
 			on:change={(e) => selectPeriod(parseInt((e.target as HTMLSelectElement).value))}
 			class="w-fit pr-8 rounded-sm px-2 text-xs bg-transparent outline-none text-right"
@@ -233,6 +346,13 @@
 			<option value={30}>{$i18n.t('Last 30 days')}</option>
 			<option value={90}>{$i18n.t('Last 90 days')}</option>
 		</select>
+		<button
+			class="px-2 py-0.5 rounded-full text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-850"
+			on:click={() => load()}
+			aria-label={$i18n.t('Refresh')}
+		>
+			{$i18n.t('Refresh')}
+		</button>
 	</div>
 </div>
 
@@ -243,10 +363,7 @@
 		<span>
 			{$i18n.t('Failed to load usage data. The results below may be stale.')}
 		</span>
-		<button
-			class="shrink-0 font-medium underline underline-offset-2"
-			on:click={() => load()}
-		>
+		<button class="shrink-0 font-medium underline underline-offset-2" on:click={() => load()}>
 			{$i18n.t('Retry')}
 		</button>
 	</div>
@@ -257,6 +374,52 @@
 		<Spinner className="size-5" />
 	</div>
 {:else}
+	<!-- Presence & reach strip -->
+	<div
+		class="grid gap-3 mb-4"
+		style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));"
+	>
+		<div class="relative">
+			<UsageStatCard
+				label={$i18n.t('Online now')}
+				value={presence ? presence.online.toLocaleString() : '—'}
+				clickable={!!presence && presence.online > 0}
+				on:click={() => (showOnlineList = !showOnlineList)}
+			/>
+			{#if showOnlineList && presence}
+				<div
+					class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-100 dark:border-gray-850 bg-white dark:bg-gray-900 shadow-lg p-2 text-xs"
+				>
+					{#each presence.users as u (u.id)}
+						<div class="py-0.5 truncate text-gray-700 dark:text-gray-300">{u.name}</div>
+					{:else}
+						<div class="text-gray-400">{$i18n.t('No one is online')}</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<UsageStatCard
+			label={$i18n.t('Active today')}
+			value={active ? active.dau.current.toLocaleString() : '—'}
+			delta={active ? delta(active.dau.current, active.dau.previous) : null}
+		/>
+		<UsageStatCard
+			label={$i18n.t('Active (7d)')}
+			value={active ? active.wau.current.toLocaleString() : '—'}
+			delta={active ? delta(active.wau.current, active.wau.previous) : null}
+		/>
+		<UsageStatCard
+			label={$i18n.t('Active (30d)')}
+			value={active ? active.mau.current.toLocaleString() : '—'}
+			delta={active ? delta(active.mau.current, active.mau.previous) : null}
+		/>
+		<UsageStatCard
+			label={$i18n.t('New users')}
+			value={active ? active.new_users.current.toLocaleString() : '—'}
+			delta={active ? delta(active.new_users.current, active.new_users.previous) : null}
+		/>
+	</div>
+
 	<!-- Overview cards -->
 	<div
 		class="grid gap-3 mb-4"
@@ -267,8 +430,24 @@
 				<div class="text-xs text-gray-500 dark:text-gray-400 mb-1 truncate capitalize">
 					{t.tool}
 				</div>
-				<div class="text-xl font-medium text-gray-900 dark:text-white">
-					{t.active_users.toLocaleString()}
+				<div class="flex items-baseline gap-2">
+					<div class="text-xl font-medium text-gray-900 dark:text-white">
+						{t.active_users.toLocaleString()}
+					</div>
+					{#if t.prev_active_users !== undefined}
+						{@const d = delta(t.active_users, t.prev_active_users)}
+						<span
+							class="text-xs {d.dir === 'up'
+								? 'text-green-600 dark:text-green-400'
+								: d.dir === 'down'
+									? 'text-red-600 dark:text-red-400'
+									: 'text-gray-400'}"
+						>
+							{d.dir === 'up' ? '▲' : d.dir === 'down' ? '▼' : '—'}{d.pct !== null
+								? ` ${Math.abs(d.pct)}%`
+								: ''}
+						</span>
+					{/if}
 				</div>
 				<div class="text-xs text-gray-400 mb-2">{$i18n.t('Active Users')}</div>
 				<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
@@ -285,19 +464,74 @@
 		{/if}
 	</div>
 
-	<!-- Daily usage chart -->
-	{#if dailyData.length > 0}
-		<div class="mb-4">
-			<div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 px-0.5">
-				{$i18n.t('Daily Usage')}
+	<!-- Charts row -->
+	<div class="grid md:grid-cols-2 gap-4 mb-4">
+		{#if dailyData.length > 0}
+			<div>
+				<div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 px-0.5">
+					{$i18n.t('Daily Usage')}
+				</div>
+				<ChartLine
+					data={dailyData}
+					models={toolNames}
+					colors={toolColors}
+					height={200}
+					period={chartPeriod}
+				/>
+			</div>
+		{/if}
+		<div>
+			<div
+				class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 px-0.5"
+			>
+				<span>{$i18n.t('Sessions per day')}</span>
+				<span class="text-gray-400 font-normal">
+					{$i18n.t('Avg session')}: {formatMs(sessionsDaily.avg_session_ms)}
+				</span>
 			</div>
 			<ChartLine
-				data={dailyData}
-				models={toolNames}
-				colors={toolColors}
+				data={sessionsData}
+				models={['sessions']}
+				colors={['#10b981']}
 				height={200}
 				period={chartPeriod}
 			/>
+		</div>
+	</div>
+
+	<!-- Heatmap + top models -->
+	<div class="grid md:grid-cols-2 gap-4 mb-4">
+		<div>
+			<div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 px-0.5">
+				{$i18n.t('Activity by hour')}
+			</div>
+			<UsageHeatmap matrix={heatmapMatrix} />
+		</div>
+		<div>
+			<div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 px-0.5">
+				{$i18n.t('Top Models')}
+			</div>
+			{#if models.length > 0}
+				<UsageBars
+					items={models.map((m) => ({
+						label: m.model,
+						value: m.messages,
+						sub: `${m.unique_users.toLocaleString()} ${$i18n.t('Users').toLowerCase()}`
+					}))}
+				/>
+			{:else}
+				<div class="text-gray-400 text-xs px-0.5">{$i18n.t('No data')}</div>
+			{/if}
+		</div>
+	</div>
+
+	<!-- Groups rollup (Everyone scope only) -->
+	{#if !groupId}
+		<div class="mb-4">
+			<div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 px-0.5">
+				{$i18n.t('Groups')}
+			</div>
+			<UsageGroupsTable groups={groupsRollup} onSelect={(id) => selectScope(id)} />
 		</div>
 	{/if}
 
