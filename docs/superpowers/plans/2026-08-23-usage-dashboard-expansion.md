@@ -189,7 +189,7 @@ Example for `overview` (apply the same `q = _apply_user_filter(q, user_ids)` pat
 - [ ] **Step 4: Run tests to verify they pass, plus the existing suite**
 
 Run: `.venv/Scripts/python.exe -m pytest open_webui/test/usage -q`
-Expected: all PASS (new 4 + existing ~23)
+Expected: all PASS (new 4 + existing 28)
 
 - [ ] **Step 5: Commit**
 
@@ -446,7 +446,12 @@ Add to `UsageEventsDao`:
     ) -> list[list[int]]:
         # UTC buckets; epoch day 0 (1970-01-01) was a Thursday, so +4 makes
         # row index 0 = Sunday. The frontend rotates to local time.
-        dow = ((UsageEvent.created_at.op('/')(86_400_000) + 4).op('%')(7)).label('dow')
+        # precedence=8 forces SQLAlchemy to parenthesize the (day + 4) operand:
+        # the default (precedence 0) renders `day + 4 % 7`, which SQL evaluates
+        # as `day + (4 % 7)` — verified empirically on this repo's SQLAlchemy.
+        dow = (
+            (UsageEvent.created_at.op('/')(86_400_000) + 4).op('%', precedence=8)(7)
+        ).label('dow')
         hour = ((UsageEvent.created_at.op('/')(3_600_000)).op('%')(24)).label('hour')
         async with get_async_db_context(db) as db:
             q = (
@@ -1133,6 +1138,50 @@ async def test_new_endpoints_require_admin():
         ):
             r = await c.get(f'/api/v1/analytics/{path}')
             assert r.status_code in (401, 403), path
+
+
+@pytest.mark.asyncio
+async def test_new_endpoints_group_filter(monkeypatch):
+    # The router→DAO user_ids handoff on each scoped new endpoint — exactly
+    # where a copy-paste omission would hide.
+    await _seed()
+    _stub_group(monkeypatch, ['u1'])
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/active?days=30&group_id=g1')
+        assert r.json()['dau']['current'] == 1
+        r = await c.get('/api/v1/analytics/usage/heatmap?days=30&group_id=g1')
+        assert sum(sum(row) for row in r.json()['matrix']) == 1
+        r = await c.get('/api/v1/analytics/usage/models?days=30&group_id=g1')
+        assert r.json()['models'] == []  # u2's chat message excluded
+        r = await c.get('/api/v1/analytics/usage/sessions/daily?days=30&group_id=g1')
+        assert r.json()['days'][0]['sessions'] == 1
+
+
+@pytest.mark.asyncio
+async def test_new_endpoints_unknown_group_404(monkeypatch):
+    _stub_group(monkeypatch, [])
+    async with _client() as c:
+        for path in (
+            'usage/active?group_id=nope',
+            'usage/heatmap?group_id=nope',
+            'usage/models?group_id=nope',
+            'usage/sessions/daily?group_id=nope',
+        ):
+            r = await c.get(f'/api/v1/analytics/{path}')
+            assert r.status_code == 404, path
+
+
+@pytest.mark.asyncio
+async def test_empty_group_zeros(monkeypatch):
+    # 0-member group must yield zeros, not silently degrade to unscoped data
+    # (the None-vs-[] seam in _group_user_ids).
+    await _seed()
+    _stub_group(monkeypatch, [])
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/overview?days=30&group_id=g1')
+        assert r.json()['tools'] == []
+        r = await c.get('/api/v1/analytics/usage/active?days=30&group_id=g1')
+        assert r.json()['dau'] == {'current': 0, 'previous': 0}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1328,8 +1377,8 @@ git commit -m "feat(usage): active/heatmap/models/sessions/groups/user-summary e
 - Test: `backend/open_webui/test/usage/test_router_expansion.py`
 
 **Interfaces:**
-- Consumes: `SESSION_POOL` / `SESSION_POOL_TIMEOUT` from `open_webui.socket.main` (lazy import); `_group_user_ids` from Task 6.
-- Produces: `GET /usage/presence?group_id=` → `{online: int, users: [{id, name}]}`; module-level `def _get_session_pool()` (the monkeypatch seam for tests).
+- Consumes: `SESSION_POOL` / `SESSION_POOL_TIMEOUT` from `open_webui.socket.main` (lazy import); `_group_user_ids` from Task 6; `Users.get_users_by_user_ids` (already imported in analytics.py) to detect deleted users.
+- Produces: `GET /usage/presence?group_id=` → `{online: int, users: [{id, name}]}`; module-level `def _get_session_pool()` (the monkeypatch seam for tests). Deleted-but-still-connected users render as `'removed user'` (pool entries cache the real name from connect time, so an existence cross-check is required — the `or 'removed user'` fallback alone never fires for them).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1343,9 +1392,20 @@ def _pool(monkeypatch, entries, timeout=120):
     monkeypatch.setattr(ar, '_get_session_pool', lambda: (entries, timeout))
 
 
+def _stub_users(monkeypatch, existing_ids):
+    async def _get_users_by_user_ids(user_ids, db=None):
+        return [SimpleNamespace(id=i) for i in user_ids if i in existing_ids]
+
+    from open_webui.models.users import Users
+    monkeypatch.setattr(
+        Users, 'get_users_by_user_ids', staticmethod(_get_users_by_user_ids)
+    )
+
+
 @pytest.mark.asyncio
 async def test_presence_dedupes_and_skips_stale(monkeypatch):
     now = int(_time.time())
+    _stub_users(monkeypatch, {'u1', 'u3'})
     _pool(monkeypatch, {
         'sid1': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},
         'sid2': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},   # 2nd tab
@@ -1364,6 +1424,7 @@ async def test_presence_dedupes_and_skips_stale(monkeypatch):
 async def test_presence_group_intersection(monkeypatch):
     now = int(_time.time())
     _stub_group(monkeypatch, ['u1'])
+    _stub_users(monkeypatch, {'u1', 'u2'})
     _pool(monkeypatch, {
         'sid1': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},
         'sid2': {'id': 'u2', 'name': 'Omar', 'last_seen_at': now},
@@ -1371,6 +1432,20 @@ async def test_presence_group_intersection(monkeypatch):
     async with _client() as c:
         r = await c.get('/api/v1/analytics/usage/presence?group_id=g1')
     assert r.json() == {'online': 1, 'users': [{'id': 'u1', 'name': 'Lara'}]}
+
+
+@pytest.mark.asyncio
+async def test_presence_deleted_user_shows_removed(monkeypatch):
+    now = int(_time.time())
+    _stub_users(monkeypatch, {'u1'})  # 'ghost' no longer exists in the user table
+    _pool(monkeypatch, {
+        'sid1': {'id': 'u1', 'name': 'Lara', 'last_seen_at': now},
+        'sid2': {'id': 'ghost', 'name': 'Ghost', 'last_seen_at': now},
+    })
+    async with _client() as c:
+        r = await c.get('/api/v1/analytics/usage/presence')
+    names = {u['id']: u['name'] for u in r.json()['users']}
+    assert names == {'u1': 'Lara', 'ghost': 'removed user'}
 
 
 @pytest.mark.asyncio
@@ -1437,6 +1512,15 @@ async def get_usage_presence(
         if members is not None and uid not in members:
             continue
         online[uid] = entry.get('name') or 'removed user'
+    # Pool entries cache the user's name from connect time, so a deleted user
+    # keeps their real name there; cross-check existence like the users table.
+    if online:
+        existing = {
+            u.id for u in await Users.get_users_by_user_ids(list(online), db=db)
+        }
+        for uid in online:
+            if uid not in existing:
+                online[uid] = 'removed user'
     users = [
         UsagePresenceUser(id=uid, name=name)
         for uid, name in sorted(online.items(), key=lambda kv: kv[1].lower())
@@ -1466,10 +1550,10 @@ git commit -m "feat(usage): presence endpoint from websocket session pool"
 
 **Interfaces:**
 - Produces (consumed by Tasks 11–13):
-  - `rotateHeatmap(utcMatrix: number[][], offsetHours: number): number[][]` — rotates the 7×24 UTC matrix (row 0 = Sunday) into local time by treating it as a 168-hour week vector.
-  - `busiestHour(utcHours: number[], offsetHours: number): number | null` — local hour (0–23) with most events; null when all zero.
+  - `rotateHeatmap(utcMatrix: number[][], offsetHours: number): number[][]` — rotates the 7×24 UTC matrix (row 0 = Sunday) into local time by treating it as a 168-hour week vector. Fractional offsets (UTC+5:30) rounded to the nearest hour.
+  - `busiestHour(utcHours: number[], offsetHours: number): number | null` — local hour (0–23) with most events; null when all zero. Fractional offsets rounded.
   - `delta(current: number, previous: number): { dir: 'up' | 'down' | 'flat'; pct: number | null }` — pct null when previous is 0.
-  - `adoptionPct(active: number, members: number): string` — `'62%'` or `'—'` for 0 members.
+  - `adoptionPct(active: number, members: number): string` — `'63%'` (Math.round) or `'—'` for 0 members.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1509,6 +1593,12 @@ describe('rotateHeatmap', () => {
 		const local = rotateHeatmap(m, -5);
 		expect(local[6][19]).toBe(4); // Saturday 19:00 local
 	});
+
+	it('rounds fractional offsets to the nearest hour (UTC+5:30)', () => {
+		const m = empty();
+		m[1][10] = 5;
+		expect(rotateHeatmap(m, 5.5)[1][16]).toBe(5); // rounds to +6
+	});
 });
 
 describe('busiestHour', () => {
@@ -1520,6 +1610,12 @@ describe('busiestHour', () => {
 
 	it('returns null when empty', () => {
 		expect(busiestHour(new Array(24).fill(0), 3)).toBeNull();
+	});
+
+	it('rounds fractional offsets', () => {
+		const hours = new Array(24).fill(0);
+		hours[10] = 9;
+		expect(busiestHour(hours, 5.5)).toBe(16);
 	});
 });
 
@@ -1560,19 +1656,23 @@ Create `src/lib/utils/usageStats.ts`:
 // in UTC (row 0 = Sunday); rotation to the viewer's timezone happens here.
 
 export const rotateHeatmap = (utcMatrix: number[][], offsetHours: number): number[][] => {
+	// Fractional zones (UTC+5:30 etc.): round to the nearest hour — a fractional
+	// index would silently write off-array keys and render the grid empty.
+	const offset = Math.round(offsetHours);
 	const flat = utcMatrix.flat(); // index = dow * 24 + hour
 	const local = new Array(168).fill(0);
 	for (let i = 0; i < 168; i++) {
-		local[(((i + offsetHours) % 168) + 168) % 168] = flat[i];
+		local[(((i + offset) % 168) + 168) % 168] = flat[i];
 	}
 	return Array.from({ length: 7 }, (_, d) => local.slice(d * 24, d * 24 + 24));
 };
 
 export const busiestHour = (utcHours: number[], offsetHours: number): number | null => {
 	if (!utcHours.some((v) => v > 0)) return null;
+	const offset = Math.round(offsetHours);
 	const local = new Array(24).fill(0);
 	for (let h = 0; h < 24; h++) {
-		local[(((h + offsetHours) % 24) + 24) % 24] += utcHours[h];
+		local[(((h + offset) % 24) + 24) % 24] += utcHours[h];
 	}
 	let best = 0;
 	for (let h = 1; h < 24; h++) {
@@ -2112,7 +2212,7 @@ git commit -m "feat(usage): API client fetchers for new usage endpoints"
 
 - [ ] **Step 5: Add i18n keys**
 
-For each key below: grep `src/lib/i18n/locales/en-US/translation.json` first; if missing, add to en-US with value `""` and to `ar/translation.json` with the given Arabic value, both in alphabetical position. (Several likely already exist — 'Group', 'Groups', 'Members', 'Refresh', 'Sessions' — add only what's missing.)
+For each key below: grep `src/lib/i18n/locales/en-US/translation.json` first; if missing, add to en-US with value `""` and to `ar/translation.json` with the given Arabic value, both in alphabetical position. Verified against the catalog 2026-08-23: already present — `Members`, `Messages`, `Refresh`, `Tools`, `Groups`, `No data`, `Users`, `Active Users`. Casing traps: `Session` (singular) exists but `Sessions` does NOT; `Groups` exists but `Group` (singular) does NOT. `Sessions`, `Last Seen`, and `Daily Usage` are used by the base dashboard markup but missing from the catalog — they are included below to close that pre-existing gap.
 
 | key | ar |
 |---|---|
@@ -2123,15 +2223,18 @@ For each key below: grep `src/lib/i18n/locales/en-US/translation.json` first; if
 | `Adoption` | `نسبة التبني` |
 | `Avg session` | `متوسط الجلسة` |
 | `Busiest hour` | `الساعة الأكثر نشاطًا` |
+| `Daily Usage` | `الاستخدام اليومي` |
 | `Everyone` | `الجميع` |
 | `First seen` | `أول ظهور` |
 | `Group` | `المجموعة` |
+| `Last Seen` | `آخر ظهور` |
 | `Members` | `الأعضاء` |
 | `Messages` | `الرسائل` |
 | `New users` | `مستخدمون جدد` |
 | `No one is online` | `لا أحد متصل الآن` |
 | `Online now` | `متصل الآن` |
 | `Refresh` | `تحديث` |
+| `Sessions` | `الجلسات` |
 | `Sessions per day` | `الجلسات في اليوم` |
 | `Top Models` | `أكثر النماذج استخدامًا` |
 | `Top Tool` | `الأداة الأكثر استخدامًا` |
@@ -2667,7 +2770,7 @@ Insert the summary markup between the modal title row and the Activity section:
 			</div>
 ```
 
-Also add `dayjs.extend(relativeTime)` if `fromNow` is not already available in this file (import `relativeTime from 'dayjs/plugin/relativeTime'` and extend, same as Usage.svelte).
+Also add `import relativeTime from 'dayjs/plugin/relativeTime';` + `dayjs.extend(relativeTime);` to this file unconditionally — `fromNow` currently only works here via a side effect of Usage.svelte's own extend call; do not rely on it.
 
 Note: UsageBars' fixed `w-36` label column is wide for the narrow modal — acceptable; do not fork the component.
 
@@ -2688,12 +2791,13 @@ git commit -m "feat(usage): user modal summary header, sparkline, tool and model
 ### Task 14: Full verification + smoke checklist
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-08-23-usage-dashboard-expansion-design.md` (only if any implementation detail deviated — keep the spec truthful)
+- Modify: `docs/superpowers/specs/2026-08-23-usage-dashboard-expansion-design.md` (known deviations — see Step 5)
+- Modify: `docs/superpowers/specs/2026-08-19-usage-analytics-design.md` (§11 caveats — see Step 5)
 
 - [ ] **Step 1: Backend suites**
 
 Run (from `backend/`): `.venv/Scripts/python.exe -m pytest open_webui/test/usage open_webui/test/workos -q`
-Expected: all PASS (usage ≈ 23 existing + ~30 new; workos 261+; the 4 pre-existing `test_redis` sentinel failures and `test/apps` collection breakage are known baseline issues, not regressions)
+Expected: all PASS (usage = 28 existing + ~40 new; workos 261+; the 4 pre-existing `test_redis` sentinel failures and `test/apps` collection breakage are known baseline issues, not regressions)
 
 - [ ] **Step 2: Frontend suite**
 
@@ -2720,9 +2824,18 @@ The combined smoke (base dashboard smoke is still pending) must cover:
 9. Refresh button reloads presence.
 10. Base-dashboard pending item: log in WITHOUT a reload (soft navigation), browse, confirm new `page.view` rows in `usage_event`.
 
-- [ ] **Step 5: Final commit (if any spec sync was needed)**
+- [ ] **Step 5: Spec sync + final commit**
+
+Known deviations to record in the expansion spec (verified during plan review 2026-08-23), plus anything else that drifted during implementation:
+
+- §3.1 / §6: `users/{id}/activity` deliberately does NOT gain `group_id` (single-user scoped already).
+- §3.2: `/usage/users/{id}/summary` returns `hours[24]` (UTC); `busiest_hour` is computed client-side (server-side would be wrong for any non-UTC admin). `/usage/heatmap`, `/usage/models`, `/usage/groups` responses are wrapped in envelope keys (`matrix`, `models`, `groups`).
+- §3.4: presence applies the 120 s `SESSION_POOL_TIMEOUT` staleness filter — the reaper only sweeps every 120 s, so entries can be ~240 s stale, i.e. the count is NOT "trustworthy as-is". Session counts exclude `session_id IS NULL` rows (server events).
+- §5 deleted-user bullet: implemented via a `Users.get_users_by_user_ids` existence cross-check in the presence endpoint (Task 8) — the pool caches real names, so the fallback alone never fires.
+
+Also: spec §7 calls its four metric caveats "additions to the base spec's §11" — actually append them to §11 of `docs/superpowers/specs/2026-08-19-usage-analytics-design.md`; no other task does this.
 
 ```bash
 git add -A docs/
-git commit -m "docs: sync usage dashboard expansion spec with implementation"
+git commit -m "docs: sync usage dashboard specs with implementation"
 ```
