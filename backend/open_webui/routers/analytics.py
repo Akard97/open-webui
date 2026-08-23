@@ -614,3 +614,163 @@ async def get_usage_user_activity(
     return UsageActivityResponse(
         events=[UsageActivityEntry(**e) for e in res['events']], total=res['total']
     )
+
+
+class UsagePeriodCount(BaseModel):
+    current: int
+    previous: int
+
+
+class UsageActiveResponse(BaseModel):
+    dau: UsagePeriodCount
+    wau: UsagePeriodCount
+    mau: UsagePeriodCount
+    new_users: UsagePeriodCount
+
+
+@router.get('/usage/active', response_model=UsageActiveResponse)
+async def get_usage_active(
+    days: int = Query(30, ge=1, le=365),
+    group_id: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    user_ids = await _group_user_ids(group_id, db)
+    res = await UsageEvents.active_counts(days, user_ids=user_ids, db=db)
+    return UsageActiveResponse(**{k: UsagePeriodCount(**v) for k, v in res.items()})
+
+
+class UsageHeatmapResponse(BaseModel):
+    matrix: list[list[int]]
+
+
+@router.get('/usage/heatmap', response_model=UsageHeatmapResponse)
+async def get_usage_heatmap(
+    days: int = Query(30, ge=1, le=365),
+    group_id: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    user_ids = await _group_user_ids(group_id, db)
+    matrix = await UsageEvents.heatmap(_since_ms(days), user_ids=user_ids, db=db)
+    return UsageHeatmapResponse(matrix=matrix)
+
+
+class UsageModelEntry(BaseModel):
+    model: str
+    messages: int
+    unique_users: int
+
+
+class UsageModelsResponse(BaseModel):
+    models: list[UsageModelEntry]
+
+
+@router.get('/usage/models', response_model=UsageModelsResponse)
+async def get_usage_models(
+    days: int = Query(30, ge=1, le=365),
+    group_id: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    user_ids = await _group_user_ids(group_id, db)
+    rows = await UsageEvents.model_counts(_since_ms(days), user_ids=user_ids, db=db)
+    return UsageModelsResponse(models=[UsageModelEntry(**r) for r in rows])
+
+
+class UsageSessionsDayEntry(BaseModel):
+    date: str
+    sessions: int
+
+
+class UsageSessionsDailyResponse(BaseModel):
+    days: list[UsageSessionsDayEntry]
+    avg_session_ms: int
+
+
+@router.get('/usage/sessions/daily', response_model=UsageSessionsDailyResponse)
+async def get_usage_sessions_daily(
+    days: int = Query(30, ge=1, le=365),
+    group_id: Optional[str] = Query(None),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    user_ids = await _group_user_ids(group_id, db)
+    res = await UsageEvents.sessions_daily(_since_ms(days), user_ids=user_ids, db=db)
+    return UsageSessionsDailyResponse(
+        days=[UsageSessionsDayEntry(**d) for d in res['days']],
+        avg_session_ms=res['avg_session_ms'],
+    )
+
+
+class UsageGroupEntry(BaseModel):
+    group_id: str
+    name: str
+    members: int
+    active_users: int
+    events: int
+    top_tool: Optional[str] = None
+
+
+class UsageGroupsResponse(BaseModel):
+    groups: list[UsageGroupEntry]
+
+
+@router.get('/usage/groups', response_model=UsageGroupsResponse)
+async def get_usage_groups(
+    days: int = Query(30, ge=1, le=365),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    groups = await Groups.get_all_groups(db=db)
+    member_map = (
+        await Groups.get_group_user_ids_by_ids([g.id for g in groups], db=db)
+        if groups
+        else {}
+    )
+    stats = await UsageEvents.group_rollup(_since_ms(days), db=db)
+    entries = [
+        UsageGroupEntry(
+            group_id=g.id,
+            name=g.name,
+            members=len(member_map.get(g.id, [])),
+            active_users=stats.get(g.id, {}).get('active_users', 0),
+            events=stats.get(g.id, {}).get('events', 0),
+            top_tool=stats.get(g.id, {}).get('top_tool'),
+        )
+        for g in groups
+    ]
+    entries.sort(key=lambda e: -e.events)
+    return UsageGroupsResponse(groups=entries)
+
+
+class UsageUserDailyEntry(BaseModel):
+    date: str
+    events: int
+
+
+class UsageUserModelEntry(BaseModel):
+    model: str
+    messages: int
+
+
+class UsageUserSummaryResponse(BaseModel):
+    first_seen: int
+    last_seen: int
+    sessions: int
+    avg_session_ms: int
+    hours: list[int]
+    daily: list[UsageUserDailyEntry]
+    tools: dict[str, int]
+    models: list[UsageUserModelEntry]
+
+
+@router.get('/usage/users/{user_id}/summary', response_model=UsageUserSummaryResponse)
+async def get_usage_user_summary(
+    user_id: str,
+    days: int = Query(30, ge=1, le=365),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    res = await UsageEvents.user_summary(user_id, _since_ms(days), db=db)
+    return UsageUserSummaryResponse(**res)
