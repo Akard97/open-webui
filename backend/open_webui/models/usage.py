@@ -209,6 +209,7 @@ class UsageEventsDao:
         self,
         since_ms: int,
         user_ids: Optional[list[str]] = None,
+        prev_since_ms: Optional[int] = None,
         db: Optional[AsyncSession] = None,
     ) -> list[dict]:
         async with get_async_db_context(db) as db:
@@ -234,6 +235,20 @@ class UsageEventsDao:
             )
             dres = await db.execute(_apply_user_filter(dq, user_ids))
             durations = dict(dres.all())
+            prev_active: dict = {}
+            if prev_since_ms is not None:
+                pq = (
+                    select(
+                        UsageEvent.tool,
+                        func.count(func.distinct(UsageEvent.user_id)),
+                    )
+                    .filter(
+                        UsageEvent.created_at >= prev_since_ms,
+                        UsageEvent.created_at < since_ms,
+                    )
+                    .group_by(UsageEvent.tool)
+                )
+                prev_active = dict((await db.execute(_apply_user_filter(pq, user_ids))).all())
             return [
                 {
                     'tool': t,
@@ -241,9 +256,63 @@ class UsageEventsDao:
                     'sessions': s,
                     'events': e,
                     'avg_page_ms': int(durations.get(t) or 0),
+                    'prev_active_users': int(prev_active.get(t) or 0),
                 }
                 for t, u, s, e in rows
             ]
+
+    async def active_counts(
+        self,
+        days: int,
+        user_ids: Optional[list[str]] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
+        now = _now()
+        out: dict[str, dict] = {}
+        async with get_async_db_context(db) as db:
+            for key, span in (('dau', 1), ('wau', 7), ('mau', 30)):
+                span_ms = span * 86_400_000
+                counts = []
+                for start, end in (
+                    (now - span_ms, None),
+                    (now - 2 * span_ms, now - span_ms),
+                ):
+                    q = select(func.count(func.distinct(UsageEvent.user_id))).filter(
+                        UsageEvent.created_at >= start
+                    )
+                    if end is not None:
+                        q = q.filter(UsageEvent.created_at < end)
+                    counts.append(
+                        (await db.execute(_apply_user_filter(q, user_ids))).scalar() or 0
+                    )
+                out[key] = {'current': counts[0], 'previous': counts[1]}
+            # New users: first-EVER event falls inside the window.
+            first_q = select(
+                UsageEvent.user_id, func.min(UsageEvent.created_at).label('first_seen')
+            )
+            first = (
+                _apply_user_filter(first_q, user_ids)
+                .group_by(UsageEvent.user_id)
+                .subquery()
+            )
+            window_ms = days * 86_400_000
+            since, prev_since = now - window_ms, now - 2 * window_ms
+            cur = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(first)
+                    .filter(first.c.first_seen >= since)
+                )
+            ).scalar() or 0
+            prev = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(first)
+                    .filter(first.c.first_seen >= prev_since, first.c.first_seen < since)
+                )
+            ).scalar() or 0
+            out['new_users'] = {'current': cur, 'previous': prev}
+        return out
 
     async def daily(
         self,

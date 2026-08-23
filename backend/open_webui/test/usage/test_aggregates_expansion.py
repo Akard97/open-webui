@@ -71,3 +71,59 @@ async def test_user_rollup_user_ids_filter():
     assert res['total'] == 1
     assert [u['user_id'] for u in res['users']] == ['u2']
     assert res['users'][0]['tools'] == {'chat': 1}
+
+
+@pytest.mark.asyncio
+async def test_active_counts_windows():
+    now = _now()
+    await _insert('u1', now - 3_600_000)            # 1h ago: dau current
+    await _insert('u2', now - 30 * 3_600_000)       # 30h ago: dau previous, wau current
+    await _insert('u3', now - 10 * 86_400_000)      # 10d ago: wau previous, mau current
+    res = await UsageEvents.active_counts(days=30)
+    assert res['dau'] == {'current': 1, 'previous': 1}
+    assert res['wau'] == {'current': 2, 'previous': 1}
+    assert res['mau'] == {'current': 3, 'previous': 0}
+    assert res['new_users'] == {'current': 3, 'previous': 0}
+
+
+@pytest.mark.asyncio
+async def test_active_counts_new_user_uses_first_ever_event():
+    now = _now()
+    await _insert('u1', now - 1000)
+    # u4's FIRST event is 40d ago (previous window); recent activity must not
+    # make them "new" in the current window.
+    await _insert('u4', now - 40 * 86_400_000)
+    await _insert('u4', now - 5 * 86_400_000)
+    res = await UsageEvents.active_counts(days=30)
+    assert res['mau']['current'] == 2
+    assert res['new_users'] == {'current': 1, 'previous': 1}
+
+
+@pytest.mark.asyncio
+async def test_active_counts_user_ids_filter():
+    now = _now()
+    await _insert('u1', now - 1000)
+    await _insert('u2', now - 1000)
+    res = await UsageEvents.active_counts(days=30, user_ids=['u1'])
+    assert res['dau'] == {'current': 1, 'previous': 0}
+    assert res['new_users']['current'] == 1
+
+
+@pytest.mark.asyncio
+async def test_overview_prev_active_users():
+    now = _now()
+    await _insert('u1', now - 1000, tool='workos')
+    await _insert('u1', now - 40 * 86_400_000, tool='workos')
+    await _insert('u2', now - 40 * 86_400_000, tool='workos')
+    since = now - 30 * 86_400_000
+    tools = {
+        t['tool']: t
+        for t in await UsageEvents.overview(
+            since, prev_since_ms=now - 60 * 86_400_000
+        )
+    }
+    assert tools['workos']['active_users'] == 1
+    assert tools['workos']['prev_active_users'] == 2
+    # Without prev_since_ms the field defaults to 0.
+    tools = {t['tool']: t for t in await UsageEvents.overview(since)}
+    assert tools['workos']['prev_active_users'] == 0
