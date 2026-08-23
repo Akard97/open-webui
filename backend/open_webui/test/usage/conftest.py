@@ -10,6 +10,7 @@ from sqlalchemy import text  # noqa: E402
 
 from open_webui.internal.db import Base, async_engine, engine  # noqa: E402
 import open_webui.models.usage  # noqa: E402,F401  (register tables on Base)
+import open_webui.models.groups  # noqa: E402,F401  (register tables on Base)
 
 with engine.begin() as _conn:
     _conn.execute(
@@ -23,7 +24,7 @@ with engine.begin() as _conn:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _create_schema():
-    tables = [t for name, t in Base.metadata.tables.items() if name in ('usage_event',)]
+    tables = [t for name, t in Base.metadata.tables.items() if name in ('usage_event', 'group', 'group_member')]
     async with async_engine.begin() as conn:
         await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=tables))
     yield

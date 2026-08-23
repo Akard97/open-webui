@@ -616,6 +616,46 @@ class UsageEventsDao:
                 'models': models,
             }
 
+    async def group_rollup(
+        self, since_ms: int, db: Optional[AsyncSession] = None
+    ) -> dict[str, dict]:
+        # Function-level import: groups model must not become an import-time
+        # dependency of the usage DAO.
+        from open_webui.models.groups import GroupMember
+
+        async with get_async_db_context(db) as db:
+            q = (
+                select(
+                    GroupMember.group_id,
+                    func.count(func.distinct(UsageEvent.user_id)),
+                    func.count(UsageEvent.id),
+                )
+                .join(UsageEvent, UsageEvent.user_id == GroupMember.user_id)
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(GroupMember.group_id)
+            )
+            out = {
+                gid: {'active_users': a, 'events': e, 'top_tool': None}
+                for gid, a, e in (await db.execute(q)).all()
+            }
+            tq = (
+                select(
+                    GroupMember.group_id,
+                    UsageEvent.tool,
+                    func.count(UsageEvent.id).label('cnt'),
+                )
+                .join(UsageEvent, UsageEvent.user_id == GroupMember.user_id)
+                .filter(UsageEvent.created_at >= since_ms)
+                .group_by(GroupMember.group_id, UsageEvent.tool)
+            )
+            best: dict[str, tuple[int, str]] = {}
+            for gid, tool, cnt in (await db.execute(tq)).all():
+                if gid in out and (gid not in best or cnt > best[gid][0]):
+                    best[gid] = (cnt, tool)
+            for gid, (_, tool) in best.items():
+                out[gid]['top_tool'] = tool
+            return out
+
     async def delete_before(
         self, cutoff_ms: int, db: Optional[AsyncSession] = None
     ) -> int:

@@ -226,3 +226,40 @@ async def test_user_summary_no_events():
     assert res['first_seen'] == 0 and res['last_seen'] == 0
     assert res['sessions'] == 0 and res['hours'] == [0] * 24
     assert res['daily'] == [] and res['tools'] == {} and res['models'] == []
+
+
+from open_webui.models.groups import GroupMember
+
+
+async def _add_member(group_id, user_id):
+    async with get_async_db_context(None) as db:
+        db.add(GroupMember(id=f'{group_id}-{user_id}', group_id=group_id, user_id=user_id))
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_group_rollup():
+    now = _now()
+    await _add_member('g1', 'u1')
+    await _add_member('g1', 'u2')
+    await _add_member('g2', 'u3')
+    await _add_member('g3', 'u9')  # member with no events
+    await _insert('u1', now - 1000, tool='workos')
+    await _insert('u1', now - 900, tool='workos')
+    await _insert('u1', now - 800, tool='workos')
+    await _insert('u2', now - 700, tool='chat')
+    await _insert('u3', now - 600, tool='policy')
+    res = await UsageEvents.group_rollup(0)
+    assert res['g1'] == {'active_users': 2, 'events': 4, 'top_tool': 'workos'}
+    assert res['g2'] == {'active_users': 1, 'events': 1, 'top_tool': 'policy'}
+    assert 'g3' not in res
+
+
+@pytest.mark.asyncio
+async def test_group_rollup_window():
+    now = _now()
+    await _add_member('g1', 'u1')
+    await _insert('u1', now - 10_000)
+    await _insert('u1', now - 50 * 86_400_000)
+    res = await UsageEvents.group_rollup(now - 86_400_000)
+    assert res['g1']['events'] == 1
