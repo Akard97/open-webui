@@ -52,6 +52,13 @@ EVENT_ALLOWLIST: dict[str, tuple[str, str]] = {
 MAX_PROPERTIES_BYTES = 2048
 
 
+def _apply_user_filter(q, user_ids: Optional[list[str]]):
+    # None = unscoped; [] = empty group, must match nothing.
+    if user_ids is not None:
+        q = q.filter(UsageEvent.user_id.in_(user_ids))
+    return q
+
+
 class UsageEvent(Base):
     __tablename__ = 'usage_event'
 
@@ -198,9 +205,14 @@ class UsageEventsDao:
             ]
             return {'events': events, 'total': total}
 
-    async def overview(self, since_ms: int, db: Optional[AsyncSession] = None) -> list[dict]:
+    async def overview(
+        self,
+        since_ms: int,
+        user_ids: Optional[list[str]] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> list[dict]:
         async with get_async_db_context(db) as db:
-            res = await db.execute(
+            q = (
                 select(
                     UsageEvent.tool,
                     func.count(func.distinct(UsageEvent.user_id)),
@@ -210,8 +222,9 @@ class UsageEventsDao:
                 .filter(UsageEvent.created_at >= since_ms)
                 .group_by(UsageEvent.tool)
             )
+            res = await db.execute(_apply_user_filter(q, user_ids))
             rows = res.all()
-            dres = await db.execute(
+            dq = (
                 select(UsageEvent.tool, func.avg(UsageEvent.duration_ms))
                 .filter(
                     UsageEvent.created_at >= since_ms,
@@ -219,6 +232,7 @@ class UsageEventsDao:
                 )
                 .group_by(UsageEvent.tool)
             )
+            dres = await db.execute(_apply_user_filter(dq, user_ids))
             durations = dict(dres.all())
             return [
                 {
@@ -232,7 +246,11 @@ class UsageEventsDao:
             ]
 
     async def daily(
-        self, since_ms: int, tool: Optional[str] = None, db: Optional[AsyncSession] = None
+        self,
+        since_ms: int,
+        tool: Optional[str] = None,
+        user_ids: Optional[list[str]] = None,
+        db: Optional[AsyncSession] = None,
     ) -> list[dict]:
         day = (UsageEvent.created_at.op('/')(86_400_000)).label('day')
         async with get_async_db_context(db) as db:
@@ -249,6 +267,7 @@ class UsageEventsDao:
             )
             if tool:
                 q = q.filter(UsageEvent.tool == tool)
+            q = _apply_user_filter(q, user_ids)
             out: dict[int, dict] = {}
             for d, t, dau, cnt in (await db.execute(q)).all():
                 d = int(d)
@@ -265,7 +284,11 @@ class UsageEventsDao:
             return [out[k] for k in sorted(out)]
 
     async def event_counts(
-        self, since_ms: int, tool: Optional[str] = None, db: Optional[AsyncSession] = None
+        self,
+        since_ms: int,
+        tool: Optional[str] = None,
+        user_ids: Optional[list[str]] = None,
+        db: Optional[AsyncSession] = None,
     ) -> list[dict]:
         async with get_async_db_context(db) as db:
             q = (
@@ -281,6 +304,7 @@ class UsageEventsDao:
             )
             if tool:
                 q = q.filter(UsageEvent.tool == tool)
+            q = _apply_user_filter(q, user_ids)
             return [
                 {'event_name': n, 'tool': t, 'count': c, 'unique_users': u}
                 for n, t, c, u in (await db.execute(q)).all()
@@ -292,16 +316,17 @@ class UsageEventsDao:
         sort: str = 'events',
         page: int = 1,
         limit: int = 25,
+        user_ids: Optional[list[str]] = None,
         db: Optional[AsyncSession] = None,
     ) -> dict:
         async with get_async_db_context(db) as db:
-            total = (
-                await db.execute(
-                    select(func.count(func.distinct(UsageEvent.user_id))).filter(
-                        UsageEvent.created_at >= since_ms
-                    )
-                )
-            ).scalar() or 0
+            total_q = _apply_user_filter(
+                select(func.count(func.distinct(UsageEvent.user_id))).filter(
+                    UsageEvent.created_at >= since_ms
+                ),
+                user_ids,
+            )
+            total = (await db.execute(total_q)).scalar() or 0
             base = (
                 select(
                     UsageEvent.user_id,
@@ -318,15 +343,17 @@ class UsageEventsDao:
                 .limit(limit)
                 .offset((page - 1) * limit)
             )
+            base = _apply_user_filter(base, user_ids)
             rows = (await db.execute(base)).all()
             ids = [r[0] for r in rows]
             tool_counts: dict[str, dict[str, int]] = {}
             if ids:
-                tres = await db.execute(
+                tq = (
                     select(UsageEvent.user_id, UsageEvent.tool, func.count(UsageEvent.id))
                     .filter(UsageEvent.created_at >= since_ms, UsageEvent.user_id.in_(ids))
                     .group_by(UsageEvent.user_id, UsageEvent.tool)
                 )
+                tres = await db.execute(_apply_user_filter(tq, user_ids))
                 for uid, t, c in tres.all():
                     tool_counts.setdefault(uid, {})[t] = c
             return {
