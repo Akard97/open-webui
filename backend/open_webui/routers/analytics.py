@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
 import time
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from open_webui.models.chat_messages import ChatMessages, ChatMessageModel
@@ -453,12 +453,24 @@ def _since_ms(days: int) -> int:
     return int(time.time() * 1000) - days * 86_400_000
 
 
+async def _group_user_ids(
+    group_id: Optional[str], db: AsyncSession
+) -> Optional[list[str]]:
+    if not group_id:
+        return None
+    group = await Groups.get_group_by_id(group_id, db=db)
+    if group is None:
+        raise HTTPException(status_code=404, detail='Group not found')
+    return await Groups.get_group_user_ids_by_id(group_id, db=db)
+
+
 class UsageToolOverview(BaseModel):
     tool: str
     active_users: int
     sessions: int
     events: int
     avg_page_ms: int
+    prev_active_users: int = 0
 
 
 class UsageOverviewResponse(BaseModel):
@@ -468,10 +480,17 @@ class UsageOverviewResponse(BaseModel):
 @router.get('/usage/overview', response_model=UsageOverviewResponse)
 async def get_usage_overview(
     days: int = Query(30, ge=1, le=365),
+    group_id: Optional[str] = Query(None),
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    tools = await UsageEvents.overview(_since_ms(days), db=db)
+    user_ids = await _group_user_ids(group_id, db)
+    tools = await UsageEvents.overview(
+        _since_ms(days),
+        user_ids=user_ids,
+        prev_since_ms=_since_ms(2 * days),
+        db=db,
+    )
     return UsageOverviewResponse(tools=[UsageToolOverview(**t) for t in tools])
 
 
@@ -489,10 +508,12 @@ class UsageDailyResponse(BaseModel):
 async def get_usage_daily(
     days: int = Query(30, ge=1, le=365),
     tool: Optional[str] = Query(None),
+    group_id: Optional[str] = Query(None),
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    rows = await UsageEvents.daily(_since_ms(days), tool=tool, db=db)
+    user_ids = await _group_user_ids(group_id, db)
+    rows = await UsageEvents.daily(_since_ms(days), tool=tool, user_ids=user_ids, db=db)
     return UsageDailyResponse(days=[UsageDailyEntry(**r) for r in rows])
 
 
@@ -511,10 +532,14 @@ class UsageEventsResponse(BaseModel):
 async def get_usage_event_counts(
     days: int = Query(30, ge=1, le=365),
     tool: Optional[str] = Query(None),
+    group_id: Optional[str] = Query(None),
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    rows = await UsageEvents.event_counts(_since_ms(days), tool=tool, db=db)
+    user_ids = await _group_user_ids(group_id, db)
+    rows = await UsageEvents.event_counts(
+        _since_ms(days), tool=tool, user_ids=user_ids, db=db
+    )
     return UsageEventsResponse(events=[UsageEventEntry(**r) for r in rows])
 
 
@@ -537,10 +562,14 @@ async def get_usage_users(
     days: int = Query(30, ge=1, le=365),
     sort: str = Query('events', pattern='^(events|last_seen)$'),
     page: int = Query(1, ge=1),
+    group_id: Optional[str] = Query(None),
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    res = await UsageEvents.user_rollup(_since_ms(days), sort=sort, page=page, db=db)
+    user_ids = await _group_user_ids(group_id, db)
+    res = await UsageEvents.user_rollup(
+        _since_ms(days), sort=sort, page=page, user_ids=user_ids, db=db
+    )
     ids = [u['user_id'] for u in res['users']]
     user_info = (
         {u.id: u for u in await Users.get_users_by_user_ids(ids, db=db)} if ids else {}
