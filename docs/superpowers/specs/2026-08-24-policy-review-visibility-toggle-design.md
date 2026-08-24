@@ -94,11 +94,12 @@ library-read endpoints remain open, which matches current behavior.)
 
 - **Frontend (vitest):** `src/lib/components/policy-review/lib/visibility.test.ts` —
   table-driven cases for `canSeePolicyReview`: flag on/off × role
-  admin/user × policy_checker true/false/missing; plus a case asserting
-  the `policy-review` entry in `railItems` uses the predicate.
-- **Backend (pytest):** extend the existing admin-config test pattern —
-  `ENABLE_POLICY_REVIEW` defaults to `False`, round-trips through the
-  admin config POST, and appears in `/api/config` features.
+  admin/user × policy_checker true/false/missing. (Rail wiring is not
+  unit-tested — importing `railItems.ts` would pull Svelte icon
+  components into vitest; the manual smoke test covers it.)
+- **Backend (pytest):** `test_config_flag.py` — `ENABLE_POLICY_REVIEW`
+  defaults to `False`. (Admin-config round-trip needs the full app;
+  covered by the manual smoke test instead.)
 
 ## Error handling
 
