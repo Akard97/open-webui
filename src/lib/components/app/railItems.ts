@@ -7,6 +7,7 @@ import Cube from '$lib/components/icons/Cube.svelte';
 import DocumentCheck from '$lib/components/icons/DocumentCheck.svelte';
 import Clipboard from '$lib/components/icons/Clipboard.svelte';
 import UserGroup from '$lib/components/icons/UserGroup.svelte';
+import { canSeePolicyReview } from '$lib/components/policy-review/lib/visibility';
 
 export type RailIconComponent = ComponentType<SvelteComponent<{ className?: string; strokeWidth?: string }>>;
 
@@ -82,16 +83,17 @@ export const railItems: RailItem[] = [
 			!!user?.permissions?.workspace?.tools
 	},
 	{
-		// Policy Review tool. Intentionally visible to everyone: all users can
-		// browse the policy Library. The checker workflow (upload, scan, review,
-		// approve) is gated inside the tool by the `features.policy_checker`
-		// permission (see policy-review/lib/store.ts `canUseChecker`).
+		// Policy Review tool. Hidden while in development: the
+		// ENABLE_POLICY_REVIEW admin toggle (Admin Settings > General) reveals
+		// it to everyone; admins and policy_checker users always see it. The
+		// checker workflow inside the tool stays gated by canUseChecker
+		// (see policy-review/lib/store.ts).
 		id: 'policy-review',
 		label: 'Policy Review',
 		href: '/policy-review',
 		icon: DocumentCheck,
 		segments: ['policy-review'],
-		visible: () => true
+		visible: canSeePolicyReview
 	},
 	{
 		// WorkOS task-management tool. Placeholder for now — visible to everyone,
