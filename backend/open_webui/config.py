@@ -1738,6 +1738,12 @@ ENABLE_NOTES = PersistentConfig(
     os.environ.get('ENABLE_NOTES', 'True').lower() == 'true',
 )
 
+ENABLE_POLICY_REVIEW = PersistentConfig(
+    'ENABLE_POLICY_REVIEW',
+    'policy_review.enable',
+    os.environ.get('ENABLE_POLICY_REVIEW', 'False').lower() == 'true',
+)
+
 ENABLE_USER_STATUS = PersistentConfig(
     'ENABLE_USER_STATUS',
     'users.enable_status',

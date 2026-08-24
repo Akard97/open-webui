@@ -417,6 +417,7 @@ from open_webui.config import (
     ENABLE_CHANNELS,
     ENABLE_CALENDAR,
     ENABLE_NOTES,
+    ENABLE_POLICY_REVIEW,
     ENABLE_USER_STATUS,
     ENABLE_COMMUNITY_SHARING,
     ENABLE_MESSAGE_RATING,
@@ -964,6 +965,7 @@ app.state.config.AUTOMATION_MIN_INTERVAL = AUTOMATION_MIN_INTERVAL
 app.state.config.ENABLE_CHANNELS = ENABLE_CHANNELS
 app.state.config.ENABLE_CALENDAR = ENABLE_CALENDAR
 app.state.config.ENABLE_NOTES = ENABLE_NOTES
+app.state.config.ENABLE_POLICY_REVIEW = ENABLE_POLICY_REVIEW
 app.state.config.ENABLE_COMMUNITY_SHARING = ENABLE_COMMUNITY_SHARING
 app.state.config.ENABLE_MESSAGE_RATING = ENABLE_MESSAGE_RATING
 app.state.config.ENABLE_USER_WEBHOOKS = ENABLE_USER_WEBHOOKS
@@ -2441,6 +2443,7 @@ async def get_app_config(request: Request):
                     'enable_calendar': app.state.config.ENABLE_CALENDAR,
                     'enable_automations': app.state.config.ENABLE_AUTOMATIONS,
                     'enable_notes': app.state.config.ENABLE_NOTES,
+                    'enable_policy_review': app.state.config.ENABLE_POLICY_REVIEW,
                     'enable_web_search': app.state.config.ENABLE_WEB_SEARCH,
                     'enable_code_execution': app.state.config.ENABLE_CODE_EXECUTION,
                     'enable_code_interpreter': app.state.config.ENABLE_CODE_INTERPRETER,

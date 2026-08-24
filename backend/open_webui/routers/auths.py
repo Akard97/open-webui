@@ -1021,6 +1021,7 @@ async def get_admin_config(request: Request, user=Depends(get_admin_user)):
         'ENABLE_CALENDAR': request.app.state.config.ENABLE_CALENDAR,
         'ENABLE_MEMORIES': request.app.state.config.ENABLE_MEMORIES,
         'ENABLE_NOTES': request.app.state.config.ENABLE_NOTES,
+        'ENABLE_POLICY_REVIEW': request.app.state.config.ENABLE_POLICY_REVIEW,
         'ENABLE_USER_WEBHOOKS': request.app.state.config.ENABLE_USER_WEBHOOKS,
         'ENABLE_USER_STATUS': request.app.state.config.ENABLE_USER_STATUS,
         'PENDING_USER_OVERLAY_TITLE': request.app.state.config.PENDING_USER_OVERLAY_TITLE,
@@ -1051,6 +1052,7 @@ class AdminConfig(BaseModel):
     ENABLE_CALENDAR: bool
     ENABLE_MEMORIES: bool
     ENABLE_NOTES: bool
+    ENABLE_POLICY_REVIEW: bool
     ENABLE_USER_WEBHOOKS: bool
     ENABLE_USER_STATUS: bool
     PENDING_USER_OVERLAY_TITLE: Optional[str] = None
@@ -1084,6 +1086,7 @@ async def update_admin_config(request: Request, form_data: AdminConfig, user=Dep
     request.app.state.config.ENABLE_CALENDAR = form_data.ENABLE_CALENDAR
     request.app.state.config.ENABLE_MEMORIES = form_data.ENABLE_MEMORIES
     request.app.state.config.ENABLE_NOTES = form_data.ENABLE_NOTES
+    request.app.state.config.ENABLE_POLICY_REVIEW = form_data.ENABLE_POLICY_REVIEW
 
     if form_data.DEFAULT_USER_ROLE in ['pending', 'user', 'admin']:
         request.app.state.config.DEFAULT_USER_ROLE = form_data.DEFAULT_USER_ROLE
@@ -1129,6 +1132,7 @@ async def update_admin_config(request: Request, form_data: AdminConfig, user=Dep
         'ENABLE_CALENDAR': request.app.state.config.ENABLE_CALENDAR,
         'ENABLE_MEMORIES': request.app.state.config.ENABLE_MEMORIES,
         'ENABLE_NOTES': request.app.state.config.ENABLE_NOTES,
+        'ENABLE_POLICY_REVIEW': request.app.state.config.ENABLE_POLICY_REVIEW,
         'ENABLE_USER_WEBHOOKS': request.app.state.config.ENABLE_USER_WEBHOOKS,
         'ENABLE_USER_STATUS': request.app.state.config.ENABLE_USER_STATUS,
         'PENDING_USER_OVERLAY_TITLE': request.app.state.config.PENDING_USER_OVERLAY_TITLE,
