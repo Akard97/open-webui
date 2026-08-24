@@ -20,6 +20,7 @@
 	// Restore the prior visibility when navigating away.
 	let prev: boolean | undefined;
 	onMount(() => {
+		if (!allowed) return; // being redirected away — don't flicker the sidebar
 		showSidebar.update((v) => {
 			prev = v;
 			return false;
