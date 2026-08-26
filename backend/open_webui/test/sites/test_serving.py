@@ -112,3 +112,24 @@ async def test_traversal_rejected(monkeypatch, tmp_path):
         # not in manifest -> 404 regardless of encoding tricks
         assert (await c.get('/sites/demo/..%2Fsecret.txt')).status_code == 404
         assert (await c.get('/sites/demo/%2e%2e/secret.txt')).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_optional_user_role_gate(monkeypatch):
+    monkeypatch.setattr(sites_router, 'decode_token', lambda t: {'id': 'x1'})
+
+    async def _user_with_role(role):
+        async def _get(id, db=None):
+            return SimpleNamespace(id='x1', role=role)
+        return _get
+
+    req = SimpleNamespace(headers={'authorization': 'Bearer tok'}, cookies={})
+
+    monkeypatch.setattr(sites_router.Users, 'get_user_by_id', await _user_with_role('pending'))
+    assert await sites_router._get_optional_user(req) is None
+
+    monkeypatch.setattr(sites_router.Users, 'get_user_by_id', await _user_with_role('user'))
+    assert (await sites_router._get_optional_user(req)).role == 'user'
+
+    monkeypatch.setattr(sites_router.Users, 'get_user_by_id', await _user_with_role('admin'))
+    assert (await sites_router._get_optional_user(req)).role == 'admin'

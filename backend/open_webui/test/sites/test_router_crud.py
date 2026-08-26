@@ -139,6 +139,25 @@ async def test_list_scoping_and_get(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_size_limits(monkeypatch, tmp_path):
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        big = b'x' * (sites_router.MAX_FILE_SIZE + 1)
+        res = await c.post('/api/v1/sites/', data=_form(slug='too-big'),
+                           files=[('files', ('index.html', big, 'text/html'))])
+        assert res.status_code == 400
+
+        ok = b'x' * (9 * 1024 * 1024)
+        parts = [('files', (f'f{i}.html', ok, 'text/html')) for i in range(4)]  # 36MB total > 30MB
+        res = await c.post('/api/v1/sites/', data=_form(slug='too-much'), files=parts)
+        assert res.status_code == 400
+
+        exact = b'x' * sites_router.MAX_FILE_SIZE  # exactly at the per-file limit: allowed if total fits
+        res = await c.post('/api/v1/sites/', data=_form(slug='at-limit'),
+                           files=[('files', ('index.html', exact, 'text/html'))])
+        assert res.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_create_cleans_up_on_write_failure(monkeypatch, tmp_path):
     async with _client(monkeypatch, tmp_path, user=USER) as c:
         def _boom(site_id, validated):

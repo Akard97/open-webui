@@ -76,12 +76,18 @@ async def _validate_files(uploads: list[UploadFile]) -> list[tuple[str, bytes, s
         if name in seen:
             raise _bad(f'Duplicate file name: {name!r}')
         seen.add(name)
-        content = await upload.read()
-        if len(content) > MAX_FILE_SIZE:
-            raise _bad(f'{name!r} exceeds the {MAX_FILE_SIZE // (1024 * 1024)} MB per-file limit.')
+        content = bytearray()
+        while True:
+            chunk = await upload.read(1024 * 1024)
+            if not chunk:
+                break
+            content.extend(chunk)
+            if len(content) > MAX_FILE_SIZE:
+                raise _bad(f'{name!r} exceeds the {MAX_FILE_SIZE // (1024 * 1024)} MB per-file limit.')
+            if total + len(content) > MAX_SITE_SIZE:
+                raise _bad(f'Site exceeds the {MAX_SITE_SIZE // (1024 * 1024)} MB total size limit.')
+        content = bytes(content)
         total += len(content)
-        if total > MAX_SITE_SIZE:
-            raise _bad(f'Site exceeds the {MAX_SITE_SIZE // (1024 * 1024)} MB total size limit.')
         content_type = mimetypes.guess_type(name)[0] or 'application/octet-stream'
         validated.append((name, content, content_type))
     return validated
@@ -304,6 +310,12 @@ async def delete_site(
 
 serve_router = APIRouter()
 
+# SECURITY: the sandbox CSP gives served pages an opaque origin, which keeps
+# the viewer's token cookie off any fetch a page makes ONLY while the auth
+# cookie stays SameSite=lax/strict (this app's default). If
+# WEBUI_AUTH_COOKIE_SAME_SITE is ever set to 'none', a published page could
+# call the API with the viewer's cookie via credentialed CORS (ACAO reflects
+# origin 'null'). Do not run the Site Publisher with SameSite=none.
 SERVE_HEADERS = {
     # Opaque origin: scripts run but cannot reach the app's localStorage,
     # cookies, or API with the viewer's credentials.
@@ -329,7 +341,10 @@ async def _get_optional_user(request: Request):
         return None
     if not data or 'id' not in data:
         return None
-    return await Users.get_user_by_id(data['id'])
+    user = await Users.get_user_by_id(data['id'])
+    if user is not None and user.role not in ('user', 'admin'):
+        return None
+    return user
 
 
 async def _resolve_site_for_view(slug: str, request: Request, db: AsyncSession, *, is_entry: bool):
