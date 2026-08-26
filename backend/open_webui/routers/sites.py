@@ -1,12 +1,15 @@
 import json
 import logging
 import mimetypes
+import os
 import re
 import shutil
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +20,7 @@ from open_webui.models.access_grants import AccessGrants
 from open_webui.models.sites import SiteModel, Sites
 from open_webui.models.users import Users
 from open_webui.utils.access_control import has_permission
-from open_webui.utils.auth import get_verified_user
+from open_webui.utils.auth import decode_token, get_verified_user
 
 log = logging.getLogger(__name__)
 
@@ -297,3 +300,88 @@ async def delete_site(
     await AccessGrants.revoke_all_access('site', site.id, db=db)
     shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
     return {'deleted': True}
+
+
+serve_router = APIRouter()
+
+SERVE_HEADERS = {
+    # Opaque origin: scripts run but cannot reach the app's localStorage,
+    # cookies, or API with the viewer's credentials.
+    'Content-Security-Policy': 'sandbox allow-scripts',
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-cache',
+}
+
+
+async def _get_optional_user(request: Request):
+    """Resolve the requester from bearer header or token cookie; None if anonymous/invalid."""
+    token = None
+    auth_header = request.headers.get('authorization') or ''
+    if auth_header.lower().startswith('bearer '):
+        token = auth_header[7:].strip()
+    if not token:
+        token = request.cookies.get('token')
+    if not token:
+        return None
+    try:
+        data = decode_token(token)
+    except Exception:
+        return None
+    if not data or 'id' not in data:
+        return None
+    return await Users.get_user_by_id(data['id'])
+
+
+async def _resolve_site_for_view(slug: str, request: Request, db: AsyncSession, *, is_entry: bool):
+    site = await Sites.get_site_by_slug(slug, db=db)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    if site.public:
+        return site
+    user = await _get_optional_user(request)
+    if user is None:
+        if is_entry:
+            # Direct navigation: send the browser to login and back.
+            return RedirectResponse(url=f'/auth?redirect={quote(f"/sites/{slug}")}', status_code=302)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
+    if user.role == 'admin' or site.user_id == user.id:
+        return site
+    if await AccessGrants.has_access(
+        user_id=user.id, resource_type='site', resource_id=site.id, permission='read', db=db
+    ):
+        return site
+    # Authenticated but not allowed: do not reveal that the site exists.
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+
+
+def _serve_file(site, filename: str) -> FileResponse:
+    manifest = {f['name']: f for f in site.files}
+    entry = manifest.get(filename)
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    site_dir = (SITES_DIR / site.id).resolve()
+    file_path = (site_dir / filename).resolve()
+    # Defense in depth: the manifest check above should already exclude traversal.
+    if not str(file_path).startswith(str(site_dir) + os.sep):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    if not file_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return FileResponse(file_path, media_type=entry['content_type'], headers=SERVE_HEADERS)
+
+
+@serve_router.get('/sites/{slug}')
+async def serve_site_entry(
+    slug: str, request: Request, db: AsyncSession = Depends(get_async_session)
+):
+    site = await _resolve_site_for_view(slug, request, db, is_entry=True)
+    if isinstance(site, RedirectResponse):
+        return site
+    return _serve_file(site, site.entry_file)
+
+
+@serve_router.get('/sites/{slug}/{filename}')
+async def serve_site_file(
+    slug: str, filename: str, request: Request, db: AsyncSession = Depends(get_async_session)
+):
+    site = await _resolve_site_for_view(slug, request, db, is_entry=False)
+    return _serve_file(site, filename)
