@@ -208,3 +208,82 @@ async def get_site(
     if not site or (site.user_id != user.id and user.role != 'admin'):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     return await _site_response(site, db, with_user=user.role == 'admin')
+
+
+async def _get_owned_site(id: str, user, db: AsyncSession) -> SiteModel:
+    site = await Sites.get_site_by_id(id, db=db)
+    if not site or (site.user_id != user.id and user.role != 'admin'):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return site
+
+
+@router.post('/{id}/update', response_model=SiteResponse)
+async def update_site(
+    request: Request,
+    id: str,
+    name: Optional[str] = Form(None),
+    slug: Optional[str] = Form(None),
+    entry_file: Optional[str] = Form(None),
+    files: list[UploadFile] = File(default=[]),
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    await _require_publisher(request, user, db)
+    site = await _get_owned_site(id, user, db)
+
+    updates: dict = {}
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise _bad('Name cannot be empty.')
+        updates['name'] = name
+    if slug is not None and slug != site.slug:
+        if not SLUG_RE.match(slug):
+            raise _bad('Slug must be 3-60 characters: lowercase letters, digits, hyphens; no leading/trailing hyphen.')
+        if await Sites.get_site_by_slug(slug, db=db):
+            raise _bad('This link is already taken.')
+        updates['slug'] = slug
+
+    if files:
+        validated = await _validate_files(files)
+        updates['files'] = _manifest(validated)
+        updates['entry_file'] = _pick_entry([v[0] for v in validated], entry_file)
+        _write_site_dir(site.id, validated)
+    elif entry_file is not None:
+        current_names = [f['name'] for f in site.files]
+        updates['entry_file'] = _pick_entry(current_names, entry_file)
+
+    updated = await Sites.update_site_by_id(site.id, updates, db=db)
+    if updated is None:
+        raise _bad('This link is already taken.')
+    return await _site_response(updated, db)
+
+
+@router.post('/{id}/access', response_model=SiteResponse)
+async def update_site_access(
+    request: Request,
+    id: str,
+    form_data: SiteAccessForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    await _require_publisher(request, user, db)
+    site = await _get_owned_site(id, user, db)
+    updated = await Sites.update_site_by_id(site.id, {'public': form_data.public}, db=db)
+    await AccessGrants.set_access_grants('site', site.id, form_data.access_grants, db=db)
+    return await _site_response(updated, db)
+
+
+@router.delete('/{id}')
+async def delete_site(
+    request: Request,
+    id: str,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    await _require_publisher(request, user, db)
+    site = await _get_owned_site(id, user, db)
+    await AccessGrants.revoke_all_access('site', site.id, db=db)
+    await Sites.delete_site_by_id(site.id, db=db)
+    shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
+    return {'deleted': True}
