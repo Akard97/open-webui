@@ -89,13 +89,13 @@ class SitesTable:
     async def get_sites_by_user_id(self, user_id: str, db: Optional[AsyncSession] = None) -> list[SiteModel]:
         async with get_async_db_context(db) as db:
             result = await db.execute(
-                select(Site).where(Site.user_id == user_id).order_by(Site.updated_at.desc(), Site.id.desc())
+                select(Site).where(Site.user_id == user_id).order_by(Site.updated_at.desc())
             )
             return [SiteModel.model_validate(s) for s in result.scalars().all()]
 
     async def get_all_sites(self, db: Optional[AsyncSession] = None) -> list[SiteModel]:
         async with get_async_db_context(db) as db:
-            result = await db.execute(select(Site).order_by(Site.updated_at.desc(), Site.id.desc()))
+            result = await db.execute(select(Site).order_by(Site.updated_at.desc()))
             return [SiteModel.model_validate(s) for s in result.scalars().all()]
 
     async def update_site_by_id(

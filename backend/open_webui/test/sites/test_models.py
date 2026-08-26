@@ -3,6 +3,14 @@ import pytest
 from open_webui.models.sites import Sites
 
 
+@pytest.fixture(autouse=True)
+def _monotonic_now(monkeypatch):
+    import open_webui.models.sites as sites_model
+
+    counter = iter(range(1_700_000_000_000, 1_700_000_100_000))
+    monkeypatch.setattr(sites_model, '_now', lambda: next(counter))
+
+
 def _files():
     return [{'name': 'index.html', 'size': 120, 'content_type': 'text/html'}]
 
