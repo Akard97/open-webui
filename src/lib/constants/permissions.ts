@@ -67,7 +67,8 @@ export const DEFAULT_PERMISSIONS = {
 		calendar: true,
 		policy_checker: false,
 		policy_approver: false,
-		policy_admin: false
+		policy_admin: false,
+		site_publisher: false
 	},
 	settings: {
 		interface: true
