@@ -185,8 +185,14 @@ async def create_site(
     if site is None:
         raise _bad('This link is already taken.')
 
-    _write_site_dir(site.id, validated)
-    await AccessGrants.set_access_grants('site', site.id, grants, db=db)
+    try:
+        _write_site_dir(site.id, validated)
+        await AccessGrants.set_access_grants('site', site.id, grants, db=db)
+    except Exception:
+        # Roll back to a consistent state: no half-created site may remain.
+        shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
+        await Sites.delete_site_by_id(site.id, db=db)
+        raise
     return await _site_response(site, db)
 
 

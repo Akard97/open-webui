@@ -136,3 +136,16 @@ async def test_list_scoping_and_get(monkeypatch, tmp_path):
     async with _client(monkeypatch, tmp_path, user=ADMIN) as c:
         assert len((await c.get('/api/v1/sites/?all=true')).json()) == 2
         assert (await c.get(f"/api/v1/sites/{created['id']}")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_cleans_up_on_write_failure(monkeypatch, tmp_path):
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        def _boom(site_id, validated):
+            raise OSError('disk full')
+
+        monkeypatch.setattr(sites_router, '_write_site_dir', _boom)
+        with pytest.raises(OSError):
+            await c.post('/api/v1/sites/', data=_form(slug='doomed'), files=[_upload()])
+
+    assert await Sites.get_site_by_slug('doomed') is None
