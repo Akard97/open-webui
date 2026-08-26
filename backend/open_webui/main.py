@@ -93,6 +93,7 @@ from open_webui.routers import (
     workos,
     workos_internal,
     usage,
+    sites,
     folders,
     configs,
     groups,
@@ -1499,6 +1500,7 @@ app.include_router(workos.router, prefix='/api/v1/workos', tags=['workos'])
 workos_internal.mount(app)
 app.include_router(usage.router, prefix='/api/v1/usage', tags=['usage'])
 app.include_router(avatar.router, prefix='/api/v1/avatar', tags=['avatar'])
+app.include_router(sites.router, prefix='/api/v1/sites', tags=['sites'])
 
 
 app.include_router(models.router, prefix='/api/v1/models', tags=['models'])
