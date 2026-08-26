@@ -7,7 +7,9 @@ import Cube from '$lib/components/icons/Cube.svelte';
 import DocumentCheck from '$lib/components/icons/DocumentCheck.svelte';
 import Clipboard from '$lib/components/icons/Clipboard.svelte';
 import UserGroup from '$lib/components/icons/UserGroup.svelte';
+import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte';
 import { canSeePolicyReview } from '$lib/components/policy-review/lib/visibility';
+import { canSeeSites } from '$lib/components/sites/lib/visibility';
 
 export type RailIconComponent = ComponentType<SvelteComponent<{ className?: string; strokeWidth?: string }>>;
 
@@ -94,6 +96,16 @@ export const railItems: RailItem[] = [
 		icon: DocumentCheck,
 		segments: ['policy-review'],
 		visible: canSeePolicyReview
+	},
+	{
+		// Site Publisher bonus tool. Visible to admins and users the admin
+		// has granted the site_publisher permission.
+		id: 'sites',
+		label: 'Sites',
+		href: '/sites',
+		icon: GlobeAlt,
+		segments: ['sites'],
+		visible: ({ user }) => canSeeSites({ user })
 	},
 	{
 		// WorkOS task-management tool. Placeholder for now — visible to everyone,
