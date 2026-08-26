@@ -22,6 +22,7 @@
 	let entryFile = $state('');
 	let saving = $state(false);
 	let dragging = $state(false);
+	let openSeq = 0;
 
 	const slugify = (v: string) =>
 		v
@@ -32,6 +33,7 @@
 
 	$effect(() => {
 		if (show) {
+			openSeq += 1;
 			name = site?.name ?? '';
 			slug = site?.slug ?? '';
 			slugTouched = !!site;
@@ -77,6 +79,7 @@
 	};
 
 	const submit = async () => {
+		const seq = openSeq;
 		saving = true;
 		try {
 			if (!site) {
@@ -99,6 +102,10 @@
 					public: level === 'public',
 					access_grants: grantsForLevel()
 				});
+			}
+			if (seq !== openSeq || !show) {
+				onSaved(); // server state did change; refresh the list, but don't touch the (re)opened dialog
+				return;
 			}
 			toast.success($i18n.t('Site saved'));
 			show = false;
@@ -182,6 +189,7 @@
 								<button
 									type="button"
 									class="text-gray-400 hover:text-red-500"
+									aria-label={$i18n.t('Remove file')}
 									onclick={() => (files = files.filter((x) => x.name !== f.name))}>&times;</button
 								>
 							</div>
@@ -198,6 +206,7 @@
 					<span class="text-gray-500">{$i18n.t('Opens with')}</span>
 					<select
 						class="rounded border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1 dark:text-gray-100"
+						aria-label={$i18n.t('Opens with')}
 						bind:value={entryFile}
 					>
 						{#each htmlNames as n (n)}
@@ -232,6 +241,7 @@
 			<button
 				type="button"
 				class="rounded-lg px-3.5 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-850"
+				disabled={saving}
 				onclick={() => (show = false)}>{$i18n.t('Cancel')}</button
 			>
 			<button

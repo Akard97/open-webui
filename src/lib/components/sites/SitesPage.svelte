@@ -14,6 +14,7 @@
 	let showEditor = $state(false);
 	let editing = $state<any>(null);
 	let confirmDelete = $state<any>(null);
+	let showDeleteConfirm = $state(false);
 	let showAll = $state(false);
 
 	const levelBadge = (s: any) => {
@@ -125,7 +126,10 @@
 						<button
 							type="button"
 							class="rounded px-2 py-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
-							onclick={() => (confirmDelete = s)}>{$i18n.t('Delete')}</button
+							onclick={() => {
+								confirmDelete = s;
+								showDeleteConfirm = true;
+							}}>{$i18n.t('Delete')}</button
 						>
 					</div>
 				</div>
@@ -137,7 +141,7 @@
 <SiteEditor bind:show={showEditor} site={editing} onSaved={load} />
 
 <ConfirmDialog
-	show={confirmDelete !== null}
+	bind:show={showDeleteConfirm}
 	title={$i18n.t('Delete site?')}
 	message={$i18n.t('The link will stop working immediately. This cannot be undone.')}
 	on:confirm={remove}
