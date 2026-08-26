@@ -111,11 +111,15 @@ def _parse_grants(raw: str) -> list[dict]:
 
 def _write_site_dir(site_id: str, validated: list[tuple[str, bytes, str]]) -> None:
     site_dir = SITES_DIR / site_id
+    tmp_dir = SITES_DIR / f'{site_id}.tmp'
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True)
+    for name, content, _ in validated:
+        (tmp_dir / name).write_bytes(content)
     if site_dir.exists():
         shutil.rmtree(site_dir)
-    site_dir.mkdir(parents=True)
-    for name, content, _ in validated:
-        (site_dir / name).write_bytes(content)
+    tmp_dir.rename(site_dir)
 
 
 def _manifest(validated: list[tuple[str, bytes, str]]) -> list[dict]:
@@ -204,9 +208,7 @@ async def get_site(
     db: AsyncSession = Depends(get_async_session),
 ):
     await _require_publisher(request, user, db)
-    site = await Sites.get_site_by_id(id, db=db)
-    if not site or (site.user_id != user.id and user.role != 'admin'):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    site = await _get_owned_site(id, user, db)
     return await _site_response(site, db, with_user=user.role == 'admin')
 
 
@@ -244,11 +246,11 @@ async def update_site(
             raise _bad('This link is already taken.')
         updates['slug'] = slug
 
+    validated = None
     if files:
         validated = await _validate_files(files)
         updates['files'] = _manifest(validated)
         updates['entry_file'] = _pick_entry([v[0] for v in validated], entry_file)
-        _write_site_dir(site.id, validated)
     elif entry_file is not None:
         current_names = [f['name'] for f in site.files]
         updates['entry_file'] = _pick_entry(current_names, entry_file)
@@ -256,7 +258,9 @@ async def update_site(
     updated = await Sites.update_site_by_id(site.id, updates, db=db)
     if updated is None:
         raise _bad('This link is already taken.')
-    return await _site_response(updated, db)
+    if validated is not None:
+        _write_site_dir(site.id, validated)
+    return await _site_response(updated, db, with_user=user.role == 'admin')
 
 
 @router.post('/{id}/access', response_model=SiteResponse)
@@ -269,9 +273,13 @@ async def update_site_access(
 ):
     await _require_publisher(request, user, db)
     site = await _get_owned_site(id, user, db)
-    updated = await Sites.update_site_by_id(site.id, {'public': form_data.public}, db=db)
+    # Grants first: if the public flip then fails, the site stays in its old
+    # (never more permissive) visibility state.
     await AccessGrants.set_access_grants('site', site.id, form_data.access_grants, db=db)
-    return await _site_response(updated, db)
+    updated = await Sites.update_site_by_id(site.id, {'public': form_data.public}, db=db)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return await _site_response(updated, db, with_user=user.role == 'admin')
 
 
 @router.delete('/{id}')
@@ -283,7 +291,9 @@ async def delete_site(
 ):
     await _require_publisher(request, user, db)
     site = await _get_owned_site(id, user, db)
+    deleted = await Sites.delete_site_by_id(site.id, db=db)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     await AccessGrants.revoke_all_access('site', site.id, db=db)
-    await Sites.delete_site_by_id(site.id, db=db)
     shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
     return {'deleted': True}

@@ -129,3 +129,35 @@ async def test_delete_removes_row_grants_and_folder(monkeypatch, tmp_path):
         assert not (tmp_path / site['id']).exists()
         assert await AccessGrants.get_grants_by_resource('site', site['id']) == []
         assert (await c.get(f"/api/v1/sites/{site['id']}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_files_preserved_on_slug_race(monkeypatch, tmp_path):
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        site = await _create(c)
+
+        async def _race(id, updates, db=None):
+            return None
+
+        monkeypatch.setattr(sites_router.Sites, 'update_site_by_id', _race)
+        res = await c.post(
+            f"/api/v1/sites/{site['id']}/update",
+            data={'slug': 'raced'},
+            files=[_upload('new.html', b'<p>new</p>')],
+        )
+        assert res.status_code == 400
+    assert (tmp_path / site['id'] / 'index.html').exists()
+    assert not (tmp_path / site['id'] / 'new.html').exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_reports_failure(monkeypatch, tmp_path):
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        site = await _create(c)
+
+        async def _fail(id, db=None):
+            return False
+
+        monkeypatch.setattr(sites_router.Sites, 'delete_site_by_id', _fail)
+        assert (await c.delete(f"/api/v1/sites/{site['id']}")).status_code == 404
+    assert (tmp_path / site['id']).exists()
