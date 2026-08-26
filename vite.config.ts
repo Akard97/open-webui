@@ -116,6 +116,17 @@ export default defineConfig({
 	optimizeDeps: {
 		include: optimizeDepsInclude
 	},
+	server: {
+		proxy: {
+			// Dev-only: published Site Publisher links live on the backend, which
+			// the Vite origin doesn't serve. Proxy /sites/<slug> to the backend —
+			// but NOT the bare /sites path, which is the SvelteKit manager page.
+			'^/sites/.+': {
+				target: 'http://localhost:8080',
+				changeOrigin: true
+			}
+		}
+	},
 	build: {
 		sourcemap: true
 	},
