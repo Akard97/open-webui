@@ -112,6 +112,15 @@ async def test_create_validation_errors(monkeypatch, tmp_path):
         assert (
             await c.post('/api/v1/sites/', data=_form(slug='dupes'), files=[_upload(), _upload()])
         ).status_code == 400
+        # case-insensitive duplicates: Index.html + index.html collide on a
+        # case-insensitive filesystem while the manifest would list both
+        assert (
+            await c.post(
+                '/api/v1/sites/',
+                data=_form(slug='case-dupes'),
+                files=[_upload('Index.html'), _upload('index.html')],
+            )
+        ).status_code == 400
 
 
 @pytest.mark.asyncio

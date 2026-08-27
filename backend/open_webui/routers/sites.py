@@ -80,9 +80,11 @@ async def _validate_files(uploads: list[UploadFile]) -> list[tuple[str, bytes, s
         name = (upload.filename or '').strip()
         if not FILENAME_RE.match(name):
             raise _bad(f'Invalid file name: {name!r}')
-        if name in seen:
+        # casefold: Index.html and index.html collide on a case-insensitive
+        # filesystem while the manifest would list both.
+        if name.casefold() in seen:
             raise _bad(f'Duplicate file name: {name!r}')
-        seen.add(name)
+        seen.add(name.casefold())
         content = bytearray()
         while True:
             chunk = await upload.read(1024 * 1024)
