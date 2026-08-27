@@ -111,6 +111,26 @@ async def test_unknown_slug_and_unknown_file(monkeypatch, tmp_path):
         assert (await c.get('/sites/demo/ghost.png')).status_code == 404
 
 
+def _assert_serve_headers(res):
+    for name, value in sites_router.SERVE_HEADERS.items():
+        assert res.headers.get(name) == value, f'{name} missing on {res.status_code}'
+
+
+@pytest.mark.asyncio
+async def test_error_branches_carry_serve_headers(monkeypatch, tmp_path):
+    """CSP/nosniff/no-cache must be present on every serving response, not just 200s."""
+    await _seed(tmp_path)  # private
+    await _seed(tmp_path, slug='pub', public=True)
+    async with _client(monkeypatch, tmp_path, viewer=None) as c:
+        _assert_serve_headers(await c.get('/sites/pub'))          # 308 canonical redirect
+        _assert_serve_headers(await c.get('/sites/nope/'))        # 404 unknown slug
+        _assert_serve_headers(await c.get('/sites/pub/ghost.png'))  # 404 unknown file
+        _assert_serve_headers(await c.get('/sites/demo/'))        # 302 login redirect
+        _assert_serve_headers(await c.get('/sites/demo/pic.png'))  # 401 anonymous asset
+    async with _client(monkeypatch, tmp_path, viewer=VIEWER) as c:
+        _assert_serve_headers(await c.get('/sites/demo/'))        # 404 no-leak (no grant)
+
+
 @pytest.mark.asyncio
 async def test_traversal_rejected(monkeypatch, tmp_path):
     await _seed(tmp_path, public=True)

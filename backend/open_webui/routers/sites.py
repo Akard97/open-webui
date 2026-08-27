@@ -453,18 +453,28 @@ async def _get_optional_user(request: Request):
     return user
 
 
+def _serve_404() -> HTTPException:
+    # Error responses carry the same CSP/nosniff/no-cache headers as served
+    # pages: they leave through the same public routes.
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found', headers=SERVE_HEADERS)
+
+
 async def _resolve_site_for_view(slug: str, request: Request, db: AsyncSession, *, is_entry: bool):
     site = await Sites.get_site_by_slug(slug, db=db)
     if not site:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+        raise _serve_404()
     if site.public:
         return site
     user = await _get_optional_user(request)
     if user is None:
         if is_entry:
             # Direct navigation: send the browser to login and back.
-            return RedirectResponse(url=f'/auth?redirect={quote(f"/sites/{slug}/")}', status_code=302)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
+            return RedirectResponse(
+                url=f'/auth?redirect={quote(f"/sites/{slug}/")}', status_code=302, headers=SERVE_HEADERS
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail='Not authenticated', headers=SERVE_HEADERS
+        )
     if user.role == 'admin' or site.user_id == user.id:
         return site
     if await AccessGrants.has_access(
@@ -472,21 +482,21 @@ async def _resolve_site_for_view(slug: str, request: Request, db: AsyncSession, 
     ):
         return site
     # Authenticated but not allowed: do not reveal that the site exists.
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    raise _serve_404()
 
 
 def _serve_file(site, filename: str) -> FileResponse:
     manifest = {f['name']: f for f in site.files}
     entry = manifest.get(filename)
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+        raise _serve_404()
     site_dir = (SITES_DIR / site.id).resolve()
     file_path = (site_dir / filename).resolve()
     # Defense in depth: the manifest check above should already exclude traversal.
     if not str(file_path).startswith(str(site_dir) + os.sep):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+        raise _serve_404()
     if not file_path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+        raise _serve_404()
     return FileResponse(file_path, media_type=entry['content_type'], headers=SERVE_HEADERS)
 
 
@@ -494,7 +504,7 @@ def _serve_file(site, filename: str) -> FileResponse:
 async def redirect_site_entry(slug: str):
     # The canonical entry URL ends with a slash so a page's relative assets
     # (href="style.css") resolve to /sites/{slug}/style.css, not /sites/style.css.
-    return RedirectResponse(url=f'/sites/{quote(slug)}/', status_code=308)
+    return RedirectResponse(url=f'/sites/{quote(slug)}/', status_code=308, headers=SERVE_HEADERS)
 
 
 @serve_router.get('/sites/{slug}/')
