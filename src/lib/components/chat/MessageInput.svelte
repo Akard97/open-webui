@@ -59,7 +59,12 @@
 	import { getSessionUser } from '$lib/apis/auths';
 	import { getTools } from '$lib/apis/tools';
 
-	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
+	import {
+		WEBUI_BASE_URL,
+		WEBUI_API_BASE_URL,
+		PASTED_TEXT_CHARACTER_LIMIT,
+		VOICE_MODE_COMING_SOON
+	} from '$lib/constants';
 	import { getOAuthClientAuthorizationUrl } from '$lib/apis/configs';
 
 	import { createNoteHandler } from '../notes/utils';
@@ -1987,11 +1992,23 @@
 										{#if prompt === '' && files.length === 0 && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.call ?? true))}
 											<div class=" flex items-center">
 												<!-- {$i18n.t('Call')} -->
-												<Tooltip content={$i18n.t('Voice mode')}>
+												<Tooltip
+													content={VOICE_MODE_COMING_SOON
+														? $i18n.t('Voice mode (coming soon)')
+														: $i18n.t('Voice mode')}
+												>
 													<button
 														class=" bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full p-1.5 self-center"
 														type="button"
 														on:click={async () => {
+															if (VOICE_MODE_COMING_SOON) {
+																toast.info(
+																	$i18n.t('Voice mode is coming soon. Stay tuned!')
+																);
+
+																return;
+															}
+
 															if (selectedModels.length > 1) {
 																toast.error($i18n.t('Select only one model to call'));
 

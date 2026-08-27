@@ -3,6 +3,10 @@ import { browser, dev } from '$app/environment';
 
 export const APP_NAME = 'Osool Intelligence Hub';
 
+// Voice/call mode is temporarily disabled until STT/TTS quality is production-ready.
+// Flip to false to restore the full call overlay experience.
+export const VOICE_MODE_COMING_SOON = true;
+
 export const WEBUI_HOSTNAME = browser ? (dev ? `${location.hostname}:8080` : ``) : '';
 export const WEBUI_BASE_URL = browser ? (dev ? `http://${WEBUI_HOSTNAME}` : ``) : ``;
 export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;

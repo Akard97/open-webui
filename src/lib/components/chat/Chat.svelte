@@ -12,7 +12,7 @@
 
 	import { get, type Unsubscriber, type Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BASE_URL, VOICE_MODE_COMING_SOON } from '$lib/constants';
 	import equal from 'fast-deep-equal';
 
 	import {
@@ -1278,8 +1278,12 @@
 		}
 
 		if ($page.url.searchParams.get('call') === 'true') {
-			showCallOverlay.set(true);
-			showControls.set(true);
+			if (VOICE_MODE_COMING_SOON) {
+				toast.info($i18n.t('Voice mode is coming soon. Stay tuned!'));
+			} else {
+				showCallOverlay.set(true);
+				showControls.set(true);
+			}
 		}
 
 		// Consume one-shot desktop event (e.g. Spotlight query, call shortcut)
@@ -1288,13 +1292,17 @@
 			desktopEvent.set(null);
 
 			if (event.type === 'call') {
-				// Defer to next macrotask so the call overlay isn't clobbered by
-				// showControlsSubscribe's initial callback (value=false → set(false))
-				// which runs as a pending microtask after this function.
-				setTimeout(() => {
-					showCallOverlay.set(true);
-					showControls.set(true);
-				}, 0);
+				if (VOICE_MODE_COMING_SOON) {
+					toast.info($i18n.t('Voice mode is coming soon. Stay tuned!'));
+				} else {
+					// Defer to next macrotask so the call overlay isn't clobbered by
+					// showControlsSubscribe's initial callback (value=false → set(false))
+					// which runs as a pending microtask after this function.
+					setTimeout(() => {
+						showCallOverlay.set(true);
+						showControls.set(true);
+					}, 0);
+				}
 			} else if (event.type === 'query') {
 				const query = event.data?.query;
 				const eventFiles = event.data?.files;

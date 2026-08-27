@@ -26,7 +26,7 @@ export const getModelAnalytics = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -66,7 +66,7 @@ export const getUserAnalytics = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -112,7 +112,7 @@ export const getMessages = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -150,7 +150,7 @@ export const getSummary = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -190,7 +190,7 @@ export const getDailyStats = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -228,7 +228,7 @@ export const getTokenUsage = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -272,7 +272,7 @@ export const getModelChats = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -308,7 +308,7 @@ export const getUsageOverview = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -346,7 +346,7 @@ export const getUsageDaily = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -384,7 +384,7 @@ export const getUsageEventCounts = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -424,7 +424,7 @@ export const getUsageUsers = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -466,7 +466,7 @@ export const getUsageUserActivity = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -500,7 +500,7 @@ export const getUsagePresence = async (token: string = '', groupId: string | nul
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -539,7 +539,7 @@ export const getUsageActive = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -578,7 +578,7 @@ export const getUsageHeatmap = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -617,7 +617,7 @@ export const getUsageModels = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -656,7 +656,7 @@ export const getUsageSessionsDaily = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -690,7 +690,7 @@ export const getUsageGroups = async (token: string = '', days: number = 30) => {
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -728,7 +728,7 @@ export const getUsageUserSummary = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
@@ -762,7 +762,7 @@ export const getModelOverview = async (token: string = '', modelId: string, days
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = err.detail ?? err;
 			console.error(err);
 			return null;
 		});
