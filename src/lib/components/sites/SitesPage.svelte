@@ -34,7 +34,7 @@
 	};
 
 	const copyLink = async (s: any) => {
-		await copyToClipboard(`${window.location.origin}/sites/${s.slug}`);
+		await copyToClipboard(`${window.location.origin}/sites/${s.slug}/`);
 		toast.success($i18n.t('Link copied'));
 	};
 
@@ -101,7 +101,7 @@
 						</div>
 						<a
 							class="text-xs text-gray-500 hover:underline truncate block"
-							href={`/sites/${s.slug}`}
+							href={`/sites/${s.slug}/`}
 							target="_blank"
 							rel="noopener">/sites/{s.slug}</a
 						>

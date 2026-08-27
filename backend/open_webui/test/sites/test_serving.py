@@ -54,7 +54,13 @@ async def _seed(tmp_path, *, slug='demo', public=False, grants=None):
 async def test_public_site_served_without_login(monkeypatch, tmp_path):
     await _seed(tmp_path, public=True)
     async with _client(monkeypatch, tmp_path, viewer=None) as c:
-        res = await c.get('/sites/demo')
+        # Bare slug redirects to the canonical trailing-slash URL so the
+        # page's relative assets resolve inside /sites/demo/.
+        bare = await c.get('/sites/demo')
+        assert bare.status_code == 308
+        assert bare.headers['location'] == '/sites/demo/'
+
+        res = await c.get('/sites/demo/')
         assert res.status_code == 200
         assert b'demo' in res.content
         assert res.headers['content-security-policy'] == 'sandbox allow-scripts'
@@ -69,9 +75,10 @@ async def test_public_site_served_without_login(monkeypatch, tmp_path):
 async def test_anonymous_on_private_site(monkeypatch, tmp_path):
     await _seed(tmp_path)
     async with _client(monkeypatch, tmp_path, viewer=None) as c:
-        res = await c.get('/sites/demo')
+        res = await c.get('/sites/demo/')
         assert res.status_code == 302
         assert res.headers['location'].startswith('/auth?redirect=')
+        assert res.headers['location'].endswith('/sites/demo/')
         assert (await c.get('/sites/demo/pic.png')).status_code == 401
 
 
@@ -87,20 +94,20 @@ async def test_access_matrix(monkeypatch, tmp_path):
     await _seed(tmp_path, slug='locked')
 
     async with _client(monkeypatch, tmp_path, viewer=VIEWER) as c:
-        assert (await c.get('/sites/internal')).status_code == 200
-        assert (await c.get('/sites/granted')).status_code == 200
-        assert (await c.get('/sites/locked')).status_code == 404  # no leak
+        assert (await c.get('/sites/internal/')).status_code == 200
+        assert (await c.get('/sites/granted/')).status_code == 200
+        assert (await c.get('/sites/locked/')).status_code == 404  # no leak
     async with _client(monkeypatch, tmp_path, viewer=OWNER) as c:
-        assert (await c.get('/sites/locked')).status_code == 200  # owner
+        assert (await c.get('/sites/locked/')).status_code == 200  # owner
     async with _client(monkeypatch, tmp_path, viewer=ADMIN) as c:
-        assert (await c.get('/sites/locked')).status_code == 200  # admin
+        assert (await c.get('/sites/locked/')).status_code == 200  # admin
 
 
 @pytest.mark.asyncio
 async def test_unknown_slug_and_unknown_file(monkeypatch, tmp_path):
     await _seed(tmp_path, public=True)
     async with _client(monkeypatch, tmp_path, viewer=None) as c:
-        assert (await c.get('/sites/nope')).status_code == 404
+        assert (await c.get('/sites/nope/')).status_code == 404
         assert (await c.get('/sites/demo/ghost.png')).status_code == 404
 
 
@@ -133,3 +140,27 @@ async def test_optional_user_role_gate(monkeypatch):
 
     monkeypatch.setattr(sites_router.Users, 'get_user_by_id', await _user_with_role('admin'))
     assert (await sites_router._get_optional_user(req)).role == 'admin'
+
+
+@pytest.mark.asyncio
+async def test_optional_user_rejects_revoked_token(monkeypatch):
+    """A revoked JWT (sign-out / back-channel logout) must resolve to anonymous."""
+    monkeypatch.setattr(sites_router, 'decode_token', lambda t: {'id': 'x1', 'jti': 'j1'})
+
+    async def _get_user(id, db=None):
+        return SimpleNamespace(id='x1', role='user', email='x@x.io')
+
+    monkeypatch.setattr(sites_router.Users, 'get_user_by_id', _get_user)
+    req = SimpleNamespace(headers={'authorization': 'Bearer tok'}, cookies={})
+
+    async def _revoked(request, decoded):
+        return False
+
+    monkeypatch.setattr(sites_router, 'is_valid_token', _revoked)
+    assert await sites_router._get_optional_user(req) is None
+
+    async def _valid(request, decoded):
+        return True
+
+    monkeypatch.setattr(sites_router, 'is_valid_token', _valid)
+    assert (await sites_router._get_optional_user(req)).id == 'x1'

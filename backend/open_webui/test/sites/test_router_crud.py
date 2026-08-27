@@ -163,7 +163,7 @@ async def test_create_cleans_up_on_write_failure(monkeypatch, tmp_path):
         def _boom(site_id, validated):
             raise OSError('disk full')
 
-        monkeypatch.setattr(sites_router, '_write_site_dir', _boom)
+        monkeypatch.setattr(sites_router, '_stage_site_dir', _boom)
         with pytest.raises(OSError):
             await c.post('/api/v1/sites/', data=_form(slug='doomed'), files=[_upload()])
 

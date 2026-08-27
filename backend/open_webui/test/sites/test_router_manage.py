@@ -8,6 +8,7 @@ from httpx import ASGITransport
 
 import open_webui.routers.sites as sites_router
 from open_webui.models.access_grants import AccessGrants
+from open_webui.models.sites import Sites
 from open_webui.utils.auth import get_verified_user
 
 USER = SimpleNamespace(id='u1', role='user', name='Pub', email='p@x.io')
@@ -161,3 +162,44 @@ async def test_delete_reports_failure(monkeypatch, tmp_path):
         monkeypatch.setattr(sites_router.Sites, 'delete_site_by_id', _fail)
         assert (await c.delete(f"/api/v1/sites/{site['id']}")).status_code == 404
     assert (tmp_path / site['id']).exists()
+
+
+@pytest.mark.asyncio
+async def test_update_preserves_site_on_install_failure(monkeypatch, tmp_path):
+    """A failed file install must leave both the DB row and the live dir untouched."""
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        site = await _create(c)
+
+        def _boom(site_id, validated):
+            raise OSError('disk full')
+
+        monkeypatch.setattr(sites_router, '_stage_site_dir', _boom)
+        with pytest.raises(OSError):
+            await c.post(
+                f"/api/v1/sites/{site['id']}/update",
+                data={},
+                files=[_upload('new.html', b'<p>new</p>')],
+            )
+    assert (tmp_path / site['id'] / 'index.html').exists()
+    row = await Sites.get_site_by_id(site['id'])
+    assert row.entry_file == 'index.html'
+    assert [f['name'] for f in row.files] == ['index.html']
+
+
+def test_stage_and_restore_site_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(sites_router, 'SITES_DIR', tmp_path)
+    v1 = [('index.html', b'old', 'text/html')]
+    v2 = [('main.html', b'new', 'text/html')]
+
+    assert sites_router._stage_site_dir('s1', v1) is None
+    assert (tmp_path / 's1' / 'index.html').read_bytes() == b'old'
+
+    backup = sites_router._stage_site_dir('s1', v2)
+    assert backup is not None
+    assert (backup / 'index.html').read_bytes() == b'old'  # previous version kept
+    assert (tmp_path / 's1' / 'main.html').read_bytes() == b'new'
+
+    # Rolling back reinstates the previous version intact.
+    sites_router._restore_site_dir('s1', backup)
+    assert (tmp_path / 's1' / 'index.html').read_bytes() == b'old'
+    assert not (tmp_path / 's1' / 'main.html').exists()

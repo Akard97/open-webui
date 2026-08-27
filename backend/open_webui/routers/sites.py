@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import mimetypes
@@ -7,6 +8,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -14,13 +16,17 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.constants import ERROR_MESSAGES
-from open_webui.env import DATA_DIR
+from open_webui.env import (
+    DATA_DIR,
+    WEBUI_AUTH_COOKIE_SAME_SITE,
+    WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
+)
 from open_webui.internal.db import get_async_session
 from open_webui.models.access_grants import AccessGrants
 from open_webui.models.sites import SiteModel, Sites
 from open_webui.models.users import Users
 from open_webui.utils.access_control import has_permission
-from open_webui.utils.auth import decode_token, get_verified_user
+from open_webui.utils.auth import decode_token, get_verified_user, is_valid_token
 
 log = logging.getLogger(__name__)
 
@@ -118,17 +124,58 @@ def _parse_grants(raw: str) -> list[dict]:
     return grants
 
 
-def _write_site_dir(site_id: str, validated: list[tuple[str, bytes, str]]) -> None:
+# In-process per-site write serialization. Sufficient for the single-worker
+# deployment this app runs as (SQLite has the same constraint elsewhere).
+_site_locks: dict[str, asyncio.Lock] = {}
+
+
+def _site_lock(site_id: str) -> asyncio.Lock:
+    lock = _site_locks.get(site_id)
+    if lock is None:
+        lock = _site_locks[site_id] = asyncio.Lock()
+    return lock
+
+
+def _stage_site_dir(site_id: str, validated: list[tuple[str, bytes, str]]) -> Optional[Path]:
+    """Install the uploaded files as the live dir; return the previous dir (or None).
+
+    Files are written to a unique temp dir first, so nothing live changes until
+    every write has succeeded. The previous version is renamed aside — never
+    deleted — so a failed install, or a failed DB commit after it, can be
+    undone with _restore_site_dir. The caller removes the returned backup once
+    the whole operation has committed.
+    """
     site_dir = SITES_DIR / site_id
-    tmp_dir = SITES_DIR / f'{site_id}.tmp'
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
+    tmp_dir = SITES_DIR / f'{site_id}.tmp-{uuid4().hex}'
     tmp_dir.mkdir(parents=True)
-    for name, content, _ in validated:
-        (tmp_dir / name).write_bytes(content)
-    if site_dir.exists():
-        shutil.rmtree(site_dir)
-    tmp_dir.rename(site_dir)
+    try:
+        for name, content, _ in validated:
+            (tmp_dir / name).write_bytes(content)
+        backup = None
+        if site_dir.exists():
+            backup = SITES_DIR / f'{site_id}.bak-{uuid4().hex}'
+            site_dir.rename(backup)
+        try:
+            tmp_dir.rename(site_dir)
+        except Exception:
+            if backup is not None:
+                backup.rename(site_dir)  # put the previous version back
+            raise
+        return backup
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+def _restore_site_dir(site_id: str, backup: Optional[Path]) -> None:
+    """Undo _stage_site_dir: discard the new dir and reinstate the backup."""
+    site_dir = SITES_DIR / site_id
+    shutil.rmtree(site_dir, ignore_errors=True)
+    if backup is not None and backup.exists():
+        try:
+            backup.rename(site_dir)
+        except OSError:
+            log.exception('Failed to restore previous site dir for %s', site_id)
 
 
 def _manifest(validated: list[tuple[str, bytes, str]]) -> list[dict]:
@@ -198,14 +245,15 @@ async def create_site(
     if site is None:
         raise _bad('This link is already taken.')
 
-    try:
-        _write_site_dir(site.id, validated)
-        await AccessGrants.set_access_grants('site', site.id, grants, db=db)
-    except Exception:
-        # Roll back to a consistent state: no half-created site may remain.
-        shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
-        await Sites.delete_site_by_id(site.id, db=db)
-        raise
+    async with _site_lock(site.id):
+        try:
+            _stage_site_dir(site.id, validated)
+            await AccessGrants.set_access_grants('site', site.id, grants, db=db)
+        except Exception:
+            # Roll back to a consistent state: no half-created site may remain.
+            shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
+            await Sites.delete_site_by_id(site.id, db=db)
+            raise
     return await _site_response(site, db)
 
 
@@ -264,11 +312,25 @@ async def update_site(
         current_names = [f['name'] for f in site.files]
         updates['entry_file'] = _pick_entry(current_names, entry_file)
 
-    updated = await Sites.update_site_by_id(site.id, updates, db=db)
-    if updated is None:
-        raise _bad('This link is already taken.')
     if validated is not None:
-        _write_site_dir(site.id, validated)
+        async with _site_lock(site.id):
+            # Stage files BEFORE the DB commit so metadata never points at
+            # files that were not installed; the previous version is kept
+            # until both the install and the commit succeed.
+            backup = _stage_site_dir(site.id, validated)
+            try:
+                updated = await Sites.update_site_by_id(site.id, updates, db=db)
+                if updated is None:
+                    raise _bad('This link is already taken.')
+            except Exception:
+                _restore_site_dir(site.id, backup)
+                raise
+            if backup is not None:
+                shutil.rmtree(backup, ignore_errors=True)
+    else:
+        updated = await Sites.update_site_by_id(site.id, updates, db=db)
+        if updated is None:
+            raise _bad('This link is already taken.')
     return await _site_response(updated, db, with_user=user.role == 'admin')
 
 
@@ -300,11 +362,12 @@ async def delete_site(
 ):
     await _require_publisher(request, user, db)
     site = await _get_owned_site(id, user, db)
-    deleted = await Sites.delete_site_by_id(site.id, db=db)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
-    await AccessGrants.revoke_all_access('site', site.id, db=db)
-    shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
+    async with _site_lock(site.id):
+        deleted = await Sites.delete_site_by_id(site.id, db=db)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+        await AccessGrants.revoke_all_access('site', site.id, db=db)
+        shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
     return {'deleted': True}
 
 
@@ -313,13 +376,22 @@ serve_router = APIRouter()
 # SECURITY: the sandbox CSP gives served pages an opaque origin, which keeps
 # the viewer's token cookie off any fetch a page makes ONLY while the auth
 # cookie stays SameSite=lax/strict (this app's default). If
-# WEBUI_AUTH_COOKIE_SAME_SITE is ever set to 'none', a published page could
-# call the API with the viewer's cookie via credentialed CORS (ACAO reflects
-# origin 'null'). Do not run the Site Publisher with SameSite=none.
+# WEBUI_AUTH_COOKIE_SAME_SITE is set to 'none', a published page's scripts
+# could call the API with the viewer's cookie via credentialed CORS (ACAO
+# reflects origin 'null') — so in that configuration scripts are disabled
+# entirely rather than trusting deployers to have read this comment.
+_SANDBOX_CSP = 'sandbox allow-scripts'
+if WEBUI_AUTH_COOKIE_SAME_SITE == 'none':
+    log.warning(
+        'WEBUI_AUTH_COOKIE_SAME_SITE=none: Site Publisher pages are served with '
+        'scripts disabled to block credentialed API access from sandboxed pages.'
+    )
+    _SANDBOX_CSP = 'sandbox'
+
 SERVE_HEADERS = {
-    # Opaque origin: scripts run but cannot reach the app's localStorage,
-    # cookies, or API with the viewer's credentials.
-    'Content-Security-Policy': 'sandbox allow-scripts',
+    # Opaque origin: scripts (when allowed) cannot reach the app's
+    # localStorage, cookies, or API with the viewer's credentials.
+    'Content-Security-Policy': _SANDBOX_CSP,
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-cache',
 }
@@ -341,9 +413,17 @@ async def _get_optional_user(request: Request):
         return None
     if not data or 'id' not in data:
         return None
-    user = await Users.get_user_by_id(data['id'])
-    if user is not None and user.role not in ('user', 'admin'):
+    # Mirror get_current_user: revoked tokens (sign-out / OIDC back-channel
+    # logout) must not keep granting access to private sites.
+    if data.get('jti') and not await is_valid_token(request, data):
         return None
+    user = await Users.get_user_by_id(data['id'])
+    if user is None or user.role not in ('user', 'admin'):
+        return None
+    if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
+        trusted_email = request.headers.get(WEBUI_AUTH_TRUSTED_EMAIL_HEADER, '').lower()
+        if trusted_email and user.email != trusted_email:
+            return None
     return user
 
 
@@ -357,7 +437,7 @@ async def _resolve_site_for_view(slug: str, request: Request, db: AsyncSession, 
     if user is None:
         if is_entry:
             # Direct navigation: send the browser to login and back.
-            return RedirectResponse(url=f'/auth?redirect={quote(f"/sites/{slug}")}', status_code=302)
+            return RedirectResponse(url=f'/auth?redirect={quote(f"/sites/{slug}/")}', status_code=302)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
     if user.role == 'admin' or site.user_id == user.id:
         return site
@@ -385,6 +465,13 @@ def _serve_file(site, filename: str) -> FileResponse:
 
 
 @serve_router.get('/sites/{slug}')
+async def redirect_site_entry(slug: str):
+    # The canonical entry URL ends with a slash so a page's relative assets
+    # (href="style.css") resolve to /sites/{slug}/style.css, not /sites/style.css.
+    return RedirectResponse(url=f'/sites/{quote(slug)}/', status_code=308)
+
+
+@serve_router.get('/sites/{slug}/')
 async def serve_site_entry(
     slug: str, request: Request, db: AsyncSession = Depends(get_async_session)
 ):
