@@ -164,3 +164,13 @@ async def test_optional_user_rejects_revoked_token(monkeypatch):
 
     monkeypatch.setattr(sites_router, 'is_valid_token', _valid)
     assert (await sites_router._get_optional_user(req)).id == 'x1'
+
+
+@pytest.mark.parametrize('value', ['none', 'None', 'NONE', ' none '])
+def test_sandbox_csp_disables_scripts_for_any_samesite_none_casing(value):
+    assert sites_router._sandbox_csp(value) == 'sandbox'
+
+
+@pytest.mark.parametrize('value', ['lax', 'strict', 'Lax', '', None])
+def test_sandbox_csp_allows_scripts_otherwise(value):
+    assert sites_router._sandbox_csp(value) == 'sandbox allow-scripts'

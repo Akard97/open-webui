@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.env import (
     DATA_DIR,
+    UVICORN_WORKERS,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
 )
@@ -126,7 +127,18 @@ def _parse_grants(raw: str) -> list[dict]:
 
 # In-process per-site write serialization. Sufficient for the single-worker
 # deployment this app runs as (SQLite has the same constraint elsewhere).
+# NOT safe across processes: with UVICORN_WORKERS > 1 (or multiple nodes)
+# concurrent publishes to the same site can interleave dir swaps and DB
+# commits — hence the startup warning below.
 _site_locks: dict[str, asyncio.Lock] = {}
+
+if UVICORN_WORKERS > 1:
+    log.warning(
+        'UVICORN_WORKERS=%s: Site Publisher serializes writes per-process only; '
+        'concurrent publishes to the same site from different workers can corrupt '
+        'site files. Run a single worker or avoid concurrent site updates.',
+        UVICORN_WORKERS,
+    )
 
 
 def _site_lock(site_id: str) -> asyncio.Lock:
@@ -249,8 +261,10 @@ async def create_site(
         try:
             _stage_site_dir(site.id, validated)
             await AccessGrants.set_access_grants('site', site.id, grants, db=db)
-        except Exception:
+        except BaseException:
             # Roll back to a consistent state: no half-created site may remain.
+            # BaseException: asyncio.CancelledError (client disconnect / shutdown)
+            # must also trigger cleanup, and it is not an Exception.
             shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
             await Sites.delete_site_by_id(site.id, db=db)
             raise
@@ -322,7 +336,11 @@ async def update_site(
                 updated = await Sites.update_site_by_id(site.id, updates, db=db)
                 if updated is None:
                     raise _bad('This link is already taken.')
-            except Exception:
+            except BaseException:
+                # BaseException: a cancelled request (client disconnect) must
+                # also restore the previous version, and CancelledError is not
+                # an Exception. Restore is synchronous, so it completes even
+                # while the task is being cancelled.
                 _restore_site_dir(site.id, backup)
                 raise
             if backup is not None:
@@ -344,10 +362,11 @@ async def update_site_access(
 ):
     await _require_publisher(request, user, db)
     site = await _get_owned_site(id, user, db)
-    # Grants first: if the public flip then fails, the site stays in its old
-    # (never more permissive) visibility state.
-    await AccessGrants.set_access_grants('site', site.id, form_data.access_grants, db=db)
-    updated = await Sites.update_site_by_id(site.id, {'public': form_data.public}, db=db)
+    # Grants and the public flag commit atomically: a partial write could
+    # otherwise leave a private site readable by newly granted principals.
+    updated = await Sites.update_site_access(
+        site.id, public=form_data.public, access_grants=form_data.access_grants, db=db
+    )
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     return await _site_response(updated, db, with_user=user.role == 'admin')
@@ -380,13 +399,20 @@ serve_router = APIRouter()
 # could call the API with the viewer's cookie via credentialed CORS (ACAO
 # reflects origin 'null') — so in that configuration scripts are disabled
 # entirely rather than trusting deployers to have read this comment.
-_SANDBOX_CSP = 'sandbox allow-scripts'
-if WEBUI_AUTH_COOKIE_SAME_SITE == 'none':
-    log.warning(
-        'WEBUI_AUTH_COOKIE_SAME_SITE=none: Site Publisher pages are served with '
-        'scripts disabled to block credentialed API access from sandboxed pages.'
-    )
-    _SANDBOX_CSP = 'sandbox'
+def _sandbox_csp(same_site: Optional[str]) -> str:
+    # Case/whitespace-insensitive: Starlette accepts any casing of the
+    # samesite value ('None', 'NONE', ...), all of which yield SameSite=None
+    # cookies, so all of them must disable scripts here.
+    if (same_site or '').strip().lower() == 'none':
+        log.warning(
+            'WEBUI_AUTH_COOKIE_SAME_SITE=none: Site Publisher pages are served with '
+            'scripts disabled to block credentialed API access from sandboxed pages.'
+        )
+        return 'sandbox'
+    return 'sandbox allow-scripts'
+
+
+_SANDBOX_CSP = _sandbox_csp(WEBUI_AUTH_COOKIE_SAME_SITE)
 
 SERVE_HEADERS = {
     # Opaque origin: scripts (when allowed) cannot reach the app's

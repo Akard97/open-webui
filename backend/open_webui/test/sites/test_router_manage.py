@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -147,6 +148,26 @@ async def test_update_files_preserved_on_slug_race(monkeypatch, tmp_path):
             files=[_upload('new.html', b'<p>new</p>')],
         )
         assert res.status_code == 400
+    assert (tmp_path / site['id'] / 'index.html').exists()
+    assert not (tmp_path / site['id'] / 'new.html').exists()
+
+
+@pytest.mark.asyncio
+async def test_update_files_restored_on_cancellation(monkeypatch, tmp_path):
+    """A cancelled request (client disconnect) must restore the previous files."""
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        site = await _create(c)
+
+        async def _cancel(id, updates, db=None):
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(sites_router.Sites, 'update_site_by_id', _cancel)
+        with pytest.raises(asyncio.CancelledError):
+            await c.post(
+                f"/api/v1/sites/{site['id']}/update",
+                data={},
+                files=[_upload('new.html', b'<p>new</p>')],
+            )
     assert (tmp_path / site['id'] / 'index.html').exists()
     assert not (tmp_path / site['id'] / 'new.html').exists()
 

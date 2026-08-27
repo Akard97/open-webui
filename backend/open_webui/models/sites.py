@@ -117,6 +117,56 @@ class SitesTable:
             await db.refresh(site)
             return SiteModel.model_validate(site)
 
+    async def update_site_access(
+        self,
+        id: str,
+        *,
+        public: bool,
+        access_grants: Optional[list],
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[SiteModel]:
+        """Replace a site's grants and set its public flag in ONE transaction.
+
+        Grants and visibility must never partially commit: a failure after
+        writing new grants but before flipping `public` could leave a private
+        site readable by newly granted principals. Model helpers each commit
+        their own session (session sharing is off by default), so the only way
+        to make this atomic is to do both writes here under a single commit.
+        """
+        from open_webui.models.access_grants import AccessGrant, normalize_access_grants
+
+        async with get_async_db_context(db) as db:
+            site = (await db.execute(select(Site).where(Site.id == id))).scalars().first()
+            if not site:
+                return None
+            await db.execute(
+                delete(AccessGrant).where(
+                    AccessGrant.resource_type == 'site',
+                    AccessGrant.resource_id == id,
+                )
+            )
+            for grant in normalize_access_grants(access_grants):
+                db.add(
+                    AccessGrant(
+                        id=str(uuid.uuid4()),
+                        resource_type='site',
+                        resource_id=id,
+                        principal_type=grant['principal_type'],
+                        principal_id=grant['principal_id'],
+                        permission=grant['permission'],
+                        created_at=int(time.time()),
+                    )
+                )
+            site.public = public
+            site.updated_at = _now()
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                return None
+            await db.refresh(site)
+            return SiteModel.model_validate(site)
+
     async def delete_site_by_id(self, id: str, db: Optional[AsyncSession] = None) -> bool:
         async with get_async_db_context(db) as db:
             result = await db.execute(delete(Site).where(Site.id == id))

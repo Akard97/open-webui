@@ -1,5 +1,6 @@
 import pytest
 
+from open_webui.models.access_grants import AccessGrants
 from open_webui.models.sites import Sites
 
 
@@ -67,3 +68,36 @@ async def test_list_and_delete():
     assert await Sites.delete_site_by_id(s2.id) is True
     assert await Sites.get_site_by_id(s2.id) is None
     assert await Sites.delete_site_by_id('nope') is False
+
+
+@pytest.mark.asyncio
+async def test_update_site_access_replaces_grants_and_flag_together():
+    site = await Sites.insert_new_site(
+        'u1', name='A', slug='site-a', public=False, files=_files(), entry_file='index.html'
+    )
+
+    updated = await Sites.update_site_access(
+        site.id,
+        public=True,
+        access_grants=[{'principal_type': 'user', 'principal_id': 'u9', 'permission': 'read'}],
+    )
+    assert updated.public is True
+    grants = await AccessGrants.get_grants_by_resource('site', site.id)
+    assert [(g.principal_type, g.principal_id, g.permission) for g in grants] == [('user', 'u9', 'read')]
+
+    updated = await Sites.update_site_access(site.id, public=False, access_grants=[])
+    assert updated.public is False
+    assert await AccessGrants.get_grants_by_resource('site', site.id) == []
+
+
+@pytest.mark.asyncio
+async def test_update_site_access_missing_site_writes_nothing():
+    assert (
+        await Sites.update_site_access(
+            'nope',
+            public=True,
+            access_grants=[{'principal_type': 'user', 'principal_id': 'u9', 'permission': 'read'}],
+        )
+        is None
+    )
+    assert await AccessGrants.get_grants_by_resource('site', 'nope') == []
