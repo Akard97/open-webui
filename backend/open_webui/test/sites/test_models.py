@@ -56,6 +56,11 @@ async def test_update_and_slug_conflict():
 
 
 @pytest.mark.asyncio
+async def test_update_nonexistent_site_returns_none():
+    assert await Sites.update_site_by_id('no-such-id', {'name': 'X'}) is None
+
+
+@pytest.mark.asyncio
 async def test_list_and_delete():
     await Sites.insert_new_site('u1', name='A', slug='aaa', public=False, files=_files(), entry_file='index.html')
     s2 = await Sites.insert_new_site('u1', name='B', slug='bbb', public=False, files=_files(), entry_file='index.html')

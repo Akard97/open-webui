@@ -103,6 +103,59 @@ async def test_owner_only_unless_admin(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_admin_can_manage_other_users_site(monkeypatch, tmp_path):
+    """Admin access/delete on someone else's site (only /update was covered)."""
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        site = await _create(c)
+    async with _client(monkeypatch, tmp_path, user=ADMIN) as c:
+        res = await c.post(
+            f"/api/v1/sites/{site['id']}/access",
+            json={'public': True, 'access_grants': []},
+        )
+        assert res.status_code == 200 and res.json()['public'] is True
+        assert (await c.delete(f"/api/v1/sites/{site['id']}")).status_code == 200
+    assert await Sites.get_site_by_id(site['id']) is None
+    assert not (tmp_path / site['id']).exists()
+
+
+@pytest.mark.asyncio
+async def test_update_entry_file_only(monkeypatch, tmp_path):
+    """Switching the entry file without re-uploading must keep files on disk."""
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        res = await c.post(
+            '/api/v1/sites/',
+            data={'name': 'Two', 'slug': 'two-pages', 'public': 'false',
+                  'access_grants': '[]', 'entry_file': 'a.html'},
+            files=[_upload('a.html', b'<p>a</p>'), _upload('b.html', b'<p>b</p>')],
+        )
+        assert res.status_code == 200, res.text
+        site = res.json()
+        assert site['entry_file'] == 'a.html'
+
+        res = await c.post(f"/api/v1/sites/{site['id']}/update", data={'entry_file': 'b.html'})
+        assert res.status_code == 200
+        body = res.json()
+        assert body['entry_file'] == 'b.html'
+        assert {f['name'] for f in body['files']} == {'a.html', 'b.html'}
+        assert (tmp_path / site['id'] / 'a.html').read_bytes() == b'<p>a</p>'
+
+
+@pytest.mark.asyncio
+async def test_update_empty_payload_roundtrips(monkeypatch, tmp_path):
+    """An update with no fields must succeed and change nothing."""
+    async with _client(monkeypatch, tmp_path, user=USER) as c:
+        site = await _create(c)
+        res = await c.post(f"/api/v1/sites/{site['id']}/update", data={})
+        assert res.status_code == 200
+        body = res.json()
+        assert body['name'] == site['name']
+        assert body['slug'] == site['slug']
+        assert body['entry_file'] == site['entry_file']
+        assert body['files'] == site['files']
+        assert (tmp_path / site['id'] / 'index.html').exists()
+
+
+@pytest.mark.asyncio
 async def test_access_update(monkeypatch, tmp_path):
     async with _client(monkeypatch, tmp_path, user=USER) as c:
         site = await _create(c)
