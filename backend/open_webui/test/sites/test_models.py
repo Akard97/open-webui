@@ -76,6 +76,22 @@ async def test_list_and_delete():
 
 
 @pytest.mark.asyncio
+async def test_delete_site_removes_grants_in_same_call():
+    """Grant rows die with the site — no orphaned grants for a dead site id."""
+    site = await Sites.insert_new_site(
+        'u1', name='A', slug='doomed', public=False, files=_files(), entry_file='index.html'
+    )
+    await AccessGrants.set_access_grants(
+        'site', site.id,
+        [{'principal_type': 'user', 'principal_id': 'u9', 'permission': 'read'}],
+        db=None,
+    )
+    assert len(await AccessGrants.get_grants_by_resource('site', site.id)) == 1
+    assert await Sites.delete_site_by_id(site.id) is True
+    assert await AccessGrants.get_grants_by_resource('site', site.id) == []
+
+
+@pytest.mark.asyncio
 async def test_update_site_access_replaces_grants_and_flag_together():
     site = await Sites.insert_new_site(
         'u1', name='A', slug='site-a', public=False, files=_files(), entry_file='index.html'

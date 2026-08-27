@@ -395,10 +395,11 @@ async def delete_site(
     await _require_publisher(request, user, db)
     site = await _get_owned_site(id, user, db)
     async with _site_lock(site.id):
+        # delete_site_by_id removes the site row AND its grant rows in one
+        # transaction, so a crash mid-delete cannot orphan grants.
         deleted = await Sites.delete_site_by_id(site.id, db=db)
         if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
-        await AccessGrants.revoke_all_access('site', site.id, db=db)
         _rmtree_logged(SITES_DIR / site.id)
     return {'deleted': True}
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Boolean, Column, JSON, Text, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from open_webui.internal.db import Base, get_async_db_context
 
@@ -164,12 +165,32 @@ class SitesTable:
             except IntegrityError:
                 await db.rollback()
                 return None
+            except StaleDataError:
+                # The site row vanished between our SELECT and the commit
+                # (concurrent delete). The whole transaction — including the
+                # new grant rows — rolls back, so nothing orphans; report the
+                # site as gone.
+                await db.rollback()
+                return None
             await db.refresh(site)
             return SiteModel.model_validate(site)
 
     async def delete_site_by_id(self, id: str, db: Optional[AsyncSession] = None) -> bool:
+        """Delete a site and its access grants in ONE transaction.
+
+        A crash between the two deletes must not leave grant rows behind for
+        a dead site id (inert, but clutter that never expires).
+        """
+        from open_webui.models.access_grants import AccessGrant
+
         async with get_async_db_context(db) as db:
             result = await db.execute(delete(Site).where(Site.id == id))
+            await db.execute(
+                delete(AccessGrant).where(
+                    AccessGrant.resource_type == 'site',
+                    AccessGrant.resource_id == id,
+                )
+            )
             await db.commit()
             return result.rowcount > 0
 
