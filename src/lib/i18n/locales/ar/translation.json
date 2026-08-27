@@ -27,6 +27,7 @@
 	"Publish a Site": "نشر موقع",
 	"Publish static pages and share them with a link.": "انشر صفحات ثابتة وشاركها برابط.",
 	"Site deleted": "تم حذف الموقع",
+	"Site files saved, but updating who can view failed: {{error}}": "تم حفظ ملفات الموقع، لكن فشل تحديث من يمكنه المشاهدة: {{error}}",
 	"Site Publisher": "ناشر المواقع",
 	"Site saved": "تم حفظ الموقع",
 	"Sites": "المواقع",

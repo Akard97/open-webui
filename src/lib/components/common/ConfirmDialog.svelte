@@ -45,7 +45,10 @@
 	const handleKeyDown = (event: KeyboardEvent) => {
 		if (event.key === 'Escape') {
 			console.log('Escape');
+			// Esc is a cancel: consumers reset their pending state in on:cancel,
+			// so dismissal must fire it just like the Cancel button does.
 			show = false;
+			dispatch('cancel');
 		}
 
 		if (event.key === 'Enter') {
@@ -105,7 +108,9 @@
 		class=" fixed top-0 right-0 left-0 bottom-0 bg-black/60 w-full h-screen max-h-[100dvh] flex justify-center z-99999999 overflow-hidden overscroll-contain"
 		in:fade={{ duration: 10 }}
 		on:mousedown={() => {
+			// Backdrop dismissal is a cancel, same as Esc.
 			show = false;
+			dispatch('cancel');
 		}}
 	>
 		<div

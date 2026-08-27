@@ -4,6 +4,7 @@
 	import { user } from '$lib/stores';
 	import { copyToClipboard } from '$lib/utils';
 	import { getSites, deleteSite } from '$lib/apis/sites';
+	import { siteAccessLevel } from './lib/access';
 	import SiteEditor from './SiteEditor.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 
@@ -18,10 +19,13 @@
 	let showAll = $state(false);
 
 	const levelBadge = (s: any) => {
-		if (s.public) return $i18n.t('Public');
-		if ((s.access_grants ?? []).some((g: any) => g.principal_id === '*')) return $i18n.t('Everyone');
-		if ((s.access_grants ?? []).length > 0) return $i18n.t('Specific');
-		return $i18n.t('Private');
+		const labels = {
+			public: $i18n.t('Public'),
+			internal: $i18n.t('Everyone'),
+			specific: $i18n.t('Specific'),
+			private: $i18n.t('Private')
+		};
+		return labels[siteAccessLevel(s)];
 	};
 
 	const load = async () => {
@@ -85,17 +89,23 @@
 	</div>
 
 	{#if loaded && sites.length === 0}
-		<div class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 py-14 text-center text-sm text-gray-500">
+		<div
+			class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 py-14 text-center text-sm text-gray-500"
+		>
 			{$i18n.t('Nothing published yet. Create your first site.')}
 		</div>
 	{:else}
-		<div class="flex flex-col divide-y divide-gray-100 dark:divide-gray-850 rounded-xl border border-gray-100 dark:border-gray-850">
+		<div
+			class="flex flex-col divide-y divide-gray-100 dark:divide-gray-850 rounded-xl border border-gray-100 dark:border-gray-850"
+		>
 			{#each sites as s (s.id)}
 				<div class="flex items-center gap-3 px-4 py-3">
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
 							<span class="truncate text-sm font-medium dark:text-gray-100">{s.name}</span>
-							<span class="shrink-0 rounded bg-gray-100 dark:bg-gray-850 px-1.5 py-0.5 text-[10px] text-gray-500">
+							<span
+								class="shrink-0 rounded bg-gray-100 dark:bg-gray-850 px-1.5 py-0.5 text-[10px] text-gray-500"
+							>
 								{levelBadge(s)}
 							</span>
 						</div>

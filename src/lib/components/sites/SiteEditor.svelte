@@ -4,6 +4,7 @@
 	import Modal from '$lib/components/common/Modal.svelte';
 	import AccessControl from '$lib/components/workspace/common/AccessControl.svelte';
 	import { createSite, updateSite, updateSiteAccess } from '$lib/apis/sites';
+	import { isEveryoneGrant, siteAccessLevel } from './lib/access';
 
 	const i18n = getContext('i18n');
 
@@ -39,11 +40,8 @@
 			slugTouched = !!site;
 			files = [];
 			entryFile = site?.entry_file ?? '';
-			if (site?.public) level = 'public';
-			else if ((site?.access_grants ?? []).some((g: any) => g.principal_id === '*')) level = 'internal';
-			else if ((site?.access_grants ?? []).length > 0) level = 'specific';
-			else level = 'private';
-			accessGrants = (site?.access_grants ?? []).filter((g: any) => g.principal_id !== '*');
+			level = siteAccessLevel(site);
+			accessGrants = (site?.access_grants ?? []).filter((g: any) => !isEveryoneGrant(g));
 		}
 	});
 
@@ -73,8 +71,9 @@
 	};
 
 	const grantsForLevel = () => {
-		if (level === 'internal') return [{ principal_type: 'user', principal_id: '*', permission: 'read' }];
-		if (level === 'specific') return accessGrants.filter((g) => g.principal_id !== '*');
+		if (level === 'internal')
+			return [{ principal_type: 'user', principal_id: '*', permission: 'read' }];
+		if (level === 'specific') return accessGrants.filter((g) => !isEveryoneGrant(g));
 		return [];
 	};
 
@@ -98,10 +97,22 @@
 				if (entryFile) fd.append('entry_file', entryFile);
 				for (const f of files) fd.append('files', f);
 				await updateSite(localStorage.token, site.id, fd);
-				await updateSiteAccess(localStorage.token, site.id, {
-					public: level === 'public',
-					access_grants: grantsForLevel()
-				});
+				try {
+					await updateSiteAccess(localStorage.token, site.id, {
+						public: level === 'public',
+						access_grants: grantsForLevel()
+					});
+				} catch (err) {
+					// The files/metadata call above already committed — say so,
+					// instead of a generic error implying nothing was saved.
+					toast.error(
+						$i18n.t('Site files saved, but updating who can view failed: {{error}}', {
+							error: `${err}`
+						})
+					);
+					onSaved();
+					return;
+				}
 			}
 			if (seq !== openSeq || !show) {
 				onSaved(); // server state did change; refresh the list, but don't touch the (re)opened dialog
@@ -220,12 +231,7 @@
 		<div class="flex flex-col gap-2">
 			<div class="text-xs font-medium text-gray-500">{$i18n.t('Who can view')}</div>
 			<div class="flex flex-col gap-1.5 text-sm dark:text-gray-100">
-				{#each [
-					['private', $i18n.t('Only me')],
-					['specific', $i18n.t('Specific people or groups')],
-					['internal', $i18n.t('Everyone with an account')],
-					['public', $i18n.t('Public — no login needed')]
-				] as [value, label] (value)}
+				{#each [['private', $i18n.t('Only me')], ['specific', $i18n.t('Specific people or groups')], ['internal', $i18n.t('Everyone with an account')], ['public', $i18n.t('Public — no login needed')]] as [value, label] (value)}
 					<label class="flex items-center gap-2">
 						<input type="radio" name="site-level" {value} bind:group={level} />
 						{label}
@@ -233,7 +239,12 @@
 				{/each}
 			</div>
 			{#if level === 'specific'}
-				<AccessControl bind:accessGrants accessRoles={['read']} sharePublic={false} />
+				<AccessControl
+					bind:accessGrants
+					accessRoles={['read']}
+					sharePublic={false}
+					showVisibilitySelect={false}
+				/>
 			{/if}
 		</div>
 
@@ -248,7 +259,8 @@
 				type="button"
 				class="rounded-lg bg-gray-900 px-3.5 py-1.5 text-sm text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50"
 				disabled={saving || !name.trim() || !slug || (!site && files.length === 0)}
-				onclick={submit}>{saving ? $i18n.t('Saving...') : site ? $i18n.t('Save') : $i18n.t('Publish')}</button
+				onclick={submit}
+				>{saving ? $i18n.t('Saving...') : site ? $i18n.t('Save') : $i18n.t('Publish')}</button
 			>
 		</div>
 	</div>
