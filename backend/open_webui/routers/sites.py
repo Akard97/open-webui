@@ -150,6 +150,17 @@ def _site_lock(site_id: str) -> asyncio.Lock:
     return lock
 
 
+def _rmtree_logged(path: Path) -> None:
+    """Best-effort recursive delete: a failure must not break the request,
+    but an orphaned directory must not vanish silently from the logs either."""
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        log.warning('Failed to remove site dir %s; orphaned files remain', path, exc_info=True)
+
+
 def _stage_site_dir(site_id: str, validated: list[tuple[str, bytes, str]]) -> Optional[Path]:
     """Install the uploaded files as the live dir; return the previous dir (or None).
 
@@ -177,14 +188,14 @@ def _stage_site_dir(site_id: str, validated: list[tuple[str, bytes, str]]) -> Op
             raise
         return backup
     except Exception:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        _rmtree_logged(tmp_dir)
         raise
 
 
 def _restore_site_dir(site_id: str, backup: Optional[Path]) -> None:
     """Undo _stage_site_dir: discard the new dir and reinstate the backup."""
     site_dir = SITES_DIR / site_id
-    shutil.rmtree(site_dir, ignore_errors=True)
+    _rmtree_logged(site_dir)
     if backup is not None and backup.exists():
         try:
             backup.rename(site_dir)
@@ -267,7 +278,7 @@ async def create_site(
             # Roll back to a consistent state: no half-created site may remain.
             # BaseException: asyncio.CancelledError (client disconnect / shutdown)
             # must also trigger cleanup, and it is not an Exception.
-            shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
+            _rmtree_logged(SITES_DIR / site.id)
             await Sites.delete_site_by_id(site.id, db=db)
             raise
     return await _site_response(site, db)
@@ -346,7 +357,7 @@ async def update_site(
                 _restore_site_dir(site.id, backup)
                 raise
             if backup is not None:
-                shutil.rmtree(backup, ignore_errors=True)
+                _rmtree_logged(backup)
     else:
         updated = await Sites.update_site_by_id(site.id, updates, db=db)
         if updated is None:
@@ -388,7 +399,7 @@ async def delete_site(
         if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
         await AccessGrants.revoke_all_access('site', site.id, db=db)
-        shutil.rmtree(SITES_DIR / site.id, ignore_errors=True)
+        _rmtree_logged(SITES_DIR / site.id)
     return {'deleted': True}
 
 

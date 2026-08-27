@@ -207,6 +207,26 @@ async def test_update_preserves_site_on_install_failure(monkeypatch, tmp_path):
     assert [f['name'] for f in row.files] == ['index.html']
 
 
+def test_rmtree_logged_never_raises_and_warns(monkeypatch, tmp_path, caplog):
+    """A failed cleanup must not break the request, but must leave a log trail."""
+    target = tmp_path / 'stuck'
+    target.mkdir()
+
+    def _locked(path):
+        raise OSError('locked by antivirus')
+
+    monkeypatch.setattr(sites_router.shutil, 'rmtree', _locked)
+    with caplog.at_level('WARNING', logger=sites_router.log.name):
+        sites_router._rmtree_logged(target)
+    assert any('Failed to remove site dir' in r.message for r in caplog.records)
+    monkeypatch.undo()
+
+    caplog.clear()
+    with caplog.at_level('WARNING', logger=sites_router.log.name):
+        sites_router._rmtree_logged(tmp_path / 'does-not-exist')  # silent no-op
+    assert caplog.records == []
+
+
 def test_stage_and_restore_site_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(sites_router, 'SITES_DIR', tmp_path)
     v1 = [('index.html', b'old', 'text/html')]
