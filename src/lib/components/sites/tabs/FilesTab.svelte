@@ -66,7 +66,7 @@
 				<div
 					class="flex items-center gap-2.5 border-b border-[var(--st-hairline)] px-3 py-2 text-[13px] last:border-b-0"
 				>
-					<span class="min-w-0 flex-1 truncate font-mono">{f.name}</span>
+					<span class="min-w-0 flex-1 truncate">{f.name}</span>
 					{#if f.name === entryFile}<span class="st-pv">{$i18n.t('ENTRY')}</span>{/if}
 					<span class="text-xs tabular-nums text-[var(--st-faint)]">{formatSize(f.size)}</span>
 					<button
@@ -82,7 +82,7 @@
 				<div
 					class="flex items-center gap-2.5 border-b border-[var(--st-hairline)] px-3 py-2 text-[13px] last:border-b-0"
 				>
-					<span class="min-w-0 flex-1 truncate font-mono">{f.name}</span>
+					<span class="min-w-0 flex-1 truncate">{f.name}</span>
 					{#if f.name === entryFile}<span class="st-pv">{$i18n.t('ENTRY')}</span>{/if}
 					<span class="text-xs tabular-nums text-[var(--st-faint)]"
 						>{f.size != null ? formatSize(f.size) : ''}</span
@@ -101,7 +101,7 @@
 		{#if htmlNames.length > 1}
 			<span class="text-[12.5px] text-[var(--st-muted)]">{$i18n.t('Opens with')}</span>
 			<select
-				class="rounded-[7px] border border-[var(--st-border)] bg-transparent px-2.5 py-1 font-mono text-[12.5px]"
+				class="rounded-[7px] border border-[var(--st-border)] bg-transparent px-2.5 py-1 text-[12.5px]"
 				aria-label={$i18n.t('Opens with')}
 				bind:value={entryFile}
 			>

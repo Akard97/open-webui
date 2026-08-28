@@ -40,7 +40,7 @@
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 		{#each [[$i18n.t('Total views'), '2,847'], [$i18n.t('Unique visitors'), '391'], [$i18n.t('Avg. time on page'), '1:42']] as [k, v] (k)}
 			<div class="rounded-xl border border-[var(--st-hairline)] px-3.5 py-3">
-				<div class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--st-faint)]">
+				<div class="text-xs font-medium text-gray-400 dark:text-gray-500">
 					{k}
 				</div>
 				<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight">{v}</div>
@@ -57,11 +57,11 @@
 				<thead>
 					<tr>
 						<th
-							class="border-b border-[var(--st-hairline)] py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--st-faint)]"
+							class="border-b border-[var(--st-hairline)] py-1.5 text-left text-xs font-medium text-gray-400 dark:text-gray-500"
 							>{$i18n.t('Page')}</th
 						>
 						<th
-							class="w-28 border-b border-[var(--st-hairline)] py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--st-faint)]"
+							class="w-28 border-b border-[var(--st-hairline)] py-1.5 text-left text-xs font-medium text-gray-400 dark:text-gray-500"
 							>{$i18n.t('Views')}</th
 						>
 						<th class="w-44 border-b border-[var(--st-hairline)]"></th>
@@ -71,7 +71,7 @@
 					{#each topPages as [page, views, pct] (page)}
 						<tr>
 							<td
-								class="border-b border-[var(--st-hairline)] py-2 font-mono text-[12.5px] last:border-b-0"
+								class="border-b border-[var(--st-hairline)] py-2 text-[12.5px] last:border-b-0"
 								>/{page}</td
 							>
 							<td class="border-b border-[var(--st-hairline)] py-2 tabular-nums">{views}</td>

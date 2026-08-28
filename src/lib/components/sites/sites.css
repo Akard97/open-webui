@@ -1,49 +1,43 @@
-/* Sites tool tokens + shared motion. Scope: .sites-root. Spec §4–5. */
+/* Sites tool tokens + shared motion. Scope: .sites-root.
+   Mapped onto the app's gray ramp + global shadcn --primary (Osool teal),
+   mirroring the WorkOS surface conventions (workos/styles.css). */
 .sites-root {
-	--st-ground: #f7f9f9;
-	--st-card: #ffffff;
-	--st-ink: #16282d;
-	--st-deep: #00353e;
-	--st-muted: #5d7176;
-	--st-faint: #8fa0a4;
-	--st-border: #e2e9ea;
-	--st-hairline: #edf2f3;
-	--st-hover: #f1f5f5;
-	--st-accent: #00677f;
-	--st-accent-ink: #ffffff;
-	--st-accent-soft: #e3f1f4;
-	--st-accent-soft-ink: #00566a;
-	--st-live: #789d4a;
-	--st-live-soft: #eef4e4;
-	--st-danger: #c2410c;
-	--st-danger-soft: #fdf0e8;
-	--st-chart: #00a9ce;
-	--st-chart-fill: rgba(0, 169, 206, 0.12);
-	--st-shadow: 0 1px 2px rgba(0, 53, 62, 0.05), 0 4px 16px rgba(0, 53, 62, 0.05);
+	--st-ground: #fff;
+	--st-card: #fff;
+	--st-ink: var(--color-gray-800);
+	--st-deep: var(--color-gray-900);
+	--st-muted: var(--color-gray-500);
+	--st-faint: var(--color-gray-400);
+	--st-border: var(--color-gray-200);
+	--st-hairline: var(--color-gray-100);
+	--st-hover: var(--color-gray-50);
+	--st-accent: var(--primary);
+	--st-accent-ink: var(--primary-foreground);
+	--st-accent-soft: color-mix(in oklab, var(--primary) 10%, transparent);
+	--st-accent-soft-ink: var(--primary);
+	--st-live: #769a4a; /* matches --wos-done */
+	--st-live-soft: color-mix(in oklab, #769a4a 12%, transparent);
+	--st-danger: #dc2626; /* matches --wos-danger */
+	--st-danger-soft: color-mix(in oklab, #dc2626 8%, transparent);
+	--st-chart: #00a5ba; /* WorkOS teal */
+	--st-chart-fill: color-mix(in oklab, #00a5ba 12%, transparent);
 	--st-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 	color: var(--st-ink);
 }
 .dark .sites-root {
-	--st-ground: #0b1416;
-	--st-card: #111c1f;
-	--st-ink: #e4edee;
-	--st-deep: #bfe9f1;
-	--st-muted: #93a6aa;
-	--st-faint: #5f7478;
-	--st-border: #223236;
-	--st-hairline: #1a282b;
-	--st-hover: #162225;
-	--st-accent: #2fb8cf;
-	--st-accent-ink: #03252c;
-	--st-accent-soft: #123239;
-	--st-accent-soft-ink: #7fd4e4;
+	--st-ground: var(--color-gray-900);
+	--st-card: var(--color-gray-900);
+	--st-ink: var(--color-gray-100);
+	--st-deep: var(--color-gray-50);
+	--st-muted: var(--color-gray-400);
+	--st-faint: var(--color-gray-500);
+	--st-border: var(--color-gray-800);
+	--st-hairline: var(--color-gray-850);
+	--st-hover: var(--color-gray-850);
 	--st-live: #9dc06a;
-	--st-live-soft: #1e2a14;
-	--st-danger: #f0824d;
-	--st-danger-soft: #33200f;
-	--st-chart: #2fb8cf;
-	--st-chart-fill: rgba(47, 184, 207, 0.14);
-	--st-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+	--st-live-soft: color-mix(in oklab, #9dc06a 15%, transparent);
+	--st-danger: #f87171;
+	--st-danger-soft: color-mix(in oklab, #f87171 12%, transparent);
 }
 
 .sites-root .st-press {
@@ -69,11 +63,11 @@
 
 .sites-root .st-btn {
 	border: 1px solid var(--st-border);
-	border-radius: 9px;
-	padding: 6px 13px;
-	font-size: 13px;
+	border-radius: 8px;
+	padding: 5px 12px;
+	font-size: 0.75rem;
 	font-weight: 500;
-	background: var(--st-card);
+	background: transparent;
 	transition: background 120ms ease, transform 140ms var(--st-ease-out);
 }
 .sites-root .st-btn:active {
@@ -94,8 +88,7 @@
 		background: var(--st-hover);
 	}
 	.sites-root .st-btn-primary:hover {
-		background: var(--st-accent);
-		filter: brightness(1.08);
+		background: color-mix(in oklab, var(--st-accent) 90%, transparent);
 	}
 	.sites-root .st-btn-danger:hover {
 		background: var(--st-danger-soft);
@@ -104,9 +97,8 @@
 
 .sites-root .st-chip {
 	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.04em;
-	padding: 2px 7px;
+	font-weight: 500;
+	padding: 2px 8px;
 	border-radius: 99px;
 	background: var(--st-hairline);
 	color: var(--st-muted);
@@ -118,9 +110,9 @@
 }
 .sites-root .st-pv {
 	font-size: 9.5px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	padding: 1.5px 6px;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	padding: 1.5px 7px;
 	border-radius: 99px;
 	background: var(--st-accent-soft);
 	color: var(--st-accent-soft-ink);
@@ -161,7 +153,7 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.sites-root .st-pane {
-		animation: none;
+		animation: st-enter-fade 180ms ease;
 	}
 	.sites-root .st-status .st-dot {
 		animation: none;
@@ -169,5 +161,13 @@
 	.sites-root .st-press,
 	.sites-root .st-btn {
 		transition: none;
+	}
+}
+@keyframes st-enter-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
 	}
 }

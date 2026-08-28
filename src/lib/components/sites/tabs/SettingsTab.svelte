@@ -73,12 +73,12 @@
 			>{$i18n.t('Link')}</label
 		>
 		<div class="flex items-center gap-1 text-sm">
-			<span class="shrink-0 font-mono text-[12.5px] text-[var(--st-faint)]"
+			<span class="shrink-0 text-[12.5px] text-[var(--st-faint)]"
 				>{window.location.origin}/sites/</span
 			>
 			<input
 				id="st-slug"
-				class="min-w-0 flex-1 rounded-[9px] border border-[var(--st-border)] bg-transparent px-2.5 py-2 font-mono text-[12.5px] outline-none focus:border-[var(--st-accent)]"
+				class="min-w-0 flex-1 rounded-[9px] border border-[var(--st-border)] bg-transparent px-2.5 py-2 text-[12.5px] outline-none focus:border-[var(--st-accent)]"
 				bind:value={slug}
 			/>
 		</div>

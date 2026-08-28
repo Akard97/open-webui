@@ -60,17 +60,17 @@
 	onMount(load);
 </script>
 
-<div class="sites-root mx-auto w-full max-w-[1160px] px-4 py-7 pb-10">
-	<div class="mx-1 mb-4 flex flex-wrap items-baseline gap-3">
-		<h1 class="text-[22px] font-bold tracking-tight">{$i18n.t('Sites')}</h1>
-		<span class="text-[13px] text-[var(--st-muted)]"
+<div class="sites-root flex h-full w-full flex-col text-gray-800 dark:text-gray-100">
+	<div
+		class="flex flex-none flex-wrap items-baseline gap-2.5 border-b border-gray-100 px-4 py-3 dark:border-gray-850 md:px-6"
+	>
+		<h1 class="text-lg font-semibold">{$i18n.t('Sites')}</h1>
+		<span class="text-xs text-gray-500 dark:text-gray-400"
 			>{$i18n.t('Publish static pages and share them with a link.')}</span
 		>
 	</div>
 
-	<div
-		class="grid min-h-[640px] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--st-border)] bg-[var(--st-card)] shadow-[var(--st-shadow)] md:grid-cols-[280px_1fr]"
-	>
+	<div class="flex min-h-0 flex-1 flex-col md:flex-row">
 		<SiteRail
 			{sites}
 			{selectedId}
@@ -99,10 +99,10 @@
 			<SiteDetail site={selected} bind:tab onSaved={load} onDelete={() => (showDeleteConfirm = true)} />
 		{:else if loaded}
 			<div
-				class="flex flex-col items-center justify-center gap-2.5 px-10 py-16 text-center text-[var(--st-muted)]"
+				class="flex flex-1 flex-col items-center justify-center gap-2.5 px-10 py-16 text-center text-gray-500 dark:text-gray-400"
 			>
 				<div class="text-[34px]">🌐</div>
-				<div class="text-[15px] font-semibold text-[var(--st-ink)]">
+				<div class="text-[15px] font-semibold text-gray-800 dark:text-gray-100">
 					{$i18n.t('Nothing published yet')}
 				</div>
 				<div class="max-w-xs text-[13px]">

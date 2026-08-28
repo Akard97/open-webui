@@ -79,12 +79,12 @@
 			>{$i18n.t('Link')}</label
 		>
 		<div class="flex items-center gap-1 text-sm">
-			<span class="shrink-0 font-mono text-[12.5px] text-[var(--st-faint)]"
+			<span class="shrink-0 text-[12.5px] text-[var(--st-faint)]"
 				>{window.location.origin}/sites/</span
 			>
 			<input
 				id="st-new-slug"
-				class="min-w-0 flex-1 rounded-[9px] border border-[var(--st-border)] bg-transparent px-2.5 py-2 font-mono text-[12.5px] outline-none focus:border-[var(--st-accent)]"
+				class="min-w-0 flex-1 rounded-[9px] border border-[var(--st-border)] bg-transparent px-2.5 py-2 text-[12.5px] outline-none focus:border-[var(--st-accent)]"
 				bind:value={slug}
 				oninput={() => (slugTouched = true)}
 			/>
@@ -100,7 +100,7 @@
 		<div class="mt-1.5 flex flex-col gap-1">
 			{#each files as f (f.name)}
 				<div class="flex items-center justify-between text-xs text-[var(--st-muted)]">
-					<span class="truncate font-mono">{f.name}</span>
+					<span class="truncate">{f.name}</span>
 					<div class="flex shrink-0 items-center gap-2">
 						{#if f.name === entryFile}<span class="st-pv">{$i18n.t('ENTRY')}</span>{/if}
 						<span class="tabular-nums text-[var(--st-faint)]">{formatSize(f.size)}</span>
@@ -119,7 +119,7 @@
 		<div class="mt-1.5 flex items-center gap-2 text-xs">
 			<span class="text-[var(--st-muted)]">{$i18n.t('Opens with')}</span>
 			<select
-				class="rounded border border-[var(--st-border)] bg-transparent px-2 py-1 font-mono"
+				class="rounded border border-[var(--st-border)] bg-transparent px-2 py-1"
 				aria-label={$i18n.t('Opens with')}
 				bind:value={entryFile}
 			>
