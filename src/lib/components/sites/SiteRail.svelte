@@ -13,6 +13,15 @@
 		onSelect = (_id: string) => {},
 		onCreate = () => {},
 		onToggleAll = (_v: boolean) => {}
+	}: {
+		sites?: any[];
+		selectedId?: string | null;
+		creating?: boolean;
+		showAll?: boolean;
+		isAdmin?: boolean;
+		onSelect?: (id: string) => void;
+		onCreate?: () => void;
+		onToggleAll?: (v: boolean) => void;
 	} = $props();
 
 	const levelBadge = (s: any) => {
