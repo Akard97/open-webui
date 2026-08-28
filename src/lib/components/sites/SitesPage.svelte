@@ -2,31 +2,25 @@
 	import { onMount, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { user } from '$lib/stores';
-	import { copyToClipboard } from '$lib/utils';
 	import { getSites, deleteSite } from '$lib/apis/sites';
-	import { siteAccessLevel } from './lib/access';
-	import SiteEditor from './SiteEditor.svelte';
+	import { nextSelection } from './lib/selection';
+	import SiteRail from './SiteRail.svelte';
+	import SiteDetail from './SiteDetail.svelte';
+	import CreatePanel from './CreatePanel.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
+	import './sites.css';
 
 	const i18n = getContext('i18n');
 
 	let sites = $state<any[]>([]);
 	let loaded = $state(false);
-	let showEditor = $state(false);
-	let editing = $state<any>(null);
-	let confirmDelete = $state<any>(null);
-	let showDeleteConfirm = $state(false);
+	let selectedId = $state<string | null>(null);
+	let tab = $state('overview');
+	let creating = $state(false);
 	let showAll = $state(false);
+	let showDeleteConfirm = $state(false);
 
-	const levelBadge = (s: any) => {
-		const labels = {
-			public: $i18n.t('Public'),
-			internal: $i18n.t('Everyone'),
-			specific: $i18n.t('Specific'),
-			private: $i18n.t('Private')
-		};
-		return labels[siteAccessLevel(s)];
-	};
+	const selected = $derived(sites.find((s) => s.id === selectedId) ?? null);
 
 	const load = async () => {
 		try {
@@ -34,19 +28,29 @@
 		} catch (err) {
 			toast.error(`${err}`);
 		}
+		if (selectedId === null || !sites.some((s) => s.id === selectedId)) {
+			selectedId = sites[0]?.id ?? null;
+			tab = 'overview';
+		}
 		loaded = true;
 	};
 
-	const copyLink = async (s: any) => {
-		await copyToClipboard(`${window.location.origin}/sites/${s.slug}/`);
-		toast.success($i18n.t('Link copied'));
+	const select = (id: string) => {
+		creating = false;
+		if (id !== selectedId) {
+			selectedId = id;
+			tab = 'overview';
+		}
 	};
 
 	const remove = async () => {
+		if (!selected) return;
 		try {
-			await deleteSite(localStorage.token, confirmDelete.id);
+			const next = nextSelection(sites, selected.id);
+			await deleteSite(localStorage.token, selected.id);
 			toast.success($i18n.t('Site deleted'));
-			confirmDelete = null;
+			selectedId = next;
+			tab = 'overview';
 			await load();
 		} catch (err) {
 			toast.error(`${err}`);
@@ -56,104 +60,67 @@
 	onMount(load);
 </script>
 
-<div class="mx-auto w-full max-w-3xl px-4 py-6 flex flex-col gap-4">
-	<div class="flex items-center justify-between">
-		<div>
-			<div class="text-xl font-medium dark:text-gray-100">{$i18n.t('Sites')}</div>
-			<div class="text-xs text-gray-500">
-				{$i18n.t('Publish static pages and share them with a link.')}
-			</div>
-		</div>
-		<div class="flex items-center gap-2">
-			{#if $user?.role === 'admin'}
-				<button
-					type="button"
-					class="rounded-lg px-3 py-1.5 text-xs {showAll
-						? 'bg-gray-100 dark:bg-gray-850 dark:text-gray-100'
-						: 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-850'}"
-					onclick={async () => {
-						showAll = !showAll;
-						await load();
-					}}>{$i18n.t('All users')}</button
-				>
-			{/if}
-			<button
-				type="button"
-				class="rounded-lg bg-gray-900 px-3.5 py-1.5 text-sm text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900"
-				onclick={() => {
-					editing = null;
-					showEditor = true;
-				}}>{$i18n.t('New Site')}</button
-			>
-		</div>
+<div class="sites-root mx-auto w-full max-w-[1160px] px-4 py-7 pb-10">
+	<div class="mx-1 mb-4 flex flex-wrap items-baseline gap-3">
+		<h1 class="text-[22px] font-bold tracking-tight">{$i18n.t('Sites')}</h1>
+		<span class="text-[13px] text-[var(--st-muted)]"
+			>{$i18n.t('Publish static pages and share them with a link.')}</span
+		>
 	</div>
 
-	{#if loaded && sites.length === 0}
-		<div
-			class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 py-14 text-center text-sm text-gray-500"
-		>
-			{$i18n.t('Nothing published yet. Create your first site.')}
-		</div>
-	{:else}
-		<div
-			class="flex flex-col divide-y divide-gray-100 dark:divide-gray-850 rounded-xl border border-gray-100 dark:border-gray-850"
-		>
-			{#each sites as s (s.id)}
-				<div class="flex items-center gap-3 px-4 py-3">
-					<div class="min-w-0 flex-1">
-						<div class="flex items-center gap-2">
-							<span class="truncate text-sm font-medium dark:text-gray-100">{s.name}</span>
-							<span
-								class="shrink-0 rounded bg-gray-100 dark:bg-gray-850 px-1.5 py-0.5 text-[10px] text-gray-500"
-							>
-								{levelBadge(s)}
-							</span>
-						</div>
-						<a
-							class="text-xs text-gray-500 hover:underline truncate block"
-							href={`/sites/${s.slug}/`}
-							target="_blank"
-							rel="noopener">/sites/{s.slug}</a
-						>
-						{#if s.user_name && showAll}
-							<div class="text-[10px] text-gray-400">{s.user_name}</div>
-						{/if}
-					</div>
-					<div class="flex shrink-0 items-center gap-1 text-xs">
-						<button
-							type="button"
-							class="rounded px-2 py-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-850"
-							onclick={() => copyLink(s)}>{$i18n.t('Copy link')}</button
-						>
-						<button
-							type="button"
-							class="rounded px-2 py-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-850"
-							onclick={() => {
-								editing = s;
-								showEditor = true;
-							}}>{$i18n.t('Edit')}</button
-						>
-						<button
-							type="button"
-							class="rounded px-2 py-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
-							onclick={() => {
-								confirmDelete = s;
-								showDeleteConfirm = true;
-							}}>{$i18n.t('Delete')}</button
-						>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
-</div>
+	<div
+		class="grid min-h-[640px] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--st-border)] bg-[var(--st-card)] shadow-[var(--st-shadow)] md:grid-cols-[280px_1fr]"
+	>
+		<SiteRail
+			{sites}
+			{selectedId}
+			{creating}
+			{showAll}
+			isAdmin={$user?.role === 'admin'}
+			onSelect={select}
+			onCreate={() => (creating = true)}
+			onToggleAll={async (v) => {
+				showAll = v;
+				await load();
+			}}
+		/>
 
-<SiteEditor bind:show={showEditor} site={editing} onSaved={load} />
+		{#if creating}
+			<CreatePanel
+				onCancel={() => (creating = false)}
+				onCreated={async (site) => {
+					creating = false;
+					selectedId = site?.id ?? null;
+					tab = 'overview';
+					await load();
+				}}
+			/>
+		{:else if selected}
+			<SiteDetail site={selected} bind:tab onSaved={load} onDelete={() => (showDeleteConfirm = true)} />
+		{:else if loaded}
+			<div
+				class="flex flex-col items-center justify-center gap-2.5 px-10 py-16 text-center text-[var(--st-muted)]"
+			>
+				<div class="text-[34px]">🌐</div>
+				<div class="text-[15px] font-semibold text-[var(--st-ink)]">
+					{$i18n.t('Nothing published yet')}
+				</div>
+				<div class="max-w-xs text-[13px]">
+					{$i18n.t('Upload HTML and assets — get a shareable link in seconds.')}
+				</div>
+				<button
+					type="button"
+					class="st-btn st-btn-primary st-press mt-2"
+					onclick={() => (creating = true)}>{$i18n.t('Publish a Site')}</button
+				>
+			</div>
+		{/if}
+	</div>
+</div>
 
 <ConfirmDialog
 	bind:show={showDeleteConfirm}
 	title={$i18n.t('Delete site?')}
 	message={$i18n.t('The link will stop working immediately. This cannot be undone.')}
 	on:confirm={remove}
-	on:cancel={() => (confirmDelete = null)}
 />
