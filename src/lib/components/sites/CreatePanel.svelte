@@ -57,7 +57,7 @@
 	};
 </script>
 
-<div class="st-pane flex max-w-xl flex-col px-8 py-8 sm:px-10">
+<div class="st-pane flex min-w-0 max-w-xl flex-1 flex-col">
 	<h3 class="text-lg font-semibold tracking-tight">{$i18n.t('Publish a Site')}</h3>
 	<p class="mb-5 text-[13px] text-[var(--st-muted)]">
 		{$i18n.t('Upload HTML and assets — get a shareable link in seconds.')}

@@ -38,8 +38,8 @@
 	};
 </script>
 
-<section class="flex min-h-0 min-w-0 flex-1 flex-col">
-	<div class="flex flex-col gap-2.5 px-4 pt-4 md:px-6">
+<section class="flex min-w-0 flex-1 flex-col">
+	<div class="flex flex-col gap-2.5">
 		<div class="flex flex-wrap items-start gap-3.5">
 			<div class="min-w-0 flex-1">
 				<h2 class="text-lg font-semibold">{site.name}</h2>
@@ -70,7 +70,7 @@
 	</div>
 
 	<div
-		class="flex flex-none gap-0.5 overflow-x-auto border-b border-gray-100 px-4 pt-3 dark:border-gray-850 md:px-6"
+		class="flex flex-none gap-0.5 overflow-x-auto border-b border-gray-100 pt-3 dark:border-gray-850"
 		role="tablist"
 	>
 		{#each tabs as t (t.id)}
@@ -90,7 +90,7 @@
 		{/each}
 	</div>
 
-	<div class="flex-1 overflow-y-auto px-4 pb-7 pt-5 md:px-6">
+	<div class="pb-7 pt-5">
 		{#if tab === 'overview'}
 			<OverviewTab {site} onGoTab={(t) => (tab = t)} />
 		{:else if tab === 'files'}

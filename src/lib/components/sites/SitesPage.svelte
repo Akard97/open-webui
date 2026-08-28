@@ -60,17 +60,16 @@
 	onMount(load);
 </script>
 
-<div class="sites-root flex h-full w-full flex-col text-gray-800 dark:text-gray-100">
-	<div
-		class="flex flex-none flex-wrap items-baseline gap-2.5 border-b border-gray-100 px-4 py-3 dark:border-gray-850 md:px-6"
-	>
-		<h1 class="text-lg font-semibold">{$i18n.t('Sites')}</h1>
-		<span class="text-xs text-gray-500 dark:text-gray-400"
-			>{$i18n.t('Publish static pages and share them with a link.')}</span
-		>
-	</div>
+<div class="sites-root h-full w-full overflow-y-auto text-gray-800 dark:text-gray-100">
+	<div class="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">
+		<div class="mb-6">
+			<h1 class="text-2xl font-semibold tracking-tight">{$i18n.t('Sites')}</h1>
+			<div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+				{$i18n.t('Publish static pages and share them with a link.')}
+			</div>
+		</div>
 
-	<div class="flex min-h-0 flex-1 flex-col md:flex-row">
+		<div class="flex flex-col gap-6 md:flex-row md:gap-8">
 		<SiteRail
 			{sites}
 			{selectedId}
@@ -97,24 +96,25 @@
 			/>
 		{:else if selected}
 			<SiteDetail site={selected} bind:tab onSaved={load} onDelete={() => (showDeleteConfirm = true)} />
-		{:else if loaded}
-			<div
-				class="flex flex-1 flex-col items-center justify-center gap-2.5 px-10 py-16 text-center text-gray-500 dark:text-gray-400"
-			>
-				<div class="text-[34px]">🌐</div>
-				<div class="text-[15px] font-semibold text-gray-800 dark:text-gray-100">
-					{$i18n.t('Nothing published yet')}
-				</div>
-				<div class="max-w-xs text-[13px]">
-					{$i18n.t('Upload HTML and assets — get a shareable link in seconds.')}
-				</div>
-				<button
-					type="button"
-					class="st-btn st-btn-primary st-press mt-2"
-					onclick={() => (creating = true)}>{$i18n.t('Publish a Site')}</button
+			{:else if loaded}
+				<div
+					class="flex flex-1 flex-col items-center justify-center gap-2.5 rounded-xl border border-gray-100 px-10 py-16 text-center text-gray-500 dark:border-gray-850 dark:text-gray-400"
 				>
-			</div>
-		{/if}
+					<div class="text-[34px]">🌐</div>
+					<div class="text-[15px] font-semibold text-gray-800 dark:text-gray-100">
+						{$i18n.t('Nothing published yet')}
+					</div>
+					<div class="max-w-xs text-[13px]">
+						{$i18n.t('Upload HTML and assets — get a shareable link in seconds.')}
+					</div>
+					<button
+						type="button"
+						class="st-btn st-btn-primary st-press mt-2"
+						onclick={() => (creating = true)}>{$i18n.t('Publish a Site')}</button
+					>
+				</div>
+			{/if}
+		</div>
 	</div>
 </div>
 

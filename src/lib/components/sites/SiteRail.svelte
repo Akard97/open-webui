@@ -35,13 +35,11 @@
 	};
 </script>
 
-<aside
-	class="flex flex-none flex-col border-b border-gray-100 dark:border-gray-850 md:w-72 md:border-b-0 md:border-r"
->
-	<div class="flex flex-col gap-2 px-3 pb-2 pt-3">
+<aside class="flex w-full flex-none flex-col md:w-64">
+	<div class="flex flex-col gap-2">
 		<button
 			type="button"
-			class="st-press flex h-9 items-center justify-center gap-1.5 rounded-lg bg-gray-900 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+			class="st-press flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
 			onclick={onCreate}
 		>
 			＋ {$i18n.t('New site')}
@@ -61,8 +59,8 @@
 			</div>
 		{/if}
 	</div>
-	<nav class="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3 pt-1">
-		<div class="px-2 pb-1.5 pt-2 text-xs font-medium text-gray-400 dark:text-gray-500">
+	<nav class="flex flex-col gap-0.5 pt-2">
+		<div class="px-2.5 pb-1.5 pt-2 text-xs font-medium text-gray-400 dark:text-gray-500">
 			{$i18n.t('Published')} · {sites.length}
 		</div>
 		{#each sites as s (s.id)}
