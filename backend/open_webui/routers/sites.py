@@ -556,6 +556,7 @@ async def _record_view(
             filename,
             _visitor_key(site_id, ip, user_agent),
             bool(viewer is not None and viewer.id == owner_id),
+            user_id=viewer.id if viewer is not None else None,
         )
     except Exception:
         log.warning('Failed to record site view for %s', site_id, exc_info=True)

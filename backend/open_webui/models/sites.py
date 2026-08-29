@@ -40,6 +40,12 @@ class SiteView(Base):
     # linkable to the same visitor on another day or another site.
     visitor_key = Column(Text, nullable=False)
     is_owner = Column(Boolean, nullable=False, default=False)
+    # The signed-in viewer, when there was one. NULL means anonymous — or a
+    # row recorded before this column existed; the two are indistinguishable
+    # and do not need distinguishing. Anonymous views are unattributed
+    # because such requests are never resolved in the first place, not
+    # because the result is discarded.
+    user_id = Column(Text, nullable=True)
     created_at = Column(BigInteger, nullable=False)
 
     __table_args__ = (Index('ix_site_view_site_created', 'site_id', 'created_at'),)
@@ -67,6 +73,7 @@ class SiteViewModel(BaseModel):
     path: str
     visitor_key: str
     is_owner: bool
+    user_id: Optional[str] = None
     created_at: int
 
 
@@ -230,6 +237,7 @@ class SiteViewsTable:
         path: str,
         visitor_key: str,
         is_owner: bool,
+        user_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> None:
         async with get_async_db_context(db) as db:
@@ -240,6 +248,7 @@ class SiteViewsTable:
                     path=path,
                     visitor_key=visitor_key,
                     is_owner=is_owner,
+                    user_id=user_id,
                     created_at=_now(),
                 )
             )

@@ -738,3 +738,40 @@ async def test_analytics_endpoint_denies_without_the_site_publisher_permission(m
         r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=30')
 
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_record_view_stores_the_signed_in_viewer():
+    await SiteViews.record_view('s1', 'index.html', 'k1', False, user_id='u42')
+    rows = await SiteViews.list_views('s1')
+    assert rows[0].user_id == 'u42'
+
+
+@pytest.mark.asyncio
+async def test_record_view_leaves_anonymous_views_unattributed():
+    await SiteViews.record_view('s1', 'index.html', 'k1', False)
+    rows = await SiteViews.list_views('s1')
+    assert rows[0].user_id is None
+
+
+@pytest.mark.asyncio
+async def test_signed_in_viewer_is_attributed_on_a_served_page(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='attr-named', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=R_VIEWER) as c:
+        assert (await c.get('/sites/attr-named/')).status_code == 200
+
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].user_id == R_VIEWER.id
+    assert rows[0].is_owner is False
+
+
+@pytest.mark.asyncio
+async def test_anonymous_view_is_recorded_without_a_user_id(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='attr-anon', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        assert (await c.get('/sites/attr-anon/')).status_code == 200
+
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].user_id is None
