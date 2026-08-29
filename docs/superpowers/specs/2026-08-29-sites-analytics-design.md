@@ -103,9 +103,14 @@ with proxy headers enabled, so `client.host` is the real client address.
 
 No new module: the file stays small and the two tables are one cohesive concern.
 
-Day bucketing uses integer division on the millisecond timestamp
-(`created_at / 86_400_000` = days since epoch) rather than a SQL date function, so the
-same query runs on both SQLite and Postgres. Buckets are converted back to ISO dates in
+Day bucketing groups on `SiteView.created_at.op('/')(day_ms)` — the literal SQL `/`
+operator between two integer operands — rather than a SQL date function, so the same query
+runs on both SQLite and Postgres. This is deliberately not Python's `/` on the column:
+SQLAlchemy compiles that to true division (`CAST(... AS NUMERIC)` on Postgres), which gives
+every row its own fractional key, so `GROUP BY` fails to merge two views recorded on the
+same day at different times. Casting that true-division result to `Integer` is not a valid
+alternative either — Postgres rounds numeric-to-integer casts rather than truncating.
+`.op('/')` truncates (floors) directly in SQL. Buckets are converted back to ISO dates in
 Python.
 
 `SitesTable.delete_site_by_id` is extended to delete the site's `site_view` rows inside its
@@ -119,25 +124,37 @@ Hooked into `serve_site_entry` and `serve_site_file` in
 
 Rules, in evaluation order:
 
-1. **Access first.** `_resolve_site_for_view` runs unchanged. When it returns a
-   `RedirectResponse` (anonymous visitor bounced to `/auth`), nothing is recorded — a
-   bounced visitor did not view the page.
+1. **Access first.** `_resolve_site_for_view` resolves the site and the viewer together,
+   returning `(site, viewer)` rather than discarding the viewer it already resolved. When it
+   returns `(RedirectResponse, None)` (anonymous visitor bounced to `/auth`), nothing is
+   recorded — a bounced visitor did not view the page.
 2. **HTML only.** The entry route always qualifies. The file route qualifies only when the
    filename ends in `.html` or `.htm`. Assets (css, js, images) are never recorded.
 3. **Bot filter.** Skip when the User-Agent is empty or matches
    `bot|crawl|spider|slurp|headless|curl|wget|python-requests` (case-insensitive).
-4. **Owner detection.** Private sites have already resolved the viewer inside
-   `_resolve_site_for_view`. Public sites resolve the viewer via `_get_optional_user` only
-   when an `authorization` header or `token` cookie is actually present, so anonymous
-   public traffic pays no token-decode or user-lookup cost.
-5. **Write off the response path.** The insert is scheduled through FastAPI
-   `BackgroundTasks` and wrapped in `try/except Exception` with `log.warning`. A failing
-   analytics write must never delay or 500 a published page.
+4. **Owner detection.** The `viewer` `_resolve_site_for_view` resolved is threaded straight
+   into `_record_view`, so a private site's pageview does not repeat the JWT decode, up to
+   two Redis GETs, and the user lookup access resolution already performed. A public site's
+   `_resolve_site_for_view` returns `viewer=None` unconditionally — public sites are
+   readable without credentials, so nothing is resolved there — and `_record_view` resolves
+   the viewer itself via `_get_optional_user`, but only when an `authorization` header or
+   `token` cookie is actually present. Anonymous public traffic still pays no token-decode
+   or user-lookup cost; a logged-in owner browsing their own public site is still
+   recognised.
+5. **Serve first, record second.** The route handler calls `_serve_file` — which raises a
+   404 for a document the site does not have — before it calls `_record_view`. Only a
+   document that was actually served reaches this checklist, by construction: recording
+   depends on `_serve_file`'s prior success through explicit sequencing, not on FastAPI
+   discarding background tasks that were queued before a later exception. From there, the
+   insert is scheduled through FastAPI `BackgroundTasks` and wrapped in `try/except
+   Exception` with `log.warning`; a failing analytics write must never delay or 500 a
+   published page.
 
 ### Known imprecision
 
-Requests answered `304 Not Modified` are still recorded, because recording happens before
-response generation. This over-counts refreshes of cached pages slightly. Accepted: served
+Requests answered `304 Not Modified` are still recorded: `_record_view` runs whenever
+`_serve_file` has already succeeded, and it does not distinguish a fresh 200 from a
+revalidated 304. This over-counts refreshes of cached pages slightly. Accepted: served
 pages carry `Cache-Control: no-cache`, so revalidation implies the page was displayed.
 
 ## API
