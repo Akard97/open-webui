@@ -3,7 +3,7 @@ import uuid
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Boolean, Column, JSON, Text, delete, select
+from sqlalchemy import BigInteger, Boolean, Column, Index, JSON, Text, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
@@ -29,6 +29,21 @@ class Site(Base):
     updated_at = Column(BigInteger, nullable=False)
 
 
+class SiteView(Base):
+    __tablename__ = 'site_view'
+
+    id = Column(Text, primary_key=True)
+    site_id = Column(Text, nullable=False)
+    path = Column(Text, nullable=False)
+    # Daily-rotating HMAC of IP + User-Agent. Not reversible to an IP, and not
+    # linkable to the same visitor on another day or another site.
+    visitor_key = Column(Text, nullable=False)
+    is_owner = Column(Boolean, nullable=False, default=False)
+    created_at = Column(BigInteger, nullable=False)
+
+    __table_args__ = (Index('ix_site_view_site_created', 'site_id', 'created_at'),)
+
+
 class SiteModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,6 +56,17 @@ class SiteModel(BaseModel):
     entry_file: str
     created_at: int
     updated_at: int
+
+
+class SiteViewModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    site_id: str
+    path: str
+    visitor_key: str
+    is_owner: bool
+    created_at: int
 
 
 class SitesTable:
@@ -196,3 +222,41 @@ class SitesTable:
 
 
 Sites = SitesTable()
+
+
+class SiteViewsTable:
+    async def record_view(
+        self,
+        site_id: str,
+        path: str,
+        visitor_key: str,
+        is_owner: bool,
+        db: Optional[AsyncSession] = None,
+    ) -> None:
+        async with get_async_db_context(db) as db:
+            db.add(
+                SiteView(
+                    id=str(uuid.uuid4()),
+                    site_id=site_id,
+                    path=path,
+                    visitor_key=visitor_key,
+                    is_owner=is_owner,
+                    created_at=_now(),
+                )
+            )
+            await db.commit()
+
+    async def list_views(
+        self, site_id: str, db: Optional[AsyncSession] = None
+    ) -> list[SiteViewModel]:
+        """Test/debug helper: every recorded view for a site, oldest first."""
+        async with get_async_db_context(db) as db:
+            result = await db.execute(
+                select(SiteView)
+                .where(SiteView.site_id == site_id)
+                .order_by(SiteView.created_at.asc())
+            )
+            return [SiteViewModel.model_validate(v) for v in result.scalars().all()]
+
+
+SiteViews = SiteViewsTable()
