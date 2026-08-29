@@ -19,19 +19,36 @@
 	let series = $state<SeriesPoint[]>([]);
 	let topPages = $state<{ path: string; views: number }[]>([]);
 	let hover = $state<number | null>(null);
+	// Sticky across reloads: only a resolved response updates it, so a
+	// loading/failed window in between never yanks the "Yours" stat in or out.
+	let ownerVisible = $state(false);
+
+	// Request-generation counter shared by every trigger that re-runs the
+	// $effect below (range AND site — see the effect for why a site change
+	// re-runs it too). A response is only applied if no newer request — for
+	// either a different range or a different site — has started since, so a
+	// slow stale response can never paint another range's, or another site's,
+	// numbers under the current header.
+	let loadSeq = 0;
 
 	const geo = $derived(chartGeometry(series, W, H));
 	const isEmpty = $derived(!loading && !failed && totals.views === 0 && totals.owner_views === 0);
+	const dataUnknown = $derived(loading || failed);
 
 	const load = async (window: number) => {
+		const seq = ++loadSeq;
 		loading = true;
 		failed = false;
+		hover = null;
 		try {
 			const res = await getSiteAnalytics(localStorage.token, site.id, window);
+			if (seq !== loadSeq) return;
 			totals = res.totals;
 			series = res.series;
 			topPages = res.top_pages;
+			ownerVisible = res.totals.owner_views > 0;
 		} catch (err) {
+			if (seq !== loadSeq) return;
 			// Analytics is one card, not the whole tab — surface it inline and
 			// let the rest of Overview render normally.
 			console.error(err);
@@ -41,6 +58,10 @@
 	};
 
 	$effect(() => {
+		// site.id is read inside load(), synchronously before its first await,
+		// so this effect depends on `site` too — not just `days`. That means a
+		// rail selection change re-runs it exactly like a range change does,
+		// and the shared loadSeq counter above covers both.
 		load(days);
 	});
 
@@ -58,7 +79,7 @@
 					{$i18n.t('Views')}
 				</div>
 				<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight">
-					{formatCount(totals.views)}
+					{dataUnknown ? '—' : formatCount(totals.views)}
 				</div>
 			</div>
 			<div>
@@ -66,10 +87,10 @@
 					{$i18n.t('Unique visitors')}
 				</div>
 				<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight">
-					{formatCount(totals.unique_visitors)}
+					{dataUnknown ? '—' : formatCount(totals.unique_visitors)}
 				</div>
 			</div>
-			{#if totals.owner_views > 0}
+			{#if ownerVisible}
 				<div>
 					<div class="text-xs font-medium text-gray-400 dark:text-gray-500">
 						{$i18n.t('Yours')}
@@ -77,7 +98,7 @@
 					<div
 						class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight text-[var(--st-muted)]"
 					>
-						{formatCount(totals.owner_views)}
+						{dataUnknown ? '—' : formatCount(totals.owner_views)}
 					</div>
 				</div>
 			{/if}
@@ -115,7 +136,7 @@
 		<div class="relative mt-3">
 			<svg
 				viewBox="0 0 {W} {H}"
-				class="block h-auto w-full touch-none"
+				class="block h-auto w-full touch-pan-y"
 				role="img"
 				aria-label={$i18n.t('Views over time')}
 				onpointermove={onMove}
@@ -148,9 +169,12 @@
 						>{formatCount(series[hover].views)}
 						{series[hover].views === 1 ? $i18n.t('view') : $i18n.t('views')}</span
 					>
+				{:else if series.length > 0}
+					<span>{dayjs(series[0].day).format('MMM D')}</span>
+					<span>{dayjs(series[series.length - 1].day).format('MMM D')}</span>
 				{:else}
-					<span>{dayjs(series[0]?.day).format('MMM D')}</span>
-					<span>{dayjs(series[series.length - 1]?.day).format('MMM D')}</span>
+					<span>—</span>
+					<span>—</span>
 				{/if}
 			</div>
 		</div>
@@ -170,7 +194,7 @@
 			>
 				<span class="min-w-0 flex-1 truncate">/{p.path}</span>
 				<div
-					class="h-[5px] w-24 rounded-[3px] bg-[var(--st-chart)]"
+					class="h-[5px] rounded-[3px] bg-[var(--st-chart)]"
 					style="width: {Math.max(6, (p.views / topPages[0].views) * 96)}px"
 				></div>
 				<span class="w-12 text-right tabular-nums text-[var(--st-muted)]"
