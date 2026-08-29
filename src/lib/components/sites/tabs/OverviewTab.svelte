@@ -136,6 +136,12 @@
 			// let the rest of Overview render normally.
 			console.error(err);
 			failed = true;
+			// Never leave a previous site's (or range's) roster in state: with
+			// `failed` true, ViewersCard renders the failure message off this
+			// prop, not off `viewers.people`, but a stale non-empty roster
+			// would otherwise still sit in state ready to leak the moment
+			// `failed` is misread as ok.
+			viewers = { people: [], anonymous_views: 0, more: 0 };
 		}
 		// Reached only by the newest request: both paths above return early
 		// when a newer one has started, so this write is gated too.
@@ -190,7 +196,7 @@
 	/>
 
 	<div class="grid gap-4 lg:grid-cols-2">
-		<ViewersCard {loading} {viewers} />
+		<ViewersCard {loading} {failed} {viewers} />
 		{#if showTopPages}
 			<TopPagesCard {loading} {topPages} />
 		{/if}

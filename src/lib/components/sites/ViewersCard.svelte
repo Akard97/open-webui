@@ -11,9 +11,11 @@
 	// Presentational: OverviewTab owns the fetch and hands the roster down.
 	let {
 		loading = false,
+		failed = false,
 		viewers = { people: [], anonymous_views: 0, more: 0 }
 	}: {
 		loading?: boolean;
+		failed?: boolean;
 		viewers?: {
 			people: {
 				user_id: string;
@@ -45,6 +47,8 @@
 			<div class="h-3 w-4/5 animate-pulse rounded bg-[var(--st-hover)]"></div>
 			<div class="h-3 w-3/5 animate-pulse rounded bg-[var(--st-hover)]"></div>
 		</div>
+	{:else if failed}
+		<div class="py-1.5 text-[13px] text-[var(--st-muted)]">{$i18n.t("Couldn't load viewers.")}</div>
 	{:else if isEmpty}
 		<div class="py-1.5 text-[13px] text-[var(--st-muted)]">{$i18n.t('No viewers yet')}</div>
 	{:else}
@@ -64,7 +68,7 @@
 				<span class="shrink-0 text-[11px] text-[var(--st-faint)]"
 					>{dayjs(p.last_viewed_at).fromNow()}</span
 				>
-				<span class="w-8 shrink-0 text-right tabular-nums text-[var(--st-muted)]"
+				<span class="w-12 shrink-0 text-right tabular-nums text-[var(--st-muted)]"
 					>{formatCount(p.views, locale)}</span
 				>
 			</div>
@@ -82,7 +86,7 @@
 					aria-hidden="true">·</span
 				>
 				<span class="min-w-0 flex-1 truncate text-[var(--st-muted)]">{$i18n.t('Anonymous')}</span>
-				<span class="w-8 shrink-0 text-right tabular-nums text-[var(--st-muted)]"
+				<span class="w-12 shrink-0 text-right tabular-nums text-[var(--st-muted)]"
 					>{formatCount(viewers.anonymous_views, locale)}</span
 				>
 			</div>
@@ -90,8 +94,7 @@
 
 		{#if viewers.more > 0}
 			<div class="pt-1.5 text-[11px] text-[var(--st-faint)]">
-				+{formatCount(viewers.more, locale)}
-				{$i18n.t('more')}
+				{$i18n.t('+{{count}} more', { count: viewers.more })}
 			</div>
 		{/if}
 	{/if}
