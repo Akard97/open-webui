@@ -1,6 +1,10 @@
+import uuid
+from datetime import datetime, timezone
+
 import pytest
 
-from open_webui.models.sites import SiteViews
+from open_webui.internal.db import get_async_db_context
+from open_webui.models.sites import SiteView, SiteViews
 
 
 @pytest.mark.asyncio
@@ -22,27 +26,31 @@ async def test_record_view_marks_owner_visits():
     assert rows[0].is_owner is True
 
 
-from datetime import datetime, timezone
-
 DAY_MS = 86_400_000
 # 2026-08-29T12:00:00Z, pinned so day bucketing is deterministic.
 NOW_MS = int(datetime(2026, 8, 29, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
 
 
 async def _record_at(site_id, path, key, is_owner, ts_ms):
-    """record_view stamps its own time; rewrite created_at for windowed tests."""
-    from open_webui.internal.db import get_async_db_context
-    from open_webui.models.sites import SiteView
-    from sqlalchemy import select
+    """Insert a SiteView row directly with a pinned created_at.
 
-    await SiteViews.record_view(site_id, path, key, is_owner)
+    Deliberately bypasses record_view (which stamps its own wall-clock time)
+    instead of inserting via it and then rewriting/re-querying the row
+    afterward: re-querying by ORDER BY created_at DESC on the very column
+    about to be rewritten is unsound once an earlier call in the same test
+    has already pinned a row's created_at ahead of the real clock.
+    """
     async with get_async_db_context(None) as db:
-        row = (
-            await db.execute(
-                select(SiteView).where(SiteView.site_id == site_id).order_by(SiteView.created_at.desc())
+        db.add(
+            SiteView(
+                id=str(uuid.uuid4()),
+                site_id=site_id,
+                path=path,
+                visitor_key=key,
+                is_owner=is_owner,
+                created_at=ts_ms,
             )
-        ).scalars().first()
-        row.created_at = ts_ms
+        )
         await db.commit()
 
 
@@ -78,11 +86,37 @@ async def test_get_analytics_series_is_zero_filled_and_window_sized():
     a = await SiteViews.get_analytics('s1', 7, now_ms=NOW_MS)
 
     assert len(a['series']) == 7
+    assert a['series'][0] == {'day': '2026-08-23', 'views': 0}
     assert a['series'][-1] == {'day': '2026-08-29', 'views': 1}
     assert a['series'][-3] == {'day': '2026-08-27', 'views': 1}
     assert a['series'][-2] == {'day': '2026-08-28', 'views': 0}
     days = [p['day'] for p in a['series']]
     assert days == sorted(days)
+
+
+@pytest.mark.asyncio
+async def test_get_analytics_sums_multiple_views_on_the_same_day():
+    """Two non-owner views on the same UTC day, at different times, must land
+    in the same day bucket and sum together.
+
+    Regression test for a bucketing bug where SQLAlchemy compiled the
+    `created_at / day_ms` day-index expression to true (fractional) division
+    in SQL. GROUP BY then grouped on the fractional value, so two views on
+    the same calendar day at different times of day fell into separate SQL
+    groups; truncating those distinct fractional keys to the same integer
+    day afterward in Python silently kept only the last group's count.
+    """
+    day_start = int(datetime(2026, 8, 29, 0, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    morning = day_start + 9 * 60 * 60 * 1000  # 2026-08-29T09:00:00Z
+    evening = day_start + 21 * 60 * 60 * 1000  # 2026-08-29T21:00:00Z
+
+    await _record_at('s1', 'index.html', 'k1', False, morning)
+    await _record_at('s1', 'about.html', 'k2', False, evening)
+
+    a = await SiteViews.get_analytics('s1', 7, now_ms=NOW_MS)
+
+    assert a['series'][-1] == {'day': '2026-08-29', 'views': 2}
+    assert a['totals']['views'] == 2
 
 
 @pytest.mark.asyncio

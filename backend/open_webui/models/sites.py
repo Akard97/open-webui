@@ -271,9 +271,10 @@ class SiteViewsTable:
         Owner visits are excluded from every visitor-facing number and reported
         on their own as `owner_views`.
 
-        Day bucketing is integer division on the millisecond timestamp rather
-        than a SQL date function, so the identical query runs on SQLite and
-        Postgres.
+        Day bucketing uses the SQL `/` operator (via `.op('/')`) between two
+        integer operands rather than a SQL date function, so the identical
+        query runs on SQLite and Postgres, and truncates (floors) rather than
+        rounds since `created_at` is always positive.
         """
         now_ms = _now() if now_ms is None else now_ms
         day_ms = 86_400_000
@@ -299,7 +300,7 @@ class SiteViewsTable:
                 )
             ).scalar_one()
 
-            day_idx = (SiteView.created_at / day_ms).label('day_idx')
+            day_idx = SiteView.created_at.op('/')(day_ms).label('day_idx')
             rows = (
                 await db.execute(
                     select(day_idx, func.count(SiteView.id)).where(*visitors).group_by(day_idx)
