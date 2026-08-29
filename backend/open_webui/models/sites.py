@@ -116,9 +116,7 @@ class SitesTable:
 
     async def get_sites_by_user_id(self, user_id: str, db: Optional[AsyncSession] = None) -> list[SiteModel]:
         async with get_async_db_context(db) as db:
-            result = await db.execute(
-                select(Site).where(Site.user_id == user_id).order_by(Site.updated_at.desc())
-            )
+            result = await db.execute(select(Site).where(Site.user_id == user_id).order_by(Site.updated_at.desc()))
             return [SiteModel.model_validate(s) for s in result.scalars().all()]
 
     async def get_all_sites(self, db: Optional[AsyncSession] = None) -> list[SiteModel]:
@@ -126,9 +124,7 @@ class SitesTable:
             result = await db.execute(select(Site).order_by(Site.updated_at.desc()))
             return [SiteModel.model_validate(s) for s in result.scalars().all()]
 
-    async def update_site_by_id(
-        self, id: str, updates: dict, db: Optional[AsyncSession] = None
-    ) -> Optional[SiteModel]:
+    async def update_site_by_id(self, id: str, updates: dict, db: Optional[AsyncSession] = None) -> Optional[SiteModel]:
         async with get_async_db_context(db) as db:
             site = (await db.execute(select(Site).where(Site.id == id))).scalars().first()
             if not site:
@@ -249,15 +245,11 @@ class SiteViewsTable:
             )
             await db.commit()
 
-    async def list_views(
-        self, site_id: str, db: Optional[AsyncSession] = None
-    ) -> list[SiteViewModel]:
+    async def list_views(self, site_id: str, db: Optional[AsyncSession] = None) -> list[SiteViewModel]:
         """Test/debug helper: every recorded view for a site, oldest first."""
         async with get_async_db_context(db) as db:
             result = await db.execute(
-                select(SiteView)
-                .where(SiteView.site_id == site_id)
-                .order_by(SiteView.created_at.asc())
+                select(SiteView).where(SiteView.site_id == site_id).order_by(SiteView.created_at.asc())
             )
             return [SiteViewModel.model_validate(v) for v in result.scalars().all()]
 
@@ -297,17 +289,11 @@ class SiteViewsTable:
                 )
             ).one()
             owner_views = (
-                await db.execute(
-                    select(func.count(SiteView.id)).where(*in_window, SiteView.is_owner.is_(True))
-                )
+                await db.execute(select(func.count(SiteView.id)).where(*in_window, SiteView.is_owner.is_(True)))
             ).scalar_one()
 
             day_idx = SiteView.created_at.op('/')(day_ms).label('day_idx')
-            rows = (
-                await db.execute(
-                    select(day_idx, func.count(SiteView.id)).where(*visitors).group_by(day_idx)
-                )
-            ).all()
+            rows = (await db.execute(select(day_idx, func.count(SiteView.id)).where(*visitors).group_by(day_idx))).all()
             counts = {int(idx): int(n) for idx, n in rows}
 
             pages = (
