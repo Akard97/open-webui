@@ -113,3 +113,22 @@ export const deleteSite = async (token: string = '', id: string) => {
 	if (error) throw error;
 	return res;
 };
+
+export const getSiteAnalytics = async (token: string = '', id: string, days: number = 30) => {
+	let error = null;
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/sites/${encodeURIComponent(id)}/analytics?days=${days}`,
+		{
+			method: 'GET',
+			headers: jsonHeaders(token)
+		}
+	)
+		.then(handle)
+		.catch((err) => {
+			error = err.detail ?? err;
+			console.error(err);
+			return null;
+		});
+	if (error) throw error;
+	return res;
+};
