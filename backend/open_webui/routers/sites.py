@@ -318,6 +318,24 @@ async def _get_owned_site(id: str, user, db: AsyncSession) -> SiteModel:
     return site
 
 
+ANALYTICS_WINDOWS = (7, 30, 90)
+
+
+@router.get('/{id}/analytics')
+async def get_site_analytics(
+    request: Request,
+    id: str,
+    days: int = 30,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if days not in ANALYTICS_WINDOWS:
+        raise _bad(f'days must be one of {ANALYTICS_WINDOWS}')
+    await _require_publisher(request, user, db)
+    site = await _get_owned_site(id, user, db)
+    return await SiteViews.get_analytics(site.id, days, db=db)
+
+
 @router.post('/{id}/update', response_model=SiteResponse)
 async def update_site(
     request: Request,

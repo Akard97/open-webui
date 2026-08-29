@@ -457,3 +457,79 @@ async def test_recording_failure_does_not_break_serving(monkeypatch, tmp_path):
 
     assert r.status_code == 200
     assert r.content == b'<h1>demo</h1>'
+
+
+def _api_client(monkeypatch, *, user):
+    from open_webui.utils.auth import get_verified_user
+
+    app = FastAPI()
+    app.include_router(sites_router.router, prefix='/api/v1/sites')
+    app.dependency_overrides[get_verified_user] = lambda: user
+
+    async def _allow(request, u, db):
+        return None
+
+    monkeypatch.setattr(sites_router, '_require_publisher', _allow)
+    return httpx.AsyncClient(transport=ASGITransport(app=app), base_url='http://test')
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_returns_the_full_shape(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='api-shape', public=True)
+    await SiteViews.record_view(site.id, 'index.html', 'k1', False)
+    await SiteViews.record_view(site.id, 'index.html', 'kowner', True)
+
+    async with _api_client(monkeypatch, user=R_OWNER) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=30')
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body['days'] == 30
+    assert body['totals'] == {'views': 1, 'unique_visitors': 1, 'owner_views': 1}
+    assert len(body['series']) == 30
+    assert body['top_pages'] == [{'path': 'index.html', 'views': 1}]
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_defaults_to_thirty_days(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='api-default', public=True)
+
+    async with _api_client(monkeypatch, user=R_OWNER) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics')
+
+    assert r.status_code == 200
+    assert r.json()['days'] == 30
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('days', [1, 14, 365, 0, -7])
+async def test_analytics_endpoint_rejects_unsupported_windows(monkeypatch, tmp_path, days):
+    site = await _seed_site(tmp_path, slug=f'api-bad-{abs(days)}', public=True)
+
+    async with _api_client(monkeypatch, user=R_OWNER) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days={days}')
+
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_hides_other_peoples_sites(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='api-private', public=True)
+
+    async with _api_client(monkeypatch, user=R_VIEWER) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=30')
+
+    # 404, not 403: the endpoint must not confirm that the site exists.
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_allows_admins(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='api-admin', public=True)
+    admin = SimpleNamespace(id='adm', role='admin', name='Admin', email='a@x.io')
+
+    async with _api_client(monkeypatch, user=admin) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=7')
+
+    assert r.status_code == 200
+    assert r.json()['days'] == 7
