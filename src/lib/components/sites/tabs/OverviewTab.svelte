@@ -10,6 +10,7 @@
 	import type { SeriesPoint } from '../lib/analytics';
 	import InsightsCard from '../InsightsCard.svelte';
 	import TopPagesCard from '../TopPagesCard.svelte';
+	import ViewersCard from '../ViewersCard.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -81,6 +82,17 @@
 	let totals = $state({ views: 0, unique_visitors: 0, owner_views: 0 });
 	let series = $state<SeriesPoint[]>([]);
 	let topPages = $state<{ path: string; views: number }[]>([]);
+	let viewers = $state<{
+		people: {
+			user_id: string;
+			name: string;
+			profile_image_url: string | null;
+			views: number;
+			last_viewed_at: number;
+		}[];
+		anonymous_views: number;
+		more: number;
+	}>({ people: [], anonymous_views: 0, more: 0 });
 	// Sticky across reloads: only a resolved response updates it, so a
 	// loading/failed window in between never yanks the "Yours" stat in or
 	// out. Reset explicitly on a site switch (see the effect below) so it
@@ -116,6 +128,7 @@
 			totals = res.totals;
 			series = res.series;
 			topPages = res.top_pages;
+			viewers = res.viewers ?? { people: [], anonymous_views: 0, more: 0 };
 			ownerVisible = res.totals.owner_views > 0;
 		} catch (err) {
 			if (seq !== loadSeq) return;
@@ -177,29 +190,26 @@
 	/>
 
 	<div class="grid gap-4 lg:grid-cols-2">
+		<ViewersCard {loading} {viewers} />
 		{#if showTopPages}
 			<TopPagesCard {loading} {topPages} />
 		{/if}
+	</div>
 
-		<div
-			class="rounded-xl border border-[var(--st-hairline)] px-4 py-3.5 {showTopPages
-				? ''
-				: 'lg:col-span-2'}"
-		>
-			<h4 class="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">
-				{$i18n.t('Details')}
-			</h4>
-			{#each details as row, i (row.id)}
-				<div
-					class="flex justify-between gap-3 py-1.5 text-[13px] {i < details.length - 1
-						? 'border-b border-[var(--st-hairline)]'
-						: ''}"
-				>
-					<span class="text-[var(--st-muted)]">{row.label}</span>
-					<span class="truncate text-right" title={row.value}>{row.value}</span>
-				</div>
-			{/each}
-		</div>
+	<div class="rounded-xl border border-[var(--st-hairline)] px-4 py-3.5">
+		<h4 class="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">
+			{$i18n.t('Details')}
+		</h4>
+		{#each details as row, i (row.id)}
+			<div
+				class="flex justify-between gap-3 py-1.5 text-[13px] {i < details.length - 1
+					? 'border-b border-[var(--st-hairline)]'
+					: ''}"
+			>
+				<span class="text-[var(--st-muted)]">{row.label}</span>
+				<span class="truncate text-right" title={row.value}>{row.value}</span>
+			</div>
+		{/each}
 	</div>
 
 	<div
