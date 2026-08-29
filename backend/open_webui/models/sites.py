@@ -269,15 +269,27 @@ class SiteViewsTable:
         integer operands rather than a SQL date function, so the identical
         query runs on SQLite and Postgres, and truncates (floors) rather than
         rounds since `created_at` is always positive.
+
+        The window is bounded at BOTH ends. The upper bound is not redundant:
+        a row stamped in the future (a server clock rolled back, a bad import)
+        would otherwise be counted in `totals` while its day index fell past
+        the last `series` bucket, so it would appear in no day at all and
+        `sum(series) != totals['views']` — an inconsistency inside a single
+        response. Excluding such rows keeps the two halves in agreement.
         """
         now_ms = _now() if now_ms is None else now_ms
         day_ms = 86_400_000
         today_idx = now_ms // day_ms
         first_idx = today_idx - (days - 1)
         window_start = first_idx * day_ms
+        window_end = (today_idx + 1) * day_ms  # exclusive: end of today, UTC
 
         async with get_async_db_context(db) as db:
-            in_window = (SiteView.site_id == site_id, SiteView.created_at >= window_start)
+            in_window = (
+                SiteView.site_id == site_id,
+                SiteView.created_at >= window_start,
+                SiteView.created_at < window_end,
+            )
             visitors = (*in_window, SiteView.is_owner.is_(False))
 
             totals_row = (

@@ -504,44 +504,92 @@ def _is_html(filename: str) -> bool:
     return bool(HTML_EXT_RE.search(filename or ''))
 
 
-async def _record_view_task(site_id: str, filename: str, visitor_key: str, is_owner: bool) -> None:
-    """Best-effort. Analytics must never take a published page down."""
-    try:
-        await SiteViews.record_view(site_id, filename, visitor_key, is_owner)
-    except Exception:
-        log.warning('Failed to record site view for %s', site_id, exc_info=True)
+async def _record_view(
+    *,
+    site_id: str,
+    owner_id: str,
+    filename: str,
+    method: str,
+    user_agent: str,
+    ip: str,
+    has_credentials: bool,
+    request: Request,
+    viewer,
+) -> None:
+    """Record a pageview. Runs as a background task, AFTER the response is sent.
 
+    Nothing in here is on the response path: the filters, the HMAC, the
+    token decode and the INSERT all happen once the visitor already has their
+    page. Best-effort throughout — analytics must never take a published page
+    down, so every failure is swallowed and logged.
 
-async def _record_view(site, filename: str, request: Request, background: BackgroundTasks, *, viewer=None) -> None:
-    """Queue a pageview for a document that has already been served.
-
-    Callers must invoke this only AFTER access resolution succeeded AND
-    _serve_file returned: a visitor bounced to the login page is never counted,
-    and neither is a request for a file the site does not have.
-
-    `viewer` is whoever access resolution already resolved. It is None for a
-    public site, which is readable without credentials and so resolves nobody.
+    `request` comes along only because `_get_optional_user` needs
+    `app.state.redis` to check token revocation, and it is touched only when
+    the request actually carried credentials. Reading it here is sound:
+    Starlette runs background tasks inside the still-open ASGI scope, and the
+    scalars this function filters on were captured before the response anyway.
     """
     try:
+        # Only a GET displays a page. HEAD (link-preview fetchers, uptime
+        # monitors — often sending browser-shaped User-Agents the bot filter
+        # will not catch) transfers no body and renders nothing.
+        # Today these are FastAPI APIRoutes, which unlike Starlette's plain
+        # Route do NOT auto-add HEAD, so such a request is already rejected
+        # with 405 before reaching here. This guard is what keeps that true
+        # if the routes are ever declared with methods=['GET', 'HEAD'] or
+        # mounted as Starlette routes; it must not be removed as dead code.
+        if method != 'GET':
+            return
         if not _is_html(filename):
             return
-        user_agent = request.headers.get('user-agent', '')
         if _is_bot(user_agent):
             return
-        if viewer is None and (request.headers.get('authorization') or request.cookies.get('token')):
+        if viewer is None and has_credentials:
             # Only a public site reaches here with viewer None: a private one
             # required valid credentials to resolve, and that user was passed
             # in. This is where a logged-in owner viewing their own public site
             # is recognised — and anonymous traffic, carrying no credentials,
             # pays neither a token decode nor a user lookup.
             viewer = await _get_optional_user(request)
-        ip = request.client.host if request.client else ''
-        background.add_task(
-            _record_view_task,
-            site.id,
+        await SiteViews.record_view(
+            site_id,
             filename,
-            _visitor_key(site.id, ip, user_agent),
-            bool(viewer is not None and viewer.id == site.user_id),
+            _visitor_key(site_id, ip, user_agent),
+            bool(viewer is not None and viewer.id == owner_id),
+        )
+    except Exception:
+        log.warning('Failed to record site view for %s', site_id, exc_info=True)
+
+
+def _queue_view(site, filename: str, request: Request, background: BackgroundTasks, *, viewer=None) -> None:
+    """Queue a pageview for a document that has already been served.
+
+    Callers must invoke this only AFTER access resolution succeeded AND
+    _serve_file returned: a visitor bounced to the login page is never counted,
+    and neither is a request for a file the site does not have.
+
+    This is the whole cost analytics adds to the response path: a handful of
+    dict lookups off the already-parsed request, and an append to the response's
+    background-task list. Everything else is deferred to `_record_view`.
+
+    `viewer` is whoever access resolution already resolved. It is None for a
+    public site, which is readable without credentials and so resolves nobody.
+    """
+    try:
+        background.add_task(
+            _record_view,
+            site_id=site.id,
+            owner_id=site.user_id,
+            filename=filename,
+            method=request.method,
+            user_agent=request.headers.get('user-agent', ''),
+            # SECURITY: the peer address only, never a forwarded header — those
+            # are caller-controlled and would let anyone mint unlimited
+            # visitor keys and inflate unique_visitors at will.
+            ip=request.client.host if request.client else '',
+            has_credentials=bool(request.headers.get('authorization') or request.cookies.get('token')),
+            request=request,
+            viewer=viewer,
         )
     except Exception:
         log.warning('Failed to queue site view for %s', getattr(site, 'id', '?'), exc_info=True)
@@ -654,7 +702,7 @@ async def serve_site_entry(
     # Serve first, record second: _serve_file raises 404 for a file the site
     # does not have, so only a document that actually exists is counted.
     response = _serve_file(site, site.entry_file)
-    await _record_view(site, site.entry_file, request, background, viewer=viewer)
+    _queue_view(site, site.entry_file, request, background, viewer=viewer)
     return response
 
 
@@ -668,5 +716,5 @@ async def serve_site_file(
 ):
     site, viewer = await _resolve_site_for_view(slug, request, db, is_entry=False)
     response = _serve_file(site, filename)
-    await _record_view(site, filename, request, background, viewer=viewer)
+    _queue_view(site, filename, request, background, viewer=viewer)
     return response

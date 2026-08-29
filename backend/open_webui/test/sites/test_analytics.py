@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -127,6 +128,38 @@ async def test_get_analytics_ignores_views_outside_the_window():
 
     assert a['totals']['views'] == 0
     assert all(p['views'] == 0 for p in a['series'])
+
+
+@pytest.mark.asyncio
+async def test_get_analytics_excludes_future_dated_rows_so_the_series_sums_to_the_total():
+    """A row stamped after the end of today (clock rollback, bad import) has a
+    day index past the last series bucket, so counting it in `totals` while no
+    `series` entry can hold it would make a single response contradict itself."""
+    await _record_at('s1', 'index.html', 'k1', False, NOW_MS)
+    await _record_at('s1', 'index.html', 'kfuture', False, NOW_MS + 3 * DAY_MS)
+    await _record_at('s1', 'index.html', 'kowner-future', True, NOW_MS + 3 * DAY_MS)
+
+    a = await SiteViews.get_analytics('s1', 7, now_ms=NOW_MS)
+
+    assert a['totals']['views'] == 1
+    assert a['totals']['unique_visitors'] == 1
+    assert a['totals']['owner_views'] == 0
+    assert sum(p['views'] for p in a['series']) == a['totals']['views']
+    assert a['top_pages'] == [{'path': 'index.html', 'views': 1}]
+
+
+@pytest.mark.asyncio
+async def test_get_analytics_keeps_the_last_millisecond_of_today():
+    """The upper bound is exclusive at the END of today, not at `now`: a view
+    recorded later today must still count."""
+    end_of_today = ((NOW_MS // DAY_MS) + 1) * DAY_MS - 1
+
+    await _record_at('s1', 'index.html', 'k1', False, end_of_today)
+
+    a = await SiteViews.get_analytics('s1', 7, now_ms=NOW_MS)
+
+    assert a['totals']['views'] == 1
+    assert a['series'][-1] == {'day': '2026-08-29', 'views': 1}
 
 
 @pytest.mark.asyncio
@@ -265,7 +298,7 @@ def test_is_html_rejects_assets(name):
 from types import SimpleNamespace
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from httpx import ASGITransport
 
 from open_webui.models.sites import Sites
@@ -366,6 +399,59 @@ async def test_missing_document_is_not_recorded(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_head_requests_are_not_recorded(monkeypatch, tmp_path):
+    """A HEAD renders no page, so it must never count as a pageview — and the
+    bot filter will not catch one, because link-preview fetchers and uptime
+    monitors routinely send browser-shaped User-Agents.
+
+    Today these are FastAPI APIRoutes, which (unlike Starlette's plain Route)
+    do not auto-add HEAD to a GET route, so the request is rejected with 405
+    and never reaches recording. This test pins the outcome, not the mechanism:
+    it stays green if HEAD is ever allowed through, because `_record_view`'s
+    method guard then does the rejecting instead.
+    """
+    site = await _seed_site(tmp_path, slug='rec-head', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        assert (await c.head('/sites/rec-head/')).status_code in (200, 405)
+        assert (await c.head('/sites/rec-head/about.html')).status_code in (200, 405)
+
+    assert await SiteViews.list_views(site.id) == []
+
+
+@pytest.mark.asyncio
+async def test_record_view_ignores_non_get_methods():
+    """The method guard itself, exercised directly: it is the backstop that
+    keeps HEAD uncounted if these routes are ever declared with
+    methods=['GET', 'HEAD'] or mounted as plain Starlette routes."""
+    for method in ('HEAD', 'OPTIONS'):
+        await sites_router._record_view(
+            site_id='s-head',
+            owner_id='o1',
+            filename='index.html',
+            method=method,
+            user_agent=BROWSER_UA,
+            ip='10.0.0.1',
+            has_credentials=False,
+            request=None,
+            viewer=None,
+        )
+    assert await SiteViews.list_views('s-head') == []
+
+    await sites_router._record_view(
+        site_id='s-head',
+        owner_id='o1',
+        filename='index.html',
+        method='GET',
+        user_agent=BROWSER_UA,
+        ip='10.0.0.1',
+        has_credentials=False,
+        request=None,
+        viewer=None,
+    )
+    assert len(await SiteViews.list_views('s-head')) == 1
+
+
+@pytest.mark.asyncio
 async def test_bot_requests_are_not_recorded(monkeypatch, tmp_path):
     site = await _seed_site(tmp_path, slug='rec-bot', public=True)
     async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
@@ -441,6 +527,56 @@ async def test_non_owner_visit_is_not_flagged(monkeypatch, tmp_path):
     rows = await SiteViews.list_views(site.id)
     assert len(rows) == 1
     assert rows[0].is_owner is False
+
+
+@pytest.mark.asyncio
+async def test_queueing_a_view_does_no_analytics_work_on_the_response_path(monkeypatch, tmp_path):
+    """`_queue_view` must only capture request scalars and append a task.
+
+    The token decode, the visitor-key HMAC and the INSERT all belong after the
+    response. This checks the boundary directly: queueing resolves no user and
+    writes no row, and both happen only once the queued task is awaited.
+    """
+    from fastapi import BackgroundTasks
+
+    site = await _seed_site(tmp_path, slug='rec-deferred', public=True)
+    calls = {'count': 0}
+
+    async def _fake_optional_user(request):
+        calls['count'] += 1
+        return R_OWNER
+
+    monkeypatch.setattr(sites_router, '_get_optional_user', _fake_optional_user)
+
+    request = httpx.Request(
+        'GET',
+        'http://test/sites/rec-deferred/',
+        headers={'user-agent': BROWSER_UA, 'cookie': 'token=t'},
+    )
+    scope = {
+        'type': 'http',
+        'method': 'GET',
+        'path': '/sites/rec-deferred/',
+        'headers': [(k.lower().encode(), v.encode()) for k, v in request.headers.items()],
+        'client': ('10.0.0.7', 51234),
+        'query_string': b'',
+    }
+
+    background = BackgroundTasks()
+    assert not asyncio.iscoroutinefunction(sites_router._queue_view)
+    sites_router._queue_view(site, 'index.html', Request(scope), background, viewer=None)
+
+    # Queued, but nothing has happened yet.
+    assert len(background.tasks) == 1
+    assert calls['count'] == 0
+    assert await SiteViews.list_views(site.id) == []
+
+    await background()
+
+    assert calls['count'] == 1
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].is_owner is True  # the credentialed owner, resolved in the task
 
 
 @pytest.mark.asyncio
