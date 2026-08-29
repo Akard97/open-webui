@@ -372,5 +372,90 @@ class SiteViewsTable:
             'top_pages': [{'path': p, 'views': int(n)} for p, n in pages],
         }
 
+    async def get_viewers(
+        self,
+        site_id: str,
+        days: int,
+        limit: int = 8,
+        now_ms: Optional[int] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
+        """Who viewed a site in the window: named people, plus an anonymous total.
+
+        Owner visits are excluded, like every other visitor-facing number —
+        the `Yours` stat already reports them.
+
+        Ranking is by view count, tie-broken by most recent view then by
+        user id, so the order is deterministic rather than whatever the
+        database happens to return.
+
+        `more` lets the card say "+N more" without shipping the whole roster
+        for a site with a large audience.
+        """
+        now_ms = _now() if now_ms is None else now_ms
+        day_ms = 86_400_000
+        today_idx = now_ms // day_ms
+        window_start = (today_idx - (days - 1)) * day_ms
+        window_end = (today_idx + 1) * day_ms
+
+        async with get_async_db_context(db) as db:
+            visitors = (
+                SiteView.site_id == site_id,
+                SiteView.created_at >= window_start,
+                SiteView.created_at < window_end,
+                SiteView.is_owner.is_(False),
+            )
+
+            rows = (
+                await db.execute(
+                    select(
+                        SiteView.user_id,
+                        func.count(SiteView.id).label('n'),
+                        func.max(SiteView.created_at).label('last'),
+                    )
+                    .where(*visitors, SiteView.user_id.is_not(None))
+                    .group_by(SiteView.user_id)
+                    .order_by(
+                        func.count(SiteView.id).desc(),
+                        func.max(SiteView.created_at).desc(),
+                        SiteView.user_id.asc(),
+                    )
+                )
+            ).all()
+
+            anonymous_views = (
+                await db.execute(select(func.count(SiteView.id)).where(*visitors, SiteView.user_id.is_(None)))
+            ).scalar_one()
+
+            top = rows[:limit]
+            users = {}
+            if top:
+                from open_webui.models.users import Users
+
+                found = await Users.get_users_by_user_ids([r[0] for r in top], db=db)
+                users = {u.id: u for u in found}
+
+        people = []
+        for user_id, n, last in top:
+            user = users.get(user_id)
+            people.append(
+                {
+                    'user_id': user_id,
+                    # A viewer whose account was deleted still has views that
+                    # are counted in `views`; dropping the row would make the
+                    # roster fail to reconcile with the totals beside it.
+                    'name': user.name if user else 'Deleted user',
+                    'profile_image_url': user.profile_image_url if user else None,
+                    'views': int(n),
+                    'last_viewed_at': int(last),
+                }
+            )
+
+        return {
+            'people': people,
+            'anonymous_views': int(anonymous_views),
+            'more': max(0, len(rows) - limit),
+        }
+
 
 SiteViews = SiteViewsTable()

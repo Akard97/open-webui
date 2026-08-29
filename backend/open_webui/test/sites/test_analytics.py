@@ -812,3 +812,72 @@ async def test_named_and_anonymous_visitors_are_both_counted():
     a = await SiteViews.get_analytics('s1', 30, now_ms=NOW_MS)
 
     assert a['totals']['unique_visitors'] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_ranks_named_people_by_view_count():
+    for _ in range(3):
+        await _record_at('s1', 'index.html', 'k', False, NOW_MS, user_id='u1')
+    await _record_at('s1', 'index.html', 'k', False, NOW_MS, user_id='u2')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert [p['user_id'] for p in v['people']] == ['u1', 'u2']
+    assert v['people'][0]['views'] == 3
+    assert v['people'][0]['last_viewed_at'] == NOW_MS
+    # No User row exists for these ids at this layer; the roster must still
+    # name the row rather than dropping it, or the counts stop reconciling.
+    assert v['people'][0]['name']
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_aggregates_anonymous_views():
+    await _record_at('s1', 'index.html', 'a1', False, NOW_MS)
+    await _record_at('s1', 'index.html', 'a2', False, NOW_MS)
+    await _record_at('s1', 'index.html', 'k', False, NOW_MS, user_id='u1')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert v['anonymous_views'] == 2
+    assert [p['user_id'] for p in v['people']] == ['u1']
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_caps_the_roster_and_reports_the_remainder():
+    for i in range(11):
+        await _record_at('s1', 'index.html', 'k', False, NOW_MS, user_id=f'u{i:02d}')
+
+    v = await SiteViews.get_viewers('s1', 30, limit=8, now_ms=NOW_MS)
+
+    assert len(v['people']) == 8
+    assert v['more'] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_excludes_the_owner():
+    # is_owner is the 4th positional arg — pass True there, not as a keyword.
+    await _record_at('s1', 'index.html', 'k', True, NOW_MS, user_id='owner1')
+    await _record_at('s1', 'index.html', 'k', False, NOW_MS, user_id='u1')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert [p['user_id'] for p in v['people']] == ['u1']
+    assert v['anonymous_views'] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_respects_the_window_and_the_site():
+    await _record_at('s1', 'index.html', 'k', False, NOW_MS - 40 * DAY_MS, user_id='old')
+    await _record_at('s2', 'index.html', 'k', False, NOW_MS, user_id='other')
+    await _record_at('s1', 'index.html', 'k', False, NOW_MS, user_id='u1')
+
+    v = await SiteViews.get_viewers('s1', 7, now_ms=NOW_MS)
+
+    assert [p['user_id'] for p in v['people']] == ['u1']
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_returns_empty_for_a_site_with_no_views():
+    v = await SiteViews.get_viewers('nobody', 30, now_ms=NOW_MS)
+
+    assert v == {'people': [], 'anonymous_views': 0, 'more': 0}
