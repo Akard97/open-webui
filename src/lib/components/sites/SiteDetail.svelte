@@ -6,7 +6,6 @@
 	import OverviewTab from './tabs/OverviewTab.svelte';
 	import FilesTab from './tabs/FilesTab.svelte';
 	import SettingsTab from './tabs/SettingsTab.svelte';
-	import AnalyticsTab from './tabs/AnalyticsTab.svelte';
 	import VersionsTab from './tabs/VersionsTab.svelte';
 
 	const i18n = getContext('i18n');
@@ -25,7 +24,6 @@
 		{ id: 'overview', label: $i18n.t('Overview'), preview: false },
 		{ id: 'files', label: $i18n.t('Files'), preview: false },
 		{ id: 'settings', label: $i18n.t('Settings'), preview: false },
-		{ id: 'analytics', label: $i18n.t('Analytics'), preview: true },
 		{ id: 'versions', label: $i18n.t('Versions'), preview: true }
 	]);
 
@@ -62,8 +60,11 @@
 					<span class="st-dot {isPrivate ? 'st-dot-off' : ''}"></span>
 					{isPrivate ? $i18n.t('Private') : $i18n.t('Live')}
 				</span>
-				<a class="st-btn st-press inline-flex items-center" href={url} target="_blank" rel="noopener"
-					>{$i18n.t('Open')} ↗</a
+				<a
+					class="st-btn st-press inline-flex items-center"
+					href={url}
+					target="_blank"
+					rel="noopener">{$i18n.t('Open')} ↗</a
 				>
 			</div>
 		</div>
@@ -80,7 +81,7 @@
 				aria-selected={tab === t.id}
 				class="relative flex items-center gap-1.5 whitespace-nowrap rounded-t-lg px-3 pb-2.5 pt-2 text-[13px] transition-colors duration-150
 					{tab === t.id
-					? 'font-semibold text-gray-800 after:absolute after:inset-x-2.5 after:-bottom-px after:h-0.5 after:rounded after:bg-primary after:content-[\'\'] dark:text-gray-100'
+					? "font-semibold text-gray-800 after:absolute after:inset-x-2.5 after:-bottom-px after:h-0.5 after:rounded after:bg-primary after:content-[''] dark:text-gray-100"
 					: 'font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'}"
 				onclick={() => (tab = t.id)}
 			>
@@ -97,8 +98,6 @@
 			<FilesTab {site} {onSaved} />
 		{:else if tab === 'settings'}
 			<SettingsTab {site} {onSaved} {onDelete} />
-		{:else if tab === 'analytics'}
-			<AnalyticsTab />
 		{:else if tab === 'versions'}
 			<VersionsTab />
 		{/if}

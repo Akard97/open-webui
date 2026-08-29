@@ -8,6 +8,15 @@
 
 	let { site }: { site: any } = $props();
 
+	// Track the id, not the whole `site` object: SitesPage recomputes
+	// `selected` via `sites.find(...)` on every list refresh (e.g. after a
+	// settings save), which produces a new object with the same id. A
+	// $derived primitive doesn't notify subscribers when its value is
+	// unchanged, so keying the load effect off this instead of `site` avoids
+	// a spurious reload — and the skeleton flash that comes with it — on
+	// every save.
+	const siteId = $derived(site.id);
+
 	const W = 640;
 	const H = 96;
 	const RANGES = [7, 30, 90];
@@ -20,7 +29,9 @@
 	let topPages = $state<{ path: string; views: number }[]>([]);
 	let hover = $state<number | null>(null);
 	// Sticky across reloads: only a resolved response updates it, so a
-	// loading/failed window in between never yanks the "Yours" stat in or out.
+	// loading/failed window in between never yanks the "Yours" stat in or
+	// out. Reset explicitly on a site switch (see the effect below) so it
+	// doesn't stay sticky across sites, only within one.
 	let ownerVisible = $state(false);
 
 	// Request-generation counter shared by every trigger that re-runs the
@@ -35,13 +46,13 @@
 	const isEmpty = $derived(!loading && !failed && totals.views === 0 && totals.owner_views === 0);
 	const dataUnknown = $derived(loading || failed);
 
-	const load = async (window: number) => {
+	const load = async (id: string, window: number) => {
 		const seq = ++loadSeq;
 		loading = true;
 		failed = false;
 		hover = null;
 		try {
-			const res = await getSiteAnalytics(localStorage.token, site.id, window);
+			const res = await getSiteAnalytics(localStorage.token, id, window);
 			if (seq !== loadSeq) return;
 			totals = res.totals;
 			series = res.series;
@@ -57,12 +68,25 @@
 		loading = false;
 	};
 
+	// Plain (non-reactive) variable: only used to detect, from inside the
+	// effect, whether this run was triggered by a site change vs. a range
+	// change — it must not itself be a dependency.
+	let prevSiteId: string | undefined;
+
 	$effect(() => {
-		// site.id is read inside load(), synchronously before its first await,
-		// so this effect depends on `site` too — not just `days`. That means a
-		// rail selection change re-runs it exactly like a range change does,
-		// and the shared loadSeq counter above covers both.
-		load(days);
+		// Depends on `siteId` (derived from site.id) and `days`, not the whole
+		// `site` object — see the comment on `siteId` above for why. A range
+		// change on the same site still re-runs this exactly like before,
+		// since `days` is read here too.
+		if (siteId !== prevSiteId) {
+			// Site actually changed (not just a range click): drop the sticky
+			// "Yours" tile from the previous site immediately instead of
+			// carrying it into the new site's loading/failed window, where it
+			// would otherwise linger until (or unless) a response resolves.
+			ownerVisible = false;
+			prevSiteId = siteId;
+		}
+		load(siteId, days);
 	});
 
 	const onMove = (e: PointerEvent) => {
