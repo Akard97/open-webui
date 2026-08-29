@@ -289,14 +289,38 @@ removed from the `tabs` array in `SiteDetail.svelte`. Tabs become
 Overview · Files · Settings · Versions. The `PREVIEW` badge survives only on Versions, which
 remains a mockup.
 
-### New component: `InsightsCard.svelte`
+### `OverviewTab.svelte`: the analytics data owner
 
-Layout option B, the chart-led hero. Lives in `src/lib/components/sites/`, rendered by
-`OverviewTab`.
+The tab, not the card, owns the fetch — so both `InsightsCard` and the new `TopPagesCard`
+can render from one load while the tab keeps control of where they sit. `OverviewTab` holds:
+
+- `days`, defaulting to `30`, and the `loadSeq` request-generation counter: a response is
+  only applied if no newer request — for either a different range or a different site — has
+  started since, so a slow stale response can never paint another range's, or another
+  site's, numbers under the current header.
+- The `$derived` `siteId` primitive (`site.id`, not the whole `site` object) that the load
+  `$effect` depends on. `SitesPage` recomputes `selected` via `sites.find(...)` on every list
+  refresh (e.g. after a settings save), producing a new object with the same id; a
+  `$derived` primitive doesn't notify subscribers when its value is unchanged, so keying the
+  effect off `siteId` instead of `site` avoids a spurious reload — and the skeleton flash
+  that comes with it — on every save.
+- `ownerVisible`, sticky across reloads so a loading/failed window never yanks the "Yours"
+  stat in or out, but reset to `false` whenever `siteId` changes so it doesn't stay sticky
+  across sites.
+- `dataUnknown` (`loading || failed`), one definition of "the current range's numbers are
+  not known yet", reused by the KPI numerals passed to `InsightsCard` and by the Top pages
+  gate below.
+
+### `InsightsCard.svelte`: presentational KPI row + chart
+
+Purely presentational: it renders from props and calls `onRangeChange` on a click, but does
+not fetch and does not own the range state. Lives in `src/lib/components/sites/`, rendered
+by `OverviewTab`.
 
 - KPI row: Views, Unique visitors, Yours. `Yours` is hidden when `owner_views` is 0 rather
   than rendering a zero.
-- Range toggle 7d · 30d · 90d, defaulting to 30d, refetching on change.
+- Range toggle 7d · 30d · 90d. Clicking a range calls `onRangeChange`, which `OverviewTab`
+  applies to its `days` state, retriggering the load effect.
 - Area chart: the hand-rolled SVG from the deleted `AnalyticsTab`, now driven by `series`.
   No charting dependency. Colors from the existing `--st-chart` / `--st-chart-fill` tokens
   in `sites.css`.
@@ -306,13 +330,24 @@ Layout option B, the chart-led hero. Lives in `src/lib/components/sites/`, rende
   ("No views yet — share the link to start seeing traffic"), and an inline muted error on
   fetch failure. `OverviewTab` renders fully in all three; analytics never takes the tab down.
 
+### New component: `TopPagesCard.svelte`
+
+Also purely presentational, taking `loading` and the `top_pages` rows `OverviewTab` already
+fetched: each row shows its path, a bar sized proportionally to the top row's view count,
+and the formatted count. While loading it renders a skeleton rather than the previous
+site's or range's rows still sitting in state. `OverviewTab` keeps the card mounted through
+a loading window (gated on `dataUnknown`, not just `loading`) so the two-column row doesn't
+collapse and reflow on every range switch.
+
 ### Overview structure
 
 Top to bottom:
 
 1. URL bar with copy / open actions (unchanged)
 2. `InsightsCard`
-3. Two columns: `Top pages` | `Details`
+3. Two columns at the `lg` breakpoint (stacked below it): `TopPagesCard` | `Details`.
+   `TopPagesCard` is omitted while there are no rows to show, and `Details` then spans both
+   columns instead of leaving one empty.
 4. Slim quick-actions row (Replace files → Files, Change viewers → Settings,
    Restore version → Versions)
 
@@ -325,6 +360,9 @@ Series-to-SVG-path conversion, nearest-point lookup for the hover readout, and n
 formatting are extracted to
 `src/lib/components/sites/lib/analytics.ts` so they are unit-testable without mounting a
 component, matching the existing `form.ts` / `access.ts` / `selection.ts` convention.
+`formatCount` takes a `locale` parameter rather than hardcoding `'en-US'`: the module stays
+pure and unit-testable, and callers (`InsightsCard`, `TopPagesCard`) pass `$i18n.language`
+so counts format in the active UI language instead of always US English.
 
 ## Testing
 
@@ -371,6 +409,7 @@ New:
 - `backend/open_webui/migrations/versions/b1c2d3e4f5a6_site_view.py`
 - `backend/open_webui/test/sites/test_analytics.py`
 - `src/lib/components/sites/InsightsCard.svelte`
+- `src/lib/components/sites/TopPagesCard.svelte`
 - `src/lib/components/sites/lib/analytics.ts`
 - `src/lib/components/sites/lib/analytics.test.ts`
 
