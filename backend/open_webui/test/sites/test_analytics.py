@@ -277,18 +277,37 @@ BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36
 
 
 def _serve_client(monkeypatch, tmp_path, *, viewer):
+    """An httpx client wired to the public serve routes.
+
+    When `viewer` is not None the client also sends a `token` cookie, because
+    that is the only request shape that can produce an authenticated viewer in
+    production: `_get_optional_user` returns None unless a bearer header or a
+    token cookie is present. A client that claims a viewer while sending no
+    credentials tests a request that cannot exist.
+
+    The returned client carries `.auth_calls`, a counter of how many times
+    `_get_optional_user` ran during the request. Tests use it to pin that
+    anonymous traffic to a public site performs no token decode and no user
+    lookup, and that a credentialed request resolves the viewer exactly once.
+    """
+    auth_calls = {'count': 0}
+
     async def _fake_optional_user(request):
+        auth_calls['count'] += 1
         return viewer
 
     app = FastAPI()
     app.include_router(sites_router.serve_router)
     monkeypatch.setattr(sites_router, '_get_optional_user', _fake_optional_user)
     monkeypatch.setattr(sites_router, 'SITES_DIR', tmp_path)
-    return httpx.AsyncClient(
+    client = httpx.AsyncClient(
         transport=ASGITransport(app=app),
         base_url='http://test',
         headers={'user-agent': BROWSER_UA},
+        cookies={'token': 'test-session-token'} if viewer is not None else {},
     )
+    client.auth_calls = auth_calls
+    return client
 
 
 async def _seed_site(tmp_path, *, slug, public):
@@ -336,6 +355,17 @@ async def test_html_subpage_is_recorded_but_assets_are_not(monkeypatch, tmp_path
 
 
 @pytest.mark.asyncio
+async def test_missing_document_is_not_recorded(monkeypatch, tmp_path):
+    """The pageview is queued only after _serve_file has returned, so an HTML
+    file the site does not have is never counted as a view."""
+    site = await _seed_site(tmp_path, slug='rec-ghost', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        assert (await c.get('/sites/rec-ghost/ghost.html')).status_code == 404
+
+    assert await SiteViews.list_views(site.id) == []
+
+
+@pytest.mark.asyncio
 async def test_bot_requests_are_not_recorded(monkeypatch, tmp_path):
     site = await _seed_site(tmp_path, slug='rec-bot', public=True)
     async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
@@ -356,10 +386,43 @@ async def test_login_redirect_is_not_recorded(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_anonymous_view_of_a_public_site_resolves_no_user(monkeypatch, tmp_path):
+    """Rule 5: anonymous traffic to a public site pays no token decode and no
+    user lookup. Access resolution short-circuits on `public`, and recording
+    only resolves a viewer when the request actually carries credentials."""
+    site = await _seed_site(tmp_path, slug='rec-anon-cost', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        assert (await c.get('/sites/rec-anon-cost/')).status_code == 200
+        assert c.auth_calls['count'] == 0
+
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].is_owner is False
+
+
+@pytest.mark.asyncio
 async def test_owner_visit_is_flagged(monkeypatch, tmp_path):
+    """Private site: the viewer access resolution already resolved is reused,
+    so the owner is flagged without a second token decode."""
     site = await _seed_site(tmp_path, slug='rec-owner', public=False)
     async with _serve_client(monkeypatch, tmp_path, viewer=R_OWNER) as c:
         assert (await c.get('/sites/rec-owner/')).status_code == 200
+        assert c.auth_calls['count'] == 1  # resolved once, by access control
+
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].is_owner is True
+
+
+@pytest.mark.asyncio
+async def test_owner_visit_to_a_public_site_is_flagged(monkeypatch, tmp_path):
+    """The common real case: the owner is logged in and opens their own public
+    site. Access resolution skips the viewer for public sites, so the owner is
+    only recognised because the request carries credentials."""
+    site = await _seed_site(tmp_path, slug='rec-pub-owner', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=R_OWNER) as c:
+        assert (await c.get('/sites/rec-pub-owner/')).status_code == 200
+        assert c.auth_calls['count'] == 1  # credentials present -> resolved
 
     rows = await SiteViews.list_views(site.id)
     assert len(rows) == 1
@@ -368,11 +431,15 @@ async def test_owner_visit_is_flagged(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_non_owner_visit_is_not_flagged(monkeypatch, tmp_path):
+    """A logged-in non-owner on a public site: the viewer IS resolved (the
+    auth_calls assertion proves it) and is still not flagged as the owner."""
     site = await _seed_site(tmp_path, slug='rec-viewer', public=True)
     async with _serve_client(monkeypatch, tmp_path, viewer=R_VIEWER) as c:
         assert (await c.get('/sites/rec-viewer/')).status_code == 200
+        assert c.auth_calls['count'] == 1
 
     rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
     assert rows[0].is_owner is False
 
 

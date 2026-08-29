@@ -421,6 +421,7 @@ async def delete_site(
 
 serve_router = APIRouter()
 
+
 # SECURITY: the sandbox CSP gives served pages an opaque origin, which keeps
 # the viewer's token cookie off any fetch a page makes ONLY while the auth
 # cookie stays SameSite=lax/strict (this app's default). If
@@ -451,9 +452,7 @@ SERVE_HEADERS = {
     'Cache-Control': 'no-cache',
 }
 
-BOT_UA_RE = re.compile(
-    r'bot|crawl|spider|slurp|headless|curl|wget|python-requests', re.IGNORECASE
-)
+BOT_UA_RE = re.compile(r'bot|crawl|spider|slurp|headless|curl|wget|python-requests', re.IGNORECASE)
 
 HTML_EXT_RE = re.compile(r'\.html?$', re.IGNORECASE)
 
@@ -494,13 +493,15 @@ async def _record_view_task(site_id: str, filename: str, visitor_key: str, is_ow
         log.warning('Failed to record site view for %s', site_id, exc_info=True)
 
 
-async def _record_view(
-    site, filename: str, request: Request, background: BackgroundTasks, *, viewer=None
-) -> None:
-    """Queue a pageview for a successfully served document.
+async def _record_view(site, filename: str, request: Request, background: BackgroundTasks, *, viewer=None) -> None:
+    """Queue a pageview for a document that has already been served.
 
-    Callers must invoke this only AFTER access resolution succeeds, so a visitor
-    bounced to the login page is never counted as having viewed the page.
+    Callers must invoke this only AFTER access resolution succeeded AND
+    _serve_file returned: a visitor bounced to the login page is never counted,
+    and neither is a request for a file the site does not have.
+
+    `viewer` is whoever access resolution already resolved. It is None for a
+    public site, which is readable without credentials and so resolves nobody.
     """
     try:
         if not _is_html(filename):
@@ -508,16 +509,12 @@ async def _record_view(
         user_agent = request.headers.get('user-agent', '')
         if _is_bot(user_agent):
             return
-        if viewer is None and (
-            not site.public
-            or request.headers.get('authorization')
-            or request.cookies.get('token')
-        ):
-            # Private sites always resolve here: _resolve_site_for_view already
-            # required valid credentials to reach this point, so the requester
-            # is never anonymous. Public sites skip resolution entirely for
-            # anonymous traffic and only pay the token decode when a token is
-            # actually present.
+        if viewer is None and (request.headers.get('authorization') or request.cookies.get('token')):
+            # Only a public site reaches here with viewer None: a private one
+            # required valid credentials to resolve, and that user was passed
+            # in. This is where a logged-in owner viewing their own public site
+            # is recognised — and anonymous traffic, carrying no credentials,
+            # pays neither a token decode nor a user lookup.
             viewer = await _get_optional_user(request)
         ip = request.client.host if request.client else ''
         background.add_task(
@@ -568,27 +565,37 @@ def _serve_404() -> HTTPException:
 
 
 async def _resolve_site_for_view(slug: str, request: Request, db: AsyncSession, *, is_entry: bool):
+    """Resolve the site to serve, and the viewer allowed to see it.
+
+    Returns `(site, viewer)` when the view is allowed, or `(RedirectResponse,
+    None)` when an anonymous visitor must be bounced to the login page (entry
+    route only — the file route raises 401 instead). Every other outcome
+    raises. `viewer` is None for a public site: those are readable without
+    credentials, so no token is decoded and no user is looked up.
+
+    The viewer is returned rather than discarded so the caller can flag an
+    owner's own pageview without decoding the same token a second time.
+    """
     site = await Sites.get_site_by_slug(slug, db=db)
     if not site:
         raise _serve_404()
     if site.public:
-        return site
+        return site, None
     user = await _get_optional_user(request)
     if user is None:
         if is_entry:
             # Direct navigation: send the browser to login and back.
-            return RedirectResponse(
+            redirect = RedirectResponse(
                 url=f'/auth?redirect={quote(f"/sites/{slug}/")}', status_code=302, headers=SERVE_HEADERS
             )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail='Not authenticated', headers=SERVE_HEADERS
-        )
+            return redirect, None
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Not authenticated', headers=SERVE_HEADERS)
     if user.role == 'admin' or site.user_id == user.id:
-        return site
+        return site, user
     if await AccessGrants.has_access(
         user_id=user.id, resource_type='site', resource_id=site.id, permission='read', db=db
     ):
-        return site
+        return site, user
     # Authenticated but not allowed: do not reveal that the site exists.
     raise _serve_404()
 
@@ -622,11 +629,14 @@ async def serve_site_entry(
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_async_session),
 ):
-    site = await _resolve_site_for_view(slug, request, db, is_entry=True)
+    site, viewer = await _resolve_site_for_view(slug, request, db, is_entry=True)
     if isinstance(site, RedirectResponse):
         return site
-    await _record_view(site, site.entry_file, request, background)
-    return _serve_file(site, site.entry_file)
+    # Serve first, record second: _serve_file raises 404 for a file the site
+    # does not have, so only a document that actually exists is counted.
+    response = _serve_file(site, site.entry_file)
+    await _record_view(site, site.entry_file, request, background, viewer=viewer)
+    return response
 
 
 @serve_router.get('/sites/{slug}/{filename}')
@@ -637,6 +647,7 @@ async def serve_site_file(
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_async_session),
 ):
-    site = await _resolve_site_for_view(slug, request, db, is_entry=False)
-    await _record_view(site, filename, request, background)
-    return _serve_file(site, filename)
+    site, viewer = await _resolve_site_for_view(slug, request, db, is_entry=False)
+    response = _serve_file(site, filename)
+    await _record_view(site, filename, request, background, viewer=viewer)
+    return response
