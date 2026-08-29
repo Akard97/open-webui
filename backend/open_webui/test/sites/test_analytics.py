@@ -459,17 +459,26 @@ async def test_recording_failure_does_not_break_serving(monkeypatch, tmp_path):
     assert r.content == b'<h1>demo</h1>'
 
 
-def _api_client(monkeypatch, *, user):
+def _api_client(monkeypatch, *, user, allow=True):
+    """An httpx client wired to the authenticated site-management routes.
+
+    Mocks only `has_permission` — `_require_publisher`'s single external
+    dependency — so `_require_publisher`'s real body runs, including its
+    `user.role != 'admin'` short-circuit and its 401 raise. `allow` controls
+    what a non-admin's `features.site_publisher` check returns; admins never
+    consult it.
+    """
     from open_webui.utils.auth import get_verified_user
 
     app = FastAPI()
+    app.state.config = SimpleNamespace(USER_PERMISSIONS={})
     app.include_router(sites_router.router, prefix='/api/v1/sites')
     app.dependency_overrides[get_verified_user] = lambda: user
 
-    async def _allow(request, u, db):
-        return None
+    async def _has_permission(*args, **kwargs):
+        return allow
 
-    monkeypatch.setattr(sites_router, '_require_publisher', _allow)
+    monkeypatch.setattr(sites_router, 'has_permission', _has_permission)
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url='http://test')
 
 
@@ -528,8 +537,18 @@ async def test_analytics_endpoint_allows_admins(monkeypatch, tmp_path):
     site = await _seed_site(tmp_path, slug='api-admin', public=True)
     admin = SimpleNamespace(id='adm', role='admin', name='Admin', email='a@x.io')
 
-    async with _api_client(monkeypatch, user=admin) as c:
+    async with _api_client(monkeypatch, user=admin, allow=False) as c:
         r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=7')
 
     assert r.status_code == 200
     assert r.json()['days'] == 7
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_denies_without_the_site_publisher_permission(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='api-no-perm', public=True)
+
+    async with _api_client(monkeypatch, user=R_OWNER, allow=False) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=30')
+
+    assert r.status_code == 401
