@@ -103,6 +103,15 @@ with proxy headers enabled, so `client.host` is the real client address.
 
 No new module: the file stays small and the two tables are one cohesive concern.
 
+Day bucketing uses integer division on the millisecond timestamp
+(`created_at / 86_400_000` = days since epoch) rather than a SQL date function, so the
+same query runs on both SQLite and Postgres. Buckets are converted back to ISO dates in
+Python.
+
+`SitesTable.delete_site_by_id` is extended to delete the site's `site_view` rows inside its
+existing single transaction, alongside the access-grant cleanup it already does. With no
+retention policy, orphaned view rows would otherwise persist forever.
+
 ## Recording path
 
 Hooked into `serve_site_entry` and `serve_site_file` in
@@ -206,7 +215,8 @@ instead of duplicating what the hero already shows.
 
 ### Pure helpers
 
-Zero-fill merging, series-to-SVG-path conversion, and number formatting are extracted to
+Series-to-SVG-path conversion, nearest-point lookup for the hover readout, and number
+formatting are extracted to
 `src/lib/components/sites/lib/analytics.ts` so they are unit-testable without mounting a
 component, matching the existing `form.ts` / `access.ts` / `selection.ts` convention.
 
@@ -226,15 +236,17 @@ Following the existing suite's conftest and style.
 - `days` outside `{7, 30, 90}` returns 400.
 - A non-owner, non-admin user requesting the analytics endpoint receives 404.
 - A failing insert does not break the serve response.
+- Deleting a site removes its `site_view` rows.
 
 ### Frontend — `src/lib/components/sites/lib/analytics.test.ts`
 
 Vitest, alongside the existing `form.test.ts` / `access.test.ts`.
 
-- Zero-fill merge produces one entry per day, in order, with gaps as 0.
 - Series-to-path handles the all-zero series and the single-point series without producing
-  `NaN` in the path data.
-- Number formatting: thousands separators, and no `-0`.
+  `NaN` in the path data. (Zero-filling is the API's job, not the client's — the client
+  never reconstructs missing days.)
+- Nearest-point lookup maps an x offset to the correct series index, including at both edges.
+- Number formatting adds thousands separators.
 
 ## Files touched
 
@@ -246,7 +258,8 @@ New:
 - `src/lib/components/sites/lib/analytics.test.ts`
 
 Modified:
-- `backend/open_webui/models/sites.py` — `SiteView` model, `SiteViewsTable` DAO
+- `backend/open_webui/models/sites.py` — `SiteView` model, `SiteViewsTable` DAO, view-row
+  cleanup in `delete_site_by_id`
 - `backend/open_webui/routers/sites.py` — recording hooks, analytics endpoint
 - `src/lib/apis/sites/index.ts` — `getSiteAnalytics`
 - `src/lib/components/sites/SiteDetail.svelte` — drop the analytics tab
