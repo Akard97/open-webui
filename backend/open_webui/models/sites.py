@@ -203,10 +203,11 @@ class SitesTable:
             return SiteModel.model_validate(site)
 
     async def delete_site_by_id(self, id: str, db: Optional[AsyncSession] = None) -> bool:
-        """Delete a site and its access grants in ONE transaction.
+        """Delete a site, its access grants, and its view rows in ONE transaction.
 
-        A crash between the two deletes must not leave grant rows behind for
-        a dead site id (inert, but clutter that never expires).
+        A crash between the deletes must not leave grant rows behind for a dead
+        site id (inert, but clutter that never expires). View rows matter more:
+        the table has no retention policy, so orphans would persist forever.
         """
         from open_webui.models.access_grants import AccessGrant
 
@@ -218,6 +219,7 @@ class SitesTable:
                     AccessGrant.resource_id == id,
                 )
             )
+            await db.execute(delete(SiteView).where(SiteView.site_id == id))
             await db.commit()
             return result.rowcount > 0
 

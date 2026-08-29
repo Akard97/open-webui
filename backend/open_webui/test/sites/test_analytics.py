@@ -162,3 +162,23 @@ async def test_get_analytics_empty_site_returns_zeros_not_an_error():
     assert a['totals'] == {'views': 0, 'unique_visitors': 0, 'owner_views': 0}
     assert len(a['series']) == 30
     assert a['top_pages'] == []
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_site_purges_its_view_rows():
+    from open_webui.models.sites import Sites
+
+    site = await Sites.insert_new_site(
+        'o1',
+        name='Demo',
+        slug='demo-purge',
+        public=True,
+        files=[{'name': 'index.html', 'size': 1, 'content_type': 'text/html'}],
+        entry_file='index.html',
+    )
+    await SiteViews.record_view(site.id, 'index.html', 'k1', False)
+    assert len(await SiteViews.list_views(site.id)) == 1
+
+    await Sites.delete_site_by_id(site.id)
+
+    assert await SiteViews.list_views(site.id) == []
