@@ -217,6 +217,56 @@ async def test_deleting_a_site_purges_its_view_rows():
     assert await SiteViews.list_views(site.id) == []
 
 
+@pytest.mark.asyncio
+async def test_prune_older_than_deletes_only_rows_past_the_retention_window():
+    await _record_at('s1', 'index.html', 'old', False, NOW_MS - 100 * DAY_MS)
+    await _record_at('s1', 'index.html', 'edge', False, NOW_MS - 31 * DAY_MS)
+    await _record_at('s1', 'index.html', 'recent', False, NOW_MS - 29 * DAY_MS)
+    await _record_at('s2', 'index.html', 'other-site-old', False, NOW_MS - 100 * DAY_MS)
+
+    deleted = await SiteViews.prune_older_than(30, now_ms=NOW_MS)
+
+    assert deleted == 3  # both s1 rows past the window, plus s2's
+    assert [r.visitor_key for r in await SiteViews.list_views('s1')] == ['recent']
+    assert await SiteViews.list_views('s2') == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('days', [0, -1])
+async def test_prune_older_than_is_a_no_op_when_retention_is_off(days):
+    """Unset (which env.py normalises to 0) must keep every row forever —
+    the behaviour before this setting existed."""
+    await _record_at('s1', 'index.html', 'ancient', False, NOW_MS - 10_000 * DAY_MS)
+
+    deleted = await SiteViews.prune_older_than(days, now_ms=NOW_MS)
+
+    assert deleted == 0
+    assert len(await SiteViews.list_views('s1')) == 1
+
+
+def test_retention_setting_defaults_to_off_and_survives_garbage():
+    """The env default and the parsing fallbacks: anything that is not a
+    positive integer must mean 'keep forever', never 'delete everything'."""
+    import importlib
+    import os
+
+    import open_webui.env as env_module
+
+    # One value per branch: unset, unparseable, negative, valid.
+    for raw, expected in [(None, 0), ('not-a-number', 0), ('-5', 0), ('90', 90)]:
+        before = os.environ.pop('SITES_ANALYTICS_RETENTION_DAYS', None)
+        try:
+            if raw is not None:
+                os.environ['SITES_ANALYTICS_RETENTION_DAYS'] = raw
+            reloaded = importlib.reload(env_module)
+            assert reloaded.SITES_ANALYTICS_RETENTION_DAYS == expected, raw
+        finally:
+            os.environ.pop('SITES_ANALYTICS_RETENTION_DAYS', None)
+            if before is not None:
+                os.environ['SITES_ANALYTICS_RETENTION_DAYS'] = before
+    importlib.reload(env_module)
+
+
 import open_webui.routers.sites as sites_router
 
 

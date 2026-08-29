@@ -245,6 +245,24 @@ class SiteViewsTable:
             )
             await db.commit()
 
+    async def prune_older_than(self, days: int, now_ms: Optional[int] = None, db: Optional[AsyncSession] = None) -> int:
+        """Delete view rows older than `days` days; return how many went.
+
+        `days <= 0` is a no-op returning 0 — that is the unset default, and it
+        must keep every row, exactly as before this setting existed.
+
+        The cutoff is a plain millisecond timestamp rather than a day boundary:
+        this is a size bound on an unauthenticated write path, not a reporting
+        window, so it does not need to line up with the analytics buckets.
+        """
+        if days <= 0:
+            return 0
+        cutoff = (_now() if now_ms is None else now_ms) - days * 86_400_000
+        async with get_async_db_context(db) as db:
+            result = await db.execute(delete(SiteView).where(SiteView.created_at < cutoff))
+            await db.commit()
+            return result.rowcount or 0
+
     async def list_views(self, site_id: str, db: Optional[AsyncSession] = None) -> list[SiteViewModel]:
         """Test/debug helper: every recorded view for a site, oldest first."""
         async with get_async_db_context(db) as db:

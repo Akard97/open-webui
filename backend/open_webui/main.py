@@ -130,6 +130,7 @@ from open_webui.models.models import Models
 from open_webui.models.users import UserModel, Users
 from open_webui.models.chats import Chats, ChatForm
 from open_webui.models.usage import UsageEvents
+from open_webui.models.sites import SiteViews
 
 from open_webui.config import (
     # Ollama
@@ -555,6 +556,8 @@ from open_webui.env import (
     LOG_FORMAT,
     # OAuth Back-Channel Logout
     ENABLE_OAUTH_BACKCHANNEL_LOGOUT,
+    # Site Publisher
+    SITES_ANALYTICS_RETENTION_DAYS,
 )
 
 
@@ -713,6 +716,27 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(periodic_usage_events_cleanup())
 
+    async def periodic_site_views_cleanup():
+        # Published-site pageviews are written by an unauthenticated INSERT on
+        # a route anyone who can load a public site URL can hit, so the table
+        # needs a lever. Off by default (unset or 0 keeps every row forever);
+        # SITES_ANALYTICS_RETENTION_DAYS turns it on.
+        while True:
+            try:
+                deleted = await SiteViews.prune_older_than(SITES_ANALYTICS_RETENTION_DAYS)
+                if deleted:
+                    log.info(
+                        f'site views cleanup: removed {deleted} views older than {SITES_ANALYTICS_RETENTION_DAYS}d'
+                    )
+            except Exception:
+                # Never break startup or the loop: analytics retention failing
+                # must not take the app down.
+                log.exception('site views cleanup failed')
+            await asyncio.sleep(24 * 3600)
+
+    if SITES_ANALYTICS_RETENTION_DAYS > 0:
+        asyncio.create_task(periodic_site_views_cleanup())
+
     from open_webui.utils.automations import scheduler_worker_loop
 
     asyncio.create_task(scheduler_worker_loop(app))
@@ -785,6 +809,7 @@ async def lifespan(app: FastAPI):
 
     try:
         from open_webui.internal.workos.seeder import seed_workos_demo
+
         await seed_workos_demo()
     except Exception as e:
         log.exception(f'WorkOS seeding failed: {e}')
@@ -2026,9 +2051,7 @@ async def chat_completion(
                             )
 
         request.state.metadata = metadata
-        await UsageEvents.emit(
-            user.id, 'chat.message.sent', {'model': model_id, 'chat_id': metadata.get('chat_id')}
-        )
+        await UsageEvents.emit(user.id, 'chat.message.sent', {'model': model_id, 'chat_id': metadata.get('chat_id')})
         form_data['metadata'] = metadata
 
     except HTTPException:

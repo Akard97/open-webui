@@ -1082,3 +1082,23 @@ EXTERNAL_PWA_MANIFEST_URL = os.environ.get('EXTERNAL_PWA_MANIFEST_URL')
 # Env var values: "true" (anyone), "false" (no one), "members" (only group members).
 _default_group_share = os.environ.get('DEFAULT_GROUP_SHARE_PERMISSION', 'members').strip().lower()
 DEFAULT_GROUP_SHARE_PERMISSION = 'members' if _default_group_share == 'members' else _default_group_share == 'true'
+
+####################################
+# SITE PUBLISHER
+####################################
+
+# Retention for published-site pageview rows (`site_view`), in days.
+#
+# Recording is an unauthenticated, unmetered INSERT: anyone who can load a
+# public site URL can write rows, and the bot filter is bypassed by sending a
+# normal browser User-Agent. This is the lever that bounds that table.
+#
+# Unset or 0 keeps every row forever, which is the historical behaviour and
+# stays the default. A positive value deletes rows older than that many days.
+SITES_ANALYTICS_RETENTION_DAYS = os.environ.get('SITES_ANALYTICS_RETENTION_DAYS', '')
+try:
+    SITES_ANALYTICS_RETENTION_DAYS = int(SITES_ANALYTICS_RETENTION_DAYS)
+    if SITES_ANALYTICS_RETENTION_DAYS < 0:
+        SITES_ANALYTICS_RETENTION_DAYS = 0
+except ValueError:
+    SITES_ANALYTICS_RETENTION_DAYS = 0
