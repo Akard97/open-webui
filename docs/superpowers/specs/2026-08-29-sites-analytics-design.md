@@ -36,17 +36,39 @@ Recorded here because several were live options during design.
 | Build depth | Real tracking, not a mock merge | The tab stops lying |
 | Visitor identity | Daily-salted HMAC of IP + UA | No cookies, no stored PII, unlinkable across days |
 | What counts as a view | HTML documents only | "Views" means pageviews, not server hits |
-| Storage shape | Raw rows, kept forever | User's explicit call; pruning deferred |
+| Storage shape | Raw rows, retention off by default | User's explicit call; `SITES_ANALYTICS_RETENTION_DAYS` is the opt-in lever |
 | Owner's own visits | Recorded, shown separately | Honest headline, no lost data |
 | Overview layout | Chart-led hero (option B) | One insight card, no duplicated stat tiles |
 | Analytics read access | Site owner or app admin | Mirrors existing `_get_owned_site` |
 
-### Accepted risk: unbounded growth
+### Growth: an adversarially reachable write path
 
-`site_view` has no retention policy. Row count grows linearly with traffic forever. The
-`(site_id, created_at)` composite index keeps read performance flat regardless of table
-size, so the cost is storage, not latency. A retention job is a small, isolated addition
-if the table ever becomes a problem.
+This is not merely organic growth. Recording is an **unauthenticated, unmetered INSERT**:
+the write is reachable by anyone who can load a public site URL, there is no rate limit,
+and the bot filter is a User-Agent substring match that is bypassed by sending a normal
+browser User-Agent. A single caller in a loop can add rows as fast as the app will serve
+pages. The `(site_id, created_at)` composite index keeps read performance flat regardless
+of table size, so the cost lands on storage rather than latency — but nothing in the
+feature bounds it.
+
+`SITES_ANALYTICS_RETENTION_DAYS` is the lever:
+
+- **Unset, `0`, negative, or unparseable → keep every row forever.** This is the default
+  and is exactly the behaviour before the setting existed; a misconfigured value can never
+  silently start deleting data.
+- A **positive integer** deletes `site_view` rows older than that many days.
+- Declared in `backend/open_webui/env.py` with the repo's existing int-with-fallback idiom
+  (cf. `REDIS_SENTINEL_MAX_RETRY_COUNT`, `UVICORN_WORKERS`).
+- Implemented as `SiteViews.prune_older_than(days, now_ms=None, db=None) -> int`, returning
+  the number of rows deleted.
+- Wired as a daily loop in `main.py`'s `lifespan`, alongside the existing
+  `periodic_usage_events_cleanup` and following the same shape: the task is created only
+  when retention is on, its body is wrapped in `try/except` with `log.exception`, and a
+  failure neither breaks startup nor stops the loop.
+
+Retention is a size bound on a hostile write path, not a reporting window, so its cutoff is
+a plain millisecond timestamp and deliberately does not align with the analytics day
+buckets. It does not defend against a burst — only against unbounded accumulation.
 
 ### Deliberate omission: `user_id`
 
@@ -54,6 +76,20 @@ The table stores `is_owner` but **not** the viewer's user id. `is_owner` is the 
 identity signal the feature needs, and storing viewer ids would make `site_view` a
 per-employee browsing log of internal pages — a materially different privacy artifact
 from an aggregate view counter.
+
+**This protects public sites, not small-audience private ones.** For a private site shared
+with one or two named grantees, the owner already knows the audience by name from the
+access-grant list. The owner-visible `top_pages` is then that person's reading history, and
+`unique_visitors: 1` confirms which of them it was. Omitting `user_id` changes nothing
+about what the owner learns in that case — the identification comes from the grant list
+plus the visitor count, not from the table.
+
+So the honest scope of the omission: it prevents the *database* from becoming a
+cross-site, cross-user browsing log, and it prevents anyone with database access from
+reconstructing one. It does not give a grantee of a narrowly-shared private site any
+meaningful anonymity from that site's owner. Anyone relying on this trade-off for a
+small-audience private site should be told that their reading is visible to the owner,
+rather than assuming the omission delivers a privacy property it does not.
 
 ## Data model
 
@@ -90,8 +126,17 @@ Three properties, each load-bearing:
 - **`WEBUI_SECRET_KEY` as the HMAC key** means an attacker holding the database still
   cannot brute-force the (small) IP+UA space back to a raw IP.
 
-Client IP comes from `request.client.host`. Deployments behind a proxy already run uvicorn
-with proxy headers enabled, so `client.host` is the real client address.
+Client IP comes from `request.client.host` — never from a forwarded header read directly in
+application code.
+
+That is not the same as "the real client address". `backend/start.sh`, `backend/dev.sh` and
+`start_windows.bat` all launch uvicorn with `--forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}"`,
+and `*` trusts **every** peer. Uvicorn's proxy-headers middleware then rewrites
+`scope["client"]` from whatever `X-Forwarded-For` the caller sent, so on a default
+deployment anything that can reach the app can choose its own apparent IP.
+
+**Deployment note:** set `FORWARDED_ALLOW_IPS` to the reverse proxy's address in
+production. With the default `*`, `client.host` is caller-controlled.
 
 ### DAO
 
@@ -100,6 +145,8 @@ with proxy headers enabled, so `client.host` is the real client address.
 
 - `record_view(site_id, path, visitor_key, is_owner, db=None)`
 - `get_analytics(site_id, days, db=None)` — returns totals, daily series, top pages
+- `prune_older_than(days, now_ms=None, db=None) -> int` — retention; `days <= 0` is a no-op
+  returning `0`
 
 No new module: the file stays small and the two tables are one cohesive concern.
 
@@ -113,9 +160,17 @@ alternative either — Postgres rounds numeric-to-integer casts rather than trun
 `.op('/')` truncates (floors) directly in SQL. Buckets are converted back to ISO dates in
 Python.
 
+The analytics window is bounded at **both** ends: `created_at >= window_start` and
+`created_at < (today_idx + 1) * day_ms`. The upper bound is not redundant. A row stamped in
+the future — a server clock rolled back, or a bad import — would otherwise be counted in
+`totals['views']` while its day index fell past the last `series` bucket, so it would
+appear in no day at all and `sum(series) != totals['views']` **within a single response**.
+The bound is the end of today rather than `now`, so a view recorded later today still
+counts.
+
 `SitesTable.delete_site_by_id` is extended to delete the site's `site_view` rows inside its
-existing single transaction, alongside the access-grant cleanup it already does. With no
-retention policy, orphaned view rows would otherwise persist forever.
+existing single transaction, alongside the access-grant cleanup it already does. With
+retention off by default, orphaned view rows would otherwise persist forever.
 
 ## Recording path
 
@@ -132,30 +187,60 @@ Rules, in evaluation order:
    filename ends in `.html` or `.htm`. Assets (css, js, images) are never recorded.
 3. **Bot filter.** Skip when the User-Agent is empty or matches
    `bot|crawl|spider|slurp|headless|curl|wget|python-requests` (case-insensitive).
-4. **Owner detection.** The `viewer` `_resolve_site_for_view` resolved is threaded straight
-   into `_record_view`, so a private site's pageview does not repeat the JWT decode, up to
-   two Redis GETs, and the user lookup access resolution already performed. A public site's
-   `_resolve_site_for_view` returns `viewer=None` unconditionally — public sites are
-   readable without credentials, so nothing is resolved there — and `_record_view` resolves
+   This is a substring match on a caller-supplied string, so it filters *polite* automation
+   only; anything sending a browser User-Agent is counted as a human.
+4. **GET only.** A `HEAD` renders no page, so it is a request, not a pageview — and link
+   preview fetchers and uptime monitors, which routinely send browser-shaped User-Agents
+   the bot filter will not catch, are exactly who sends one. These routes are FastAPI
+   `APIRoute`s, which (unlike Starlette's plain `Route`) do **not** auto-add `HEAD` to a
+   `GET` route, so such a request is already rejected with `405` before reaching recording.
+   The method guard in `_record_view` is what keeps that true if the routes are ever
+   declared with `methods=['GET', 'HEAD']` or mounted as Starlette routes; it is a
+   deliberate backstop, not dead code.
+5. **Owner detection.** The `viewer` `_resolve_site_for_view` resolved is threaded straight
+   through to the recorder, so a private site's pageview does not repeat the JWT decode, up
+   to two Redis GETs, and the user lookup access resolution already performed. A public
+   site's `_resolve_site_for_view` returns `viewer=None` unconditionally — public sites are
+   readable without credentials, so nothing is resolved there — and the recorder resolves
    the viewer itself via `_get_optional_user`, but only when an `authorization` header or
-   `token` cookie is actually present. Anonymous public traffic still pays no token-decode
-   or user-lookup cost; a logged-in owner browsing their own public site is still
+   `token` cookie is actually present. Anonymous public traffic pays no token-decode or
+   user-lookup cost at all; a logged-in owner browsing their own public site is still
    recognised.
-5. **Serve first, record second.** The route handler calls `_serve_file` — which raises a
-   404 for a document the site does not have — before it calls `_record_view`. Only a
-   document that was actually served reaches this checklist, by construction: recording
-   depends on `_serve_file`'s prior success through explicit sequencing, not on FastAPI
-   discarding background tasks that were queued before a later exception. From there, the
-   insert is scheduled through FastAPI `BackgroundTasks` and wrapped in `try/except
-   Exception` with `log.warning`; a failing analytics write must never delay or 500 a
-   published page.
+6. **Serve first, record second — and record entirely off the response path.** The route
+   handler calls `_serve_file` — which raises a 404 for a document the site does not have —
+   before it calls `_queue_view`. Only a document that was actually served reaches this
+   checklist, by construction: recording depends on `_serve_file`'s prior success through
+   explicit sequencing, not on FastAPI discarding background tasks that were queued before
+   a later exception.
+
+   The split is deliberate. `_queue_view` is **synchronous** and does nothing but read the
+   scalars the recorder needs off the already-parsed request — method, User-Agent,
+   `request.client.host`, and whether credentials are present — and append one FastAPI
+   `BackgroundTasks` entry. Every filter, the visitor-key HMAC, the viewer resolution in
+   rule 5 and the INSERT itself run in `_record_view` **after the response has been sent**.
+   Nothing analytics-related, including the JWT decode a credentialed visit to a public
+   site needs, is on the response path.
+
+   Passing the `Request` through to the background task is sound: Starlette runs background
+   tasks inside the still-open ASGI scope, so its headers and cookies remain readable, and
+   the values the filters depend on were captured before the response anyway. The recorder
+   needs it only because `_get_optional_user` reaches `app.state.redis` to check token
+   revocation, and it touches the request only when credentials were actually present.
+
+   `_record_view` is wrapped in `try/except Exception` with `log.warning`; a failing
+   analytics write must never delay or 500 a published page.
 
 ### Known imprecision
 
-Requests answered `304 Not Modified` are still recorded: `_record_view` runs whenever
-`_serve_file` has already succeeded, and it does not distinguish a fresh 200 from a
-revalidated 304. This over-counts refreshes of cached pages slightly. Accepted: served
-pages carry `Cache-Control: no-cache`, so revalidation implies the page was displayed.
+**Every reload counts.** Served pages carry `Cache-Control: no-cache`, which forces the
+browser to revalidate on each visit, and the route re-serves the file every time — so a
+visitor who reloads five times produces five rows. "Views" therefore means pageviews, not
+distinct reading sessions; `unique_visitors` is the number to read for audience size.
+
+There are no `304 Not Modified` responses to reason about here. These routes return
+Starlette's `FileResponse`, which sets an `etag` header but never reads `If-None-Match` or
+`If-Modified-Since` — conditional-request handling lives in `StaticFiles`, which these
+routes do not use. Every served request is a `200`.
 
 ## API
 
@@ -181,7 +266,11 @@ Response:
 
 - `views`, `series`, `unique_visitors`, and `top_pages` all **exclude** owner visits.
   `owner_views` is the separate owner count. The headline number is therefore real traffic.
-- `unique_visitors` is `COUNT(DISTINCT visitor_key)` over the window — exact, not estimated.
+- `unique_visitors` is `COUNT(DISTINCT visitor_key)` over the window — a real count, not a
+  sketch or an estimate, and so **exact against honest clients**. It is not a guarantee
+  against a hostile one: `visitor_key` is derived from the client IP, and with the default
+  `FORWARDED_ALLOW_IPS=*` a caller picks its own apparent IP (see *visitor_key derivation*),
+  so every spoofed `X-Forwarded-For` value mints a fresh key and inflates the count.
 - `series` is zero-filled across every UTC day in the window, so the chart draws a real
   gap as zero rather than interpolating a straight line between distant points.
 - `top_pages` returns the top 5 paths by view count.
@@ -254,6 +343,17 @@ Following the existing suite's conftest and style.
 - A non-owner, non-admin user requesting the analytics endpoint receives 404.
 - A failing insert does not break the serve response.
 - Deleting a site removes its `site_view` rows.
+- A `HEAD` request records nothing, and `_record_view`'s method guard rejects a non-`GET`
+  method directly.
+- `_queue_view` resolves no user and writes no row; both happen only once the queued
+  background task is awaited.
+- A future-dated row is excluded from the window, and `sum(series) == totals['views']`.
+  A row in the last millisecond of today still counts.
+- `prune_older_than` deletes rows past the retention window, keeps rows inside it, and is a
+  no-op returning `0` for `days` of `0` or negative.
+- `SITES_ANALYTICS_RETENTION_DAYS` parses to `0` when unset, unparseable, or negative, and
+  to the integer when valid — anything that is not a positive integer must mean "keep
+  forever", never "delete everything".
 
 ### Frontend — `src/lib/components/sites/lib/analytics.test.ts`
 
@@ -275,9 +375,14 @@ New:
 - `src/lib/components/sites/lib/analytics.test.ts`
 
 Modified:
-- `backend/open_webui/models/sites.py` — `SiteView` model, `SiteViewsTable` DAO, view-row
-  cleanup in `delete_site_by_id`
-- `backend/open_webui/routers/sites.py` — recording hooks, analytics endpoint
+- `backend/open_webui/models/sites.py` — `SiteView` model, `SiteViewsTable` DAO
+  (`record_view`, `get_analytics`, `prune_older_than`), view-row cleanup in
+  `delete_site_by_id`
+- `backend/open_webui/routers/sites.py` — recording hooks (`_queue_view` / `_record_view`),
+  analytics endpoint
+- `backend/open_webui/env.py` — `SITES_ANALYTICS_RETENTION_DAYS`
+- `backend/open_webui/main.py` — daily `periodic_site_views_cleanup` task in `lifespan`,
+  created only when retention is on
 - `src/lib/apis/sites/index.ts` — `getSiteAnalytics`
 - `src/lib/components/sites/SiteDetail.svelte` — drop the analytics tab
 - `src/lib/components/sites/tabs/OverviewTab.svelte` — restructure
