@@ -18,7 +18,9 @@ export const chartGeometry = (
 
 	// An all-zero series would divide by zero; a single point would divide by
 	// zero on the x axis. Both are normal states (a brand-new site, a 1-day
-	// window), so they render flat along the baseline rather than as NaN.
+	// window), so they're guarded to render as a flat line (all-zero) or a
+	// single point at the top of the canvas (one point, since `max` becomes
+	// that point's own value) rather than as NaN.
 	const max = Math.max(...series.map((p) => p.views), 1);
 	const span = height - PAD_TOP - PAD_BOTTOM;
 	const step = series.length > 1 ? width / (series.length - 1) : 0;
@@ -37,6 +39,10 @@ export const chartGeometry = (
 
 export const nearestIndex = (series: SeriesPoint[], x: number, width: number): number => {
 	if (series.length === 0) return 0;
+	// A zero-width canvas (e.g. measured while hidden) makes x / width either
+	// NaN (x === 0) or Infinity (x !== 0); guard it directly rather than
+	// relying on Math.min/Math.max, which don't clamp NaN.
+	if (width <= 0) return 0;
 	const ratio = Math.min(1, Math.max(0, x / width));
 	return Math.round(ratio * (series.length - 1));
 };

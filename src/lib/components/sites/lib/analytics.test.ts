@@ -26,6 +26,7 @@ describe('chartGeometry', () => {
 	it('produces no NaN for a single point', () => {
 		const g = chartGeometry(pts(7), 100, 50);
 		expect(g.line).not.toContain('NaN');
+		expect(g.area).not.toContain('NaN');
 		expect(g.points).toHaveLength(1);
 	});
 
@@ -58,6 +59,20 @@ describe('nearestIndex', () => {
 
 	it('returns 0 for an empty series', () => {
 		expect(nearestIndex([], 10, 100)).toBe(0);
+	});
+
+	it('clamps to index 0 when the canvas has zero width and x is zero', () => {
+		const s = pts(1, 2, 3);
+		const idx = nearestIndex(s, 0, 0);
+		expect(idx).toBe(0);
+		expect(Number.isInteger(idx)).toBe(true);
+	});
+
+	it('clamps to a valid index when the canvas has zero width and x is non-zero', () => {
+		const s = pts(1, 2, 3);
+		const idx = nearestIndex(s, 40, 0);
+		expect(idx).toBe(0);
+		expect(Number.isInteger(idx)).toBe(true);
 	});
 });
 
