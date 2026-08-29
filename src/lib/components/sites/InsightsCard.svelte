@@ -1,92 +1,51 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
 	import dayjs from 'dayjs';
-	import { getSiteAnalytics } from '$lib/apis/sites';
 	import { chartGeometry, nearestIndex, formatCount, type SeriesPoint } from './lib/analytics';
 
 	const i18n = getContext('i18n');
 
-	let { site }: { site: any } = $props();
-
-	// Track the id, not the whole `site` object: SitesPage recomputes
-	// `selected` via `sites.find(...)` on every list refresh (e.g. after a
-	// settings save), which produces a new object with the same id. A
-	// $derived primitive doesn't notify subscribers when its value is
-	// unchanged, so keying the load effect off this instead of `site` avoids
-	// a spurious reload — and the skeleton flash that comes with it — on
-	// every save.
-	const siteId = $derived(site.id);
+	// Presentational: OverviewTab owns the fetch (and every guard around it)
+	// and passes the resolved state down, so the tab can place this card and
+	// the Top pages card wherever its layout needs them.
+	let {
+		days,
+		loading,
+		failed,
+		dataUnknown,
+		totals,
+		series,
+		ownerVisible,
+		onRangeChange
+	}: {
+		days: number;
+		loading: boolean;
+		failed: boolean;
+		// `loading || failed` — computed once by the owner and reused here so
+		// no KPI numeral can render a fabricated zero or a stale previous
+		// range while the current one is unknown.
+		dataUnknown: boolean;
+		totals: { views: number; unique_visitors: number; owner_views: number };
+		series: SeriesPoint[];
+		ownerVisible: boolean;
+		onRangeChange: (days: number) => void;
+	} = $props();
 
 	const W = 640;
 	const H = 96;
 	const RANGES = [7, 30, 90];
 
-	let days = $state(30);
-	let loading = $state(true);
-	let failed = $state(false);
-	let totals = $state({ views: 0, unique_visitors: 0, owner_views: 0 });
-	let series = $state<SeriesPoint[]>([]);
-	let topPages = $state<{ path: string; views: number }[]>([]);
 	let hover = $state<number | null>(null);
-	// Sticky across reloads: only a resolved response updates it, so a
-	// loading/failed window in between never yanks the "Yours" stat in or
-	// out. Reset explicitly on a site switch (see the effect below) so it
-	// doesn't stay sticky across sites, only within one.
-	let ownerVisible = $state(false);
-
-	// Request-generation counter shared by every trigger that re-runs the
-	// $effect below (range AND site — see the effect for why a site change
-	// re-runs it too). A response is only applied if no newer request — for
-	// either a different range or a different site — has started since, so a
-	// slow stale response can never paint another range's, or another site's,
-	// numbers under the current header.
-	let loadSeq = 0;
 
 	const geo = $derived(chartGeometry(series, W, H));
-	const isEmpty = $derived(!loading && !failed && totals.views === 0 && totals.owner_views === 0);
-	const dataUnknown = $derived(loading || failed);
-
-	const load = async (id: string, window: number) => {
-		const seq = ++loadSeq;
-		loading = true;
-		failed = false;
-		hover = null;
-		try {
-			const res = await getSiteAnalytics(localStorage.token, id, window);
-			if (seq !== loadSeq) return;
-			totals = res.totals;
-			series = res.series;
-			topPages = res.top_pages;
-			ownerVisible = res.totals.owner_views > 0;
-		} catch (err) {
-			if (seq !== loadSeq) return;
-			// Analytics is one card, not the whole tab — surface it inline and
-			// let the rest of Overview render normally.
-			console.error(err);
-			failed = true;
-		}
-		loading = false;
-	};
-
-	// Plain (non-reactive) variable: only used to detect, from inside the
-	// effect, whether this run was triggered by a site change vs. a range
-	// change — it must not itself be a dependency.
-	let prevSiteId: string | undefined;
+	const isEmpty = $derived(!dataUnknown && totals.views === 0 && totals.owner_views === 0);
 
 	$effect(() => {
-		// Depends on `siteId` (derived from site.id) and `days`, not the whole
-		// `site` object — see the comment on `siteId` above for why. A range
-		// change on the same site still re-runs this exactly like before,
-		// since `days` is read here too.
-		if (siteId !== prevSiteId) {
-			// Site actually changed (not just a range click): drop the sticky
-			// "Yours" tile from the previous site immediately instead of
-			// carrying it into the new site's loading/failed window, where it
-			// would otherwise linger until (or unless) a response resolves.
-			ownerVisible = false;
-			prevSiteId = siteId;
-		}
-		load(siteId, days);
+		// Read `series` so this re-runs whenever the owner swaps in a new one:
+		// a hover index is only meaningful against the series it was measured
+		// against, so a range or site change must drop it.
+		void series;
+		hover = null;
 	});
 
 	const onMove = (e: PointerEvent) => {
@@ -137,7 +96,7 @@
 						{days === r
 						? 'bg-[var(--st-accent-soft)] font-semibold text-[var(--st-accent-soft-ink)]'
 						: 'font-medium text-[var(--st-muted)] hover:bg-[var(--st-hover)] hover:text-[var(--st-ink)]'}"
-					onclick={() => (days = r)}>{r}{$i18n.t('d')}</button
+					onclick={() => onRangeChange(r)}>{r}{$i18n.t('d')}</button
 				>
 			{/each}
 		</div>
@@ -186,7 +145,9 @@
 					/>
 				{/if}
 			</svg>
-			<div class="mt-1 flex justify-between text-[11px] text-[var(--st-faint)]">
+			<!-- The hover readout is pointer-only; announce it politely so the
+			     value isn't silent to assistive tech. -->
+			<div class="mt-1 flex justify-between text-[11px] text-[var(--st-faint)]" aria-live="polite">
 				{#if hover !== null && series[hover]}
 					<span>{dayjs(series[hover].day).format('MMM D')}</span>
 					<span class="tabular-nums"
@@ -204,27 +165,3 @@
 		</div>
 	{/if}
 </div>
-
-{#if !loading && !failed && topPages.length > 0}
-	<div class="rounded-xl border border-[var(--st-hairline)] px-4 py-3.5">
-		<h4 class="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">
-			{$i18n.t('Top pages')}
-		</h4>
-		{#each topPages as p, i (p.path)}
-			<div
-				class="flex items-center gap-3 py-1.5 text-[13px] {i < topPages.length - 1
-					? 'border-b border-[var(--st-hairline)]'
-					: ''}"
-			>
-				<span class="min-w-0 flex-1 truncate">/{p.path}</span>
-				<div
-					class="h-[5px] rounded-[3px] bg-[var(--st-chart)]"
-					style="width: {Math.max(6, (p.views / topPages[0].views) * 96)}px"
-				></div>
-				<span class="w-12 text-right tabular-nums text-[var(--st-muted)]"
-					>{formatCount(p.views)}</span
-				>
-			</div>
-		{/each}
-	</div>
-{/if}
