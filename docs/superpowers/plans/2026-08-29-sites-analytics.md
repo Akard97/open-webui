@@ -422,7 +422,12 @@ Add to `SiteViewsTable` in `backend/open_webui/models/sites.py`:
                 )
             ).scalar_one()
 
-            day_idx = (SiteView.created_at / day_ms).label('day_idx')
+            # .op('/') emits a literal SQL `/` between two integer operands —
+            # integer (truncating) division on both SQLite and Postgres. Plain
+            # Python `/` would compile to true division (CAST AS NUMERIC), and
+            # GROUP BY on a fractional value never merges two views recorded on
+            # the same day at different times.
+            day_idx = SiteView.created_at.op('/')(day_ms).label('day_idx')
             rows = (
                 await db.execute(
                     select(day_idx, func.count(SiteView.id)).where(*visitors).group_by(day_idx)
@@ -729,7 +734,7 @@ def _is_html(filename: str) -> bool:
 
 Run: `backend/.venv/Scripts/python.exe -m pytest open_webui/test/sites/test_analytics.py -k "visitor_key or is_bot or is_html" -v` from `backend/`
 
-Expected: PASS (25 passed)
+Expected: PASS (28 passed — 4 + 12 + 3 + 4 + 5 parametrized cases)
 
 - [ ] **Step 5: Commit**
 
@@ -1285,6 +1290,10 @@ export const chartGeometry = (
 
 export const nearestIndex = (series: SeriesPoint[], x: number, width: number): number => {
 	if (series.length === 0) return 0;
+	// A zero width is real, not hypothetical: an element inside a hidden tab
+	// measures 0. Without this guard, x === 0 gives 0/0 = NaN, which survives
+	// both clamps and Math.round, and series[NaN] is silently undefined.
+	if (width <= 0) return 0;
 	const ratio = Math.min(1, Math.max(0, x / width));
 	return Math.round(ratio * (series.length - 1));
 };
