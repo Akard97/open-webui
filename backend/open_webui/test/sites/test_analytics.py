@@ -260,3 +260,133 @@ def test_is_html_accepts_documents(name):
 @pytest.mark.parametrize('name', ['pic.png', 'style.css', 'app.js', 'index.html.map', 'noext'])
 def test_is_html_rejects_assets(name):
     assert sites_router._is_html(name) is False
+
+
+from types import SimpleNamespace
+
+import httpx
+from fastapi import FastAPI
+from httpx import ASGITransport
+
+from open_webui.models.sites import Sites
+
+R_OWNER = SimpleNamespace(id='ro1', role='user', name='Owner', email='ro@x.io')
+R_VIEWER = SimpleNamespace(id='rv1', role='user', name='Viewer', email='rv@x.io')
+
+BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36'
+
+
+def _serve_client(monkeypatch, tmp_path, *, viewer):
+    async def _fake_optional_user(request):
+        return viewer
+
+    app = FastAPI()
+    app.include_router(sites_router.serve_router)
+    monkeypatch.setattr(sites_router, '_get_optional_user', _fake_optional_user)
+    monkeypatch.setattr(sites_router, 'SITES_DIR', tmp_path)
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url='http://test',
+        headers={'user-agent': BROWSER_UA},
+    )
+
+
+async def _seed_site(tmp_path, *, slug, public):
+    site = await Sites.insert_new_site(
+        R_OWNER.id,
+        name='Demo',
+        slug=slug,
+        public=public,
+        files=[
+            {'name': 'index.html', 'size': 12, 'content_type': 'text/html'},
+            {'name': 'about.html', 'size': 12, 'content_type': 'text/html'},
+            {'name': 'pic.png', 'size': 4, 'content_type': 'image/png'},
+        ],
+        entry_file='index.html',
+    )
+    d = tmp_path / site.id
+    d.mkdir(parents=True)
+    (d / 'index.html').write_bytes(b'<h1>demo</h1>')
+    (d / 'about.html').write_bytes(b'<h1>about</h1>')
+    (d / 'pic.png').write_bytes(b'\x89PNG')
+    return site
+
+
+@pytest.mark.asyncio
+async def test_entry_pageview_is_recorded(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='rec-entry', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        assert (await c.get('/sites/rec-entry/')).status_code == 200
+
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].path == 'index.html'
+    assert rows[0].is_owner is False
+
+
+@pytest.mark.asyncio
+async def test_html_subpage_is_recorded_but_assets_are_not(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='rec-assets', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        assert (await c.get('/sites/rec-assets/about.html')).status_code == 200
+        assert (await c.get('/sites/rec-assets/pic.png')).status_code == 200
+
+    rows = await SiteViews.list_views(site.id)
+    assert [r.path for r in rows] == ['about.html']
+
+
+@pytest.mark.asyncio
+async def test_bot_requests_are_not_recorded(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='rec-bot', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        r = await c.get('/sites/rec-bot/', headers={'user-agent': 'Googlebot/2.1'})
+        assert r.status_code == 200
+
+    assert await SiteViews.list_views(site.id) == []
+
+
+@pytest.mark.asyncio
+async def test_login_redirect_is_not_recorded(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='rec-redirect', public=False)
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        r = await c.get('/sites/rec-redirect/')
+        assert r.status_code == 302
+
+    assert await SiteViews.list_views(site.id) == []
+
+
+@pytest.mark.asyncio
+async def test_owner_visit_is_flagged(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='rec-owner', public=False)
+    async with _serve_client(monkeypatch, tmp_path, viewer=R_OWNER) as c:
+        assert (await c.get('/sites/rec-owner/')).status_code == 200
+
+    rows = await SiteViews.list_views(site.id)
+    assert len(rows) == 1
+    assert rows[0].is_owner is True
+
+
+@pytest.mark.asyncio
+async def test_non_owner_visit_is_not_flagged(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='rec-viewer', public=True)
+    async with _serve_client(monkeypatch, tmp_path, viewer=R_VIEWER) as c:
+        assert (await c.get('/sites/rec-viewer/')).status_code == 200
+
+    rows = await SiteViews.list_views(site.id)
+    assert rows[0].is_owner is False
+
+
+@pytest.mark.asyncio
+async def test_recording_failure_does_not_break_serving(monkeypatch, tmp_path):
+    await _seed_site(tmp_path, slug='rec-boom', public=True)
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError('db down')
+
+    monkeypatch.setattr(sites_router.SiteViews, 'record_view', _boom)
+
+    async with _serve_client(monkeypatch, tmp_path, viewer=None) as c:
+        r = await c.get('/sites/rec-boom/')
+
+    assert r.status_code == 200
+    assert r.content == b'<h1>demo</h1>'

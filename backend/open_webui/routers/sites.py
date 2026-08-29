@@ -14,7 +14,17 @@ from typing import Optional
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -476,6 +486,51 @@ def _is_html(filename: str) -> bool:
     return bool(HTML_EXT_RE.search(filename or ''))
 
 
+async def _record_view_task(site_id: str, filename: str, visitor_key: str, is_owner: bool) -> None:
+    """Best-effort. Analytics must never take a published page down."""
+    try:
+        await SiteViews.record_view(site_id, filename, visitor_key, is_owner)
+    except Exception:
+        log.warning('Failed to record site view for %s', site_id, exc_info=True)
+
+
+async def _record_view(
+    site, filename: str, request: Request, background: BackgroundTasks, *, viewer=None
+) -> None:
+    """Queue a pageview for a successfully served document.
+
+    Callers must invoke this only AFTER access resolution succeeds, so a visitor
+    bounced to the login page is never counted as having viewed the page.
+    """
+    try:
+        if not _is_html(filename):
+            return
+        user_agent = request.headers.get('user-agent', '')
+        if _is_bot(user_agent):
+            return
+        if viewer is None and (
+            not site.public
+            or request.headers.get('authorization')
+            or request.cookies.get('token')
+        ):
+            # Private sites always resolve here: _resolve_site_for_view already
+            # required valid credentials to reach this point, so the requester
+            # is never anonymous. Public sites skip resolution entirely for
+            # anonymous traffic and only pay the token decode when a token is
+            # actually present.
+            viewer = await _get_optional_user(request)
+        ip = request.client.host if request.client else ''
+        background.add_task(
+            _record_view_task,
+            site.id,
+            filename,
+            _visitor_key(site.id, ip, user_agent),
+            bool(viewer is not None and viewer.id == site.user_id),
+        )
+    except Exception:
+        log.warning('Failed to queue site view for %s', getattr(site, 'id', '?'), exc_info=True)
+
+
 async def _get_optional_user(request: Request):
     """Resolve the requester from bearer header or token cookie; None if anonymous/invalid."""
     token = None
@@ -562,17 +617,26 @@ async def redirect_site_entry(slug: str):
 
 @serve_router.get('/sites/{slug}/')
 async def serve_site_entry(
-    slug: str, request: Request, db: AsyncSession = Depends(get_async_session)
+    slug: str,
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_async_session),
 ):
     site = await _resolve_site_for_view(slug, request, db, is_entry=True)
     if isinstance(site, RedirectResponse):
         return site
+    await _record_view(site, site.entry_file, request, background)
     return _serve_file(site, site.entry_file)
 
 
 @serve_router.get('/sites/{slug}/{filename}')
 async def serve_site_file(
-    slug: str, filename: str, request: Request, db: AsyncSession = Depends(get_async_session)
+    slug: str,
+    filename: str,
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_async_session),
 ):
     site = await _resolve_site_for_view(slug, request, db, is_entry=False)
+    await _record_view(site, filename, request, background)
     return _serve_file(site, filename)
