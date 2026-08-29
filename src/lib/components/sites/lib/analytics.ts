@@ -47,4 +47,14 @@ export const nearestIndex = (series: SeriesPoint[], x: number, width: number): n
 	return Math.round(ratio * (series.length - 1));
 };
 
-export const formatCount = (n: number): string => new Intl.NumberFormat('en-US').format(n);
+export const formatCount = (n: number, locale: string): string => {
+	// The locale is passed in, never read from i18n here: this module is pure
+	// and unit-tested. A malformed BCP-47 tag makes the Intl constructor
+	// throw, and a number in a card is not worth taking the pane down for, so
+	// fall back to the runtime default rather than propagating a RangeError.
+	try {
+		return new Intl.NumberFormat(locale).format(n);
+	} catch {
+		return new Intl.NumberFormat().format(n);
+	}
+};

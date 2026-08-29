@@ -37,6 +37,10 @@
 
 	let hover = $state<number | null>(null);
 
+	// Counts follow the active UI language; analytics.ts stays pure, so the
+	// locale is passed in rather than imported there.
+	const locale = $derived($i18n.language);
+
 	const geo = $derived(chartGeometry(series, W, H));
 	const isEmpty = $derived(!dataUnknown && totals.views === 0 && totals.owner_views === 0);
 
@@ -62,7 +66,7 @@
 					{$i18n.t('Views')}
 				</div>
 				<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight">
-					{dataUnknown ? '—' : formatCount(totals.views)}
+					{dataUnknown ? '—' : formatCount(totals.views, locale)}
 				</div>
 			</div>
 			<div>
@@ -70,7 +74,7 @@
 					{$i18n.t('Unique visitors')}
 				</div>
 				<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight">
-					{dataUnknown ? '—' : formatCount(totals.unique_visitors)}
+					{dataUnknown ? '—' : formatCount(totals.unique_visitors, locale)}
 				</div>
 			</div>
 			{#if ownerVisible}
@@ -81,7 +85,7 @@
 					<div
 						class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight text-[var(--st-muted)]"
 					>
-						{dataUnknown ? '—' : formatCount(totals.owner_views)}
+						{dataUnknown ? '—' : formatCount(totals.owner_views, locale)}
 					</div>
 				</div>
 			{/if}
@@ -151,7 +155,7 @@
 				{#if hover !== null && series[hover]}
 					<span>{dayjs(series[hover].day).format('MMM D')}</span>
 					<span class="tabular-nums"
-						>{formatCount(series[hover].views)}
+						>{formatCount(series[hover].views, locale)}
 						{series[hover].views === 1 ? $i18n.t('view') : $i18n.t('views')}</span
 					>
 				{:else if series.length > 0}

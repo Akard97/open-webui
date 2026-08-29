@@ -10,6 +10,10 @@
 		loading = false,
 		topPages = []
 	}: { loading?: boolean; topPages?: { path: string; views: number }[] } = $props();
+
+	// Counts follow the active UI language; analytics.ts stays pure, so the
+	// locale is passed in rather than imported there.
+	const locale = $derived($i18n.language);
 </script>
 
 <div class="rounded-xl border border-[var(--st-hairline)] px-4 py-3.5">
@@ -37,7 +41,7 @@
 					style="width: {Math.max(6, (p.views / topPages[0].views) * 96)}px"
 				></div>
 				<span class="w-12 text-right tabular-nums text-[var(--st-muted)]"
-					>{formatCount(p.views)}</span
+					>{formatCount(p.views, locale)}</span
 				>
 			</div>
 		{/each}

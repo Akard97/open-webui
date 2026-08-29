@@ -78,8 +78,16 @@ describe('nearestIndex', () => {
 
 describe('formatCount', () => {
 	it('adds thousands separators', () => {
-		expect(formatCount(2847)).toBe('2,847');
-		expect(formatCount(0)).toBe('0');
-		expect(formatCount(999)).toBe('999');
+		expect(formatCount(2847, 'en-US')).toBe('2,847');
+		expect(formatCount(0, 'en-US')).toBe('0');
+		expect(formatCount(999, 'en-US')).toBe('999');
+	});
+
+	it('groups by the locale it is given, not a hardcoded one', () => {
+		expect(formatCount(2847, 'de-DE')).toBe('2.847');
+	});
+
+	it('falls back to the runtime default for a malformed tag', () => {
+		expect(formatCount(2847, 'en_US')).toBe(new Intl.NumberFormat().format(2847));
 	});
 });
