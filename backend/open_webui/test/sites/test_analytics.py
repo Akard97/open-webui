@@ -32,7 +32,7 @@ DAY_MS = 86_400_000
 NOW_MS = int(datetime(2026, 8, 29, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
 
 
-async def _record_at(site_id, path, key, is_owner, ts_ms):
+async def _record_at(site_id, path, key, is_owner, ts_ms, *, user_id=None):
     """Insert a SiteView row directly with a pinned created_at.
 
     Deliberately bypasses record_view (which stamps its own wall-clock time)
@@ -49,6 +49,7 @@ async def _record_at(site_id, path, key, is_owner, ts_ms):
                 path=path,
                 visitor_key=key,
                 is_owner=is_owner,
+                user_id=user_id,
                 created_at=ts_ms,
             )
         )
@@ -775,3 +776,39 @@ async def test_anonymous_view_is_recorded_without_a_user_id(monkeypatch, tmp_pat
     rows = await SiteViews.list_views(site.id)
     assert len(rows) == 1
     assert rows[0].user_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_signed_in_viewer_counts_once_across_many_days():
+    # visitor_key deliberately rotates daily, so the same person on three days
+    # produces three keys. Attributed views must still be one visitor.
+    for offset, key in enumerate(['k-day1', 'k-day2', 'k-day3']):
+        await _record_at('s1', 'index.html', key, False, NOW_MS - offset * DAY_MS, user_id='u1')
+
+    a = await SiteViews.get_analytics('s1', 30, now_ms=NOW_MS)
+
+    assert a['totals']['views'] == 3
+    assert a['totals']['unique_visitors'] == 1
+
+
+@pytest.mark.asyncio
+async def test_anonymous_visitors_still_count_per_day():
+    # Unattributable by design: the daily salt rotation is the privacy
+    # property, so two days of anonymous traffic read as two.
+    await _record_at('s1', 'index.html', 'anon-day1', False, NOW_MS)
+    await _record_at('s1', 'index.html', 'anon-day2', False, NOW_MS - DAY_MS)
+
+    a = await SiteViews.get_analytics('s1', 30, now_ms=NOW_MS)
+
+    assert a['totals']['unique_visitors'] == 2
+
+
+@pytest.mark.asyncio
+async def test_named_and_anonymous_visitors_are_both_counted():
+    await _record_at('s1', 'index.html', 'k1', False, NOW_MS, user_id='u1')
+    await _record_at('s1', 'index.html', 'k2', False, NOW_MS, user_id='u2')
+    await _record_at('s1', 'index.html', 'k3', False, NOW_MS)
+
+    a = await SiteViews.get_analytics('s1', 30, now_ms=NOW_MS)
+
+    assert a['totals']['unique_visitors'] == 3

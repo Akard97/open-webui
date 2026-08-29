@@ -303,6 +303,14 @@ class SiteViewsTable:
         the last `series` bucket, so it would appear in no day at all and
         `sum(series) != totals['views']` — an inconsistency inside a single
         response. Excluding such rows keeps the two halves in agreement.
+
+        `unique_visitors` counts distinct COALESCE(user_id, visitor_key).
+        Signed-in viewers dedupe correctly across the whole window. Anonymous
+        ones cannot: `visitor_key` embeds the UTC date so it rotates daily —
+        that rotation is the privacy property, deliberately not weakened here
+        — so the anonymous portion remains a sum of daily uniques and
+        overstates a returning anonymous visitor. The UI says so rather than
+        presenting a number that is exact for one half of its inputs.
         """
         now_ms = _now() if now_ms is None else now_ms
         day_ms = 86_400_000
@@ -323,7 +331,7 @@ class SiteViewsTable:
                 await db.execute(
                     select(
                         func.count(SiteView.id),
-                        func.count(func.distinct(SiteView.visitor_key)),
+                        func.count(func.distinct(func.coalesce(SiteView.user_id, SiteView.visitor_key))),
                     ).where(*visitors)
                 )
             ).one()
