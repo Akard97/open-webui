@@ -74,7 +74,9 @@
 					<div class="text-xs font-medium text-gray-400 dark:text-gray-500">
 						{$i18n.t('Yours')}
 					</div>
-					<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight text-[var(--st-muted)]">
+					<div
+						class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight text-[var(--st-muted)]"
+					>
 						{formatCount(totals.owner_views)}
 					</div>
 				</div>
@@ -103,9 +105,7 @@
 			{$i18n.t("Couldn't load view data.")}
 		</div>
 	{:else if isEmpty}
-		<div
-			class="mt-3 flex h-[96px] flex-col items-center justify-center gap-1 text-center"
-		>
+		<div class="mt-3 flex h-[96px] flex-col items-center justify-center gap-1 text-center">
 			<div class="text-[13px] font-medium">{$i18n.t('No views yet')}</div>
 			<div class="text-xs text-[var(--st-muted)]">
 				{$i18n.t('Share the link to start seeing traffic.')}
@@ -173,7 +173,9 @@
 					class="h-[5px] w-24 rounded-[3px] bg-[var(--st-chart)]"
 					style="width: {Math.max(6, (p.views / topPages[0].views) * 96)}px"
 				></div>
-				<span class="w-12 text-right tabular-nums text-[var(--st-muted)]">{formatCount(p.views)}</span>
+				<span class="w-12 text-right tabular-nums text-[var(--st-muted)]"
+					>{formatCount(p.views)}</span
+				>
 			</div>
 		{/each}
 	</div>
