@@ -1,5 +1,6 @@
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -257,6 +258,83 @@ class SiteViewsTable:
                 .order_by(SiteView.created_at.asc())
             )
             return [SiteViewModel.model_validate(v) for v in result.scalars().all()]
+
+    async def get_analytics(
+        self,
+        site_id: str,
+        days: int,
+        now_ms: Optional[int] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
+        """Totals, a zero-filled daily series, and top pages for a time window.
+
+        Owner visits are excluded from every visitor-facing number and reported
+        on their own as `owner_views`.
+
+        Day bucketing is integer division on the millisecond timestamp rather
+        than a SQL date function, so the identical query runs on SQLite and
+        Postgres.
+        """
+        now_ms = _now() if now_ms is None else now_ms
+        day_ms = 86_400_000
+        today_idx = now_ms // day_ms
+        first_idx = today_idx - (days - 1)
+        window_start = first_idx * day_ms
+
+        async with get_async_db_context(db) as db:
+            in_window = (SiteView.site_id == site_id, SiteView.created_at >= window_start)
+            visitors = (*in_window, SiteView.is_owner.is_(False))
+
+            totals_row = (
+                await db.execute(
+                    select(
+                        func.count(SiteView.id),
+                        func.count(func.distinct(SiteView.visitor_key)),
+                    ).where(*visitors)
+                )
+            ).one()
+            owner_views = (
+                await db.execute(
+                    select(func.count(SiteView.id)).where(*in_window, SiteView.is_owner.is_(True))
+                )
+            ).scalar_one()
+
+            day_idx = (SiteView.created_at / day_ms).label('day_idx')
+            rows = (
+                await db.execute(
+                    select(day_idx, func.count(SiteView.id)).where(*visitors).group_by(day_idx)
+                )
+            ).all()
+            counts = {int(idx): int(n) for idx, n in rows}
+
+            pages = (
+                await db.execute(
+                    select(SiteView.path, func.count(SiteView.id).label('n'))
+                    .where(*visitors)
+                    .group_by(SiteView.path)
+                    .order_by(func.count(SiteView.id).desc(), SiteView.path.asc())
+                    .limit(5)
+                )
+            ).all()
+
+        series = [
+            {
+                'day': datetime.fromtimestamp(idx * day_ms / 1000, tz=timezone.utc).strftime('%Y-%m-%d'),
+                'views': counts.get(idx, 0),
+            }
+            for idx in range(first_idx, today_idx + 1)
+        ]
+
+        return {
+            'days': days,
+            'totals': {
+                'views': int(totals_row[0]),
+                'unique_visitors': int(totals_row[1]),
+                'owner_views': int(owner_views),
+            },
+            'series': series,
+            'top_pages': [{'path': p, 'views': int(n)} for p, n in pages],
+        }
 
 
 SiteViews = SiteViewsTable()
