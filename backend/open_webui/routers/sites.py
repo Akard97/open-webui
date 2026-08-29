@@ -1,10 +1,14 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import mimetypes
 import os
 import re
 import shutil
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -21,10 +25,11 @@ from open_webui.env import (
     UVICORN_WORKERS,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
+    WEBUI_SECRET_KEY,
 )
 from open_webui.internal.db import get_async_session
 from open_webui.models.access_grants import AccessGrants
-from open_webui.models.sites import SiteModel, Sites
+from open_webui.models.sites import SiteModel, Sites, SiteViews
 from open_webui.models.users import Users
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.auth import decode_token, get_verified_user, is_valid_token
@@ -435,6 +440,40 @@ SERVE_HEADERS = {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-cache',
 }
+
+BOT_UA_RE = re.compile(
+    r'bot|crawl|spider|slurp|headless|curl|wget|python-requests', re.IGNORECASE
+)
+
+HTML_EXT_RE = re.compile(r'\.html?$', re.IGNORECASE)
+
+
+def _visitor_key(site_id: str, ip: str, user_agent: str, *, now_ms: Optional[int] = None) -> str:
+    """A per-site, per-day pseudonym for a visitor.
+
+    The UTC date inside the message rotates the salt daily, so the same person
+    on two days yields unrelated keys and the table cannot reconstruct anyone's
+    browsing history. The site id scopes the key, so the same person on two
+    sites also yields unrelated keys. HMAC under WEBUI_SECRET_KEY means an
+    attacker holding the database still cannot brute-force the small IP+UA
+    space back to a raw address.
+    """
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    day = datetime.fromtimestamp(now_ms / 1000, tz=timezone.utc).strftime('%Y-%m-%d')
+    msg = f'{day}|{site_id}|{ip}|{user_agent}'
+    digest = hmac.new(WEBUI_SECRET_KEY.encode(), msg.encode(), hashlib.sha256).digest()
+    return digest[:16].hex()
+
+
+def _is_bot(user_agent: str) -> bool:
+    """Empty or automated User-Agents must not inflate a site's view count."""
+    ua = (user_agent or '').strip()
+    return not ua or bool(BOT_UA_RE.search(ua))
+
+
+def _is_html(filename: str) -> bool:
+    """Only documents count as views. Assets are requests, not pageviews."""
+    return bool(HTML_EXT_RE.search(filename or ''))
 
 
 async def _get_optional_user(request: Request):

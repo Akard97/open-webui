@@ -182,3 +182,81 @@ async def test_deleting_a_site_purges_its_view_rows():
     await Sites.delete_site_by_id(site.id)
 
     assert await SiteViews.list_views(site.id) == []
+
+
+import open_webui.routers.sites as sites_router
+
+
+def test_visitor_key_is_stable_within_a_day_and_rotates_across_days():
+    a = sites_router._visitor_key('s1', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS)
+    b = sites_router._visitor_key('s1', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS + 3600_000)
+    c = sites_router._visitor_key('s1', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS + DAY_MS)
+
+    assert a == b
+    assert a != c
+    assert len(a) == 32
+    assert all(ch in '0123456789abcdef' for ch in a)
+
+
+def test_visitor_key_does_not_correlate_across_sites():
+    a = sites_router._visitor_key('s1', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS)
+    b = sites_router._visitor_key('s2', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS)
+
+    assert a != b
+
+
+def test_visitor_key_separates_different_visitors():
+    a = sites_router._visitor_key('s1', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS)
+    b = sites_router._visitor_key('s1', '10.0.0.2', 'Mozilla/5.0', now_ms=NOW_MS)
+    c = sites_router._visitor_key('s1', '10.0.0.1', 'Safari/1.0', now_ms=NOW_MS)
+
+    assert len({a, b, c}) == 3
+
+
+def test_visitor_key_never_embeds_the_raw_ip():
+    key = sites_router._visitor_key('s1', '10.0.0.1', 'Mozilla/5.0', now_ms=NOW_MS)
+
+    assert '10.0.0.1' not in key
+
+
+@pytest.mark.parametrize(
+    'ua',
+    [
+        '',
+        '   ',
+        'Googlebot/2.1',
+        'Mozilla/5.0 (compatible; bingbot/2.0)',
+        'Twitterbot/1.0',
+        'curl/8.4.0',
+        'Wget/1.21',
+        'python-requests/2.31.0',
+        'HeadlessChrome/120.0',
+        'Mozilla/5.0 (compatible; Yahoo! Slurp)',
+        'Some Spider 1.0',
+        'my-crawler/1',
+    ],
+)
+def test_is_bot_rejects_non_humans(ua):
+    assert sites_router._is_bot(ua) is True
+
+
+@pytest.mark.parametrize(
+    'ua',
+    [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/17.0 Safari/605.1.15',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+    ],
+)
+def test_is_bot_accepts_real_browsers(ua):
+    assert sites_router._is_bot(ua) is False
+
+
+@pytest.mark.parametrize('name', ['index.html', 'a.htm', 'DEEP.HTML', 'x.Htm'])
+def test_is_html_accepts_documents(name):
+    assert sites_router._is_html(name) is True
+
+
+@pytest.mark.parametrize('name', ['pic.png', 'style.css', 'app.js', 'index.html.map', 'noext'])
+def test_is_html_rejects_assets(name):
+    assert sites_router._is_html(name) is False
