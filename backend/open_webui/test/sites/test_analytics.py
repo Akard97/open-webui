@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -881,3 +882,48 @@ async def test_get_viewers_returns_empty_for_a_site_with_no_views():
     v = await SiteViews.get_viewers('nobody', 30, now_ms=NOW_MS)
 
     assert v == {'people': [], 'anonymous_views': 0, 'more': 0}
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_returns_named_viewers(monkeypatch, tmp_path):
+    from open_webui.models.users import Users
+
+    site = await _seed_site(tmp_path, slug='api-viewers', public=True)
+    await Users.insert_new_user(id='u1', name='Sara', email='sara@x.io', profile_image_url='/img/a.png')
+
+    # record_view stamps the real wall clock (not the pinned NOW_MS used
+    # elsewhere in this file), so last_viewed_at is pinned against a window
+    # bracketing the call rather than against itself.
+    before_ms = int(time.time() * 1000)
+    await SiteViews.record_view(site.id, 'index.html', 'k1', False, user_id='u1')
+    after_ms = int(time.time() * 1000)
+    await SiteViews.record_view(site.id, 'index.html', 'k2', False)
+
+    async with _api_client(monkeypatch, user=R_OWNER) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=30')
+
+    assert r.status_code == 200
+    viewers = r.json()['viewers']
+    last_viewed_at = viewers['people'][0]['last_viewed_at']
+    assert before_ms <= last_viewed_at <= after_ms
+    assert viewers['people'] == [
+        {
+            'user_id': 'u1',
+            'name': 'Sara',
+            'profile_image_url': '/img/a.png',
+            'views': 1,
+            'last_viewed_at': last_viewed_at,
+        }
+    ]
+    assert viewers['anonymous_views'] == 1
+    assert viewers['more'] == 0
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_returns_an_empty_roster_for_a_quiet_site(monkeypatch, tmp_path):
+    site = await _seed_site(tmp_path, slug='api-quiet', public=True)
+
+    async with _api_client(monkeypatch, user=R_OWNER) as c:
+        r = await c.get(f'/api/v1/sites/{site.id}/analytics?days=30')
+
+    assert r.json()['viewers'] == {'people': [], 'anonymous_views': 0, 'more': 0}

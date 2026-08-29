@@ -333,7 +333,9 @@ async def get_site_analytics(
         raise _bad(f'days must be one of {ANALYTICS_WINDOWS}')
     await _require_publisher(request, user, db)
     site = await _get_owned_site(id, user, db)
-    return await SiteViews.get_analytics(site.id, days, db=db)
+    data = await SiteViews.get_analytics(site.id, days, db=db)
+    data['viewers'] = await SiteViews.get_viewers(site.id, days, db=db)
+    return data
 
 
 @router.post('/{id}/update', response_model=SiteResponse)
