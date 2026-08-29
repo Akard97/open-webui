@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartGeometry, nearestIndex, formatCount } from './analytics';
+import { chartGeometry, nearestIndex, formatCount, viewerInitials } from './analytics';
 
 const pts = (...views: number[]) =>
 	views.map((v, i) => ({ day: `2026-08-${String(i + 1).padStart(2, '0')}`, views: v }));
@@ -89,5 +89,25 @@ describe('formatCount', () => {
 
 	it('falls back to the runtime default for a malformed tag', () => {
 		expect(formatCount(2847, 'en_US')).toBe(new Intl.NumberFormat().format(2847));
+	});
+});
+
+describe('viewerInitials', () => {
+	it('takes the first letter of the first two words', () => {
+		expect(viewerInitials('Sara Al-Mutairi')).toBe('SA');
+		expect(viewerInitials('Omar')).toBe('O');
+	});
+
+	it('ignores extra whitespace', () => {
+		expect(viewerInitials('  Sara   Al-Mutairi  ')).toBe('SA');
+	});
+
+	it('returns a placeholder rather than nothing for an empty name', () => {
+		expect(viewerInitials('')).toBe('?');
+		expect(viewerInitials('   ')).toBe('?');
+	});
+
+	it('handles non-Latin names without mangling them', () => {
+		expect(viewerInitials('سارة المطيري')).toBe('سا');
 	});
 });

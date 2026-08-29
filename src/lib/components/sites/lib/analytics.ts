@@ -58,3 +58,15 @@ export const formatCount = (n: number, locale: string): string => {
 		return new Intl.NumberFormat().format(n);
 	}
 };
+
+export const viewerInitials = (name: string): string => {
+	// Array.from, not slice: a name may start with a character outside the
+	// BMP, and cutting a surrogate pair in half renders a replacement box.
+	const words = name.trim().split(/\s+/).filter(Boolean);
+	if (words.length === 0) return '?';
+	return words
+		.slice(0, 2)
+		.map((w) => Array.from(w)[0] ?? '')
+		.join('')
+		.toUpperCase();
+};
