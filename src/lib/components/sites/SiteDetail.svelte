@@ -48,23 +48,21 @@
 						target="_blank"
 						rel="noopener">{url}</a
 					>
-					<button
-						type="button"
-						class="st-press shrink-0 rounded-md px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-850 dark:hover:text-gray-100"
-						onclick={copy}>{copied ? $i18n.t('Copied ✓') : $i18n.t('Copy')}</button
-					>
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
-				<span class="st-status">
+				<span class="st-status {isPrivate ? 'st-status-off' : ''}">
 					<span class="st-dot {isPrivate ? 'st-dot-off' : ''}"></span>
 					{isPrivate ? $i18n.t('Private') : $i18n.t('Live')}
 				</span>
+				<button type="button" class="st-btn st-press" onclick={copy}
+					>{copied ? $i18n.t('Copied ✓') : $i18n.t('Copy link')}</button
+				>
 				<a
-					class="st-btn st-press inline-flex items-center"
+					class="st-btn st-btn-primary st-press inline-flex items-center"
 					href={url}
 					target="_blank"
-					rel="noopener">{$i18n.t('Open')} ↗</a
+					rel="noopener">{$i18n.t('Open site')} ↗</a
 				>
 			</div>
 		</div>

@@ -35,6 +35,58 @@ describe('chartGeometry', () => {
 		expect(g.points).toEqual([]);
 		expect(g.line).toBe('');
 		expect(g.area).toBe('');
+		expect(g.gridlines).toEqual([]);
+		expect(g.labeled).toEqual([]);
+	});
+
+	it('draws gridlines at the max and midpoint of real data', () => {
+		const g = chartGeometry(pts(0, 2, 4), 100, 50);
+		expect(g.gridlines.map((l) => l.value)).toEqual([4, 2]);
+		// The max line sits exactly on the highest point's y.
+		expect(g.gridlines[0].y).toBeCloseTo(g.points[2][1]);
+		expect(g.gridlines[0].y).toBeLessThan(g.gridlines[1].y);
+	});
+
+	it('skips the midpoint gridline when the max is 1', () => {
+		const g = chartGeometry(pts(0, 1), 100, 50);
+		expect(g.gridlines.map((l) => l.value)).toEqual([1]);
+	});
+
+	it('draws no gridlines for an all-zero series', () => {
+		const g = chartGeometry(pts(0, 0, 0), 100, 50);
+		expect(g.gridlines).toEqual([]);
+	});
+
+	it('labels local peaks at or above half the max', () => {
+		// Peaks at 4 (index 2) and 3 (index 5); the bump of 1 stays unlabeled.
+		const g = chartGeometry(pts(0, 2, 4, 0, 1, 3, 0), 100, 50);
+		expect(g.labeled).toEqual([2, 5]);
+	});
+
+	it('labels only the first day of a plateau', () => {
+		const g = chartGeometry(pts(0, 3, 3, 0), 100, 50);
+		expect(g.labeled).toEqual([1]);
+	});
+
+	it('labels a rising endpoint', () => {
+		const g = chartGeometry(pts(0, 0, 2, 4), 100, 50);
+		expect(g.labeled).toContain(3);
+	});
+
+	it('labels nothing for an all-zero series', () => {
+		const g = chartGeometry(pts(0, 0, 0), 100, 50);
+		expect(g.labeled).toEqual([]);
+	});
+
+	it('caps data labels at eight, keeping the largest values', () => {
+		// Ten isolated peaks of increasing height, all above half the max.
+		const views: number[] = [];
+		for (let i = 1; i <= 10; i++) views.push(20 + i, 0);
+		const g = chartGeometry(pts(...views), 100, 50);
+		expect(g.labeled).toHaveLength(8);
+		// The two smallest peaks (values 21 and 22, at indices 0 and 2) drop.
+		expect(g.labeled).not.toContain(0);
+		expect(g.labeled).not.toContain(2);
 	});
 
 	it('closes the area path back to the baseline', () => {

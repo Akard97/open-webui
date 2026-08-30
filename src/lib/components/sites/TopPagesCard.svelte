@@ -36,10 +36,12 @@
 					: ''}"
 			>
 				<span class="min-w-0 flex-1 truncate" title="/{p.path}">/{p.path}</span>
-				<div
-					class="h-[5px] rounded-[3px] bg-[var(--st-chart)]"
-					style="width: {Math.max(6, (p.views / topPages[0].views) * 96)}px"
-				></div>
+				<div class="h-[5px] w-24 flex-none overflow-hidden rounded-[3px] bg-[var(--st-hairline)]">
+					<div
+						class="h-full rounded-[3px] bg-[var(--st-chart)]"
+						style="width: {Math.max(6, (p.views / topPages[0].views) * 100)}%"
+					></div>
+				</div>
 				<span class="w-12 text-right tabular-nums text-[var(--st-muted)]"
 					>{formatCount(p.views, locale)}</span
 				>

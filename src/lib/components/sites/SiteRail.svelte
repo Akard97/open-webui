@@ -68,15 +68,19 @@
 				type="button"
 				class="flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-150
 					{s.id === selectedId && !creating
-					? 'bg-gray-100 dark:bg-gray-850'
+					? 'bg-[var(--st-accent-faint)]'
 					: 'hover:bg-gray-50 dark:hover:bg-gray-900'}"
 				onclick={() => onSelect(s.id)}
 			>
 				<span class="flex min-w-0 items-center gap-1.5">
 					<span class="st-dot {siteAccessLevel(s) === 'private' ? 'st-dot-off' : ''}"></span>
 					<span class="truncate text-sm font-medium">{s.name}</span>
-					<span class="st-chip ml-auto {siteAccessLevel(s) === 'public' ? 'st-chip-pub' : ''}"
-						>{levelBadge(s)}</span
+					<span
+						class="st-chip ml-auto {siteAccessLevel(s) === 'public'
+							? 'st-chip-pub'
+							: siteAccessLevel(s) === 'specific'
+								? 'st-chip-acc'
+								: ''}">{levelBadge(s)}</span
 					>
 				</span>
 				<span class="truncate pl-3 text-xs text-gray-400 dark:text-gray-500">/sites/{s.slug}</span>

@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
-	import { toast } from 'svelte-sonner';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { copyToClipboard } from '$lib/utils';
 	import { getSiteAnalytics } from '$lib/apis/sites';
 	import { siteAccessLevel } from '../lib/access';
 	import { totalSize, formatSize } from '../lib/form';
@@ -11,6 +9,9 @@
 	import InsightsCard from '../InsightsCard.svelte';
 	import TopPagesCard from '../TopPagesCard.svelte';
 	import ViewersCard from '../ViewersCard.svelte';
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte';
+	import Eye from '$lib/components/icons/Eye.svelte';
+	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -19,7 +20,6 @@
 	let { site, onGoTab = (_t: string) => {} }: { site: any; onGoTab?: (t: string) => void } =
 		$props();
 
-	const url = $derived(`${window.location.origin}/sites/${site.slug}/`);
 	const level = $derived(siteAccessLevel(site));
 
 	const visLabel = $derived(
@@ -58,10 +58,11 @@
 		}
 	]);
 
-	const copy = async () => {
-		await copyToClipboard(url);
-		toast.success($i18n.t('Link copied'));
-	};
+	const quickActions = $derived([
+		{ id: 'files', label: $i18n.t('Replace files'), icon: ArrowPath },
+		{ id: 'settings', label: $i18n.t('Change who can view'), icon: Eye },
+		{ id: 'versions', label: $i18n.t('Restore an older version'), icon: ClockRotateRight }
+	]);
 
 	// --- analytics ------------------------------------------------------
 	// This tab owns the fetch so that both InsightsCard and TopPagesCard can
@@ -171,19 +172,6 @@
 </script>
 
 <div class="st-pane flex flex-col gap-4">
-	<div class="flex flex-wrap items-center gap-3 rounded-xl bg-gray-50 px-4 py-3.5 dark:bg-gray-850">
-		<span class="min-w-0 flex-1 truncate text-sm text-gray-600 dark:text-gray-300">{url}</span>
-		<div class="flex gap-2">
-			<button type="button" class="st-btn" onclick={copy}>{$i18n.t('Copy link')}</button>
-			<a
-				class="st-btn st-btn-primary inline-flex items-center"
-				href={url}
-				target="_blank"
-				rel="noopener">{$i18n.t('Open site')} ↗</a
-			>
-		</div>
-	</div>
-
 	<InsightsCard
 		{days}
 		{loading}
@@ -219,16 +207,20 @@
 	</div>
 
 	<div
-		class="flex flex-wrap items-center gap-1.5"
+		class="flex flex-wrap items-center gap-2"
 		role="group"
 		aria-label={$i18n.t('Quick actions')}
 	>
-		{#each [[$i18n.t('Replace files'), 'files'], [$i18n.t('Change who can view'), 'settings'], [$i18n.t('Restore an older version'), 'versions']] as [label, target] (target)}
+		{#each quickActions as action (action.id)}
+			{@const Icon = action.icon}
 			<button
 				type="button"
-				class="st-press rounded-[7px] px-2.5 py-1.5 text-xs text-[var(--st-muted)] hover:bg-[var(--st-hover)] hover:text-[var(--st-ink)]"
-				onclick={() => onGoTab(target as string)}>{label} →</button
+				class="st-btn st-btn-ghost st-press inline-flex items-center gap-1.5"
+				onclick={() => onGoTab(action.id)}
 			>
+				<Icon className="size-3.5" />
+				{action.label}
+			</button>
 		{/each}
 	</div>
 </div>
