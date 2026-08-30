@@ -4,6 +4,8 @@ import {
 	htmlFileNames,
 	pickEntryFile,
 	mergeFiles,
+	diffFiles,
+	fileTile,
 	grantsForLevel,
 	totalSize,
 	formatSize
@@ -43,9 +45,39 @@ describe('pickEntryFile', () => {
 describe('mergeFiles', () => {
 	it('appends new names, keeps first occurrence on duplicates', () => {
 		const a = { name: 'a.html', v: 1 };
-		expect(mergeFiles([a], [{ name: 'a.html', v: 2 } as any, { name: 'b.css', v: 3 } as any])).toEqual(
-			[a, { name: 'b.css', v: 3 }]
-		);
+		expect(
+			mergeFiles([a], [{ name: 'a.html', v: 2 } as any, { name: 'b.css', v: 3 } as any])
+		).toEqual([a, { name: 'b.css', v: 3 }]);
+	});
+});
+
+describe('diffFiles', () => {
+	const current = [{ name: 'index.html' }, { name: '1.png' }];
+	it('classifies staged files as replace when the name exists, new otherwise', () => {
+		const staged = [{ name: 'index.html' }, { name: 'styles.css' }];
+		expect(diffFiles(current, staged).published).toEqual([
+			{ file: { name: 'index.html' }, status: 'replace' },
+			{ file: { name: 'styles.css' }, status: 'new' }
+		]);
+	});
+	it('lists current files missing from the staged set as removed', () => {
+		expect(diffFiles(current, [{ name: 'index.html' }]).removed).toEqual([{ name: '1.png' }]);
+	});
+	it('returns an empty diff when nothing is staged (publish keeps current files)', () => {
+		expect(diffFiles(current, [])).toEqual({ published: [], removed: [] });
+	});
+});
+
+describe('fileTile', () => {
+	it('labels by lowercased extension and kinds html/image/other', () => {
+		expect(fileTile('Index.HTML')).toEqual({ label: 'html', kind: 'html' });
+		expect(fileTile('photo.PNG')).toEqual({ label: 'png', kind: 'image' });
+		expect(fileTile('app.js')).toEqual({ label: 'js', kind: 'other' });
+	});
+	it('caps the label at 4 chars and falls back to "file" without an extension', () => {
+		expect(fileTile('archive.tar.gz')).toEqual({ label: 'gz', kind: 'other' });
+		expect(fileTile('a.woff2')).toEqual({ label: 'woff', kind: 'other' });
+		expect(fileTile('README')).toEqual({ label: 'file', kind: 'other' });
 	});
 });
 

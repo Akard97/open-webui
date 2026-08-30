@@ -20,6 +20,8 @@
 	--st-live-soft: color-mix(in oklab, #769a4a 12%, transparent);
 	--st-danger: #dc2626; /* matches --wos-danger */
 	--st-danger-soft: color-mix(in oklab, #dc2626 8%, transparent);
+	--st-warn: #b45309;
+	--st-warn-soft: color-mix(in oklab, #d97706 10%, transparent);
 	--st-chart: #00a5ba; /* WorkOS teal */
 	--st-chart-fill: color-mix(in oklab, #00a5ba 12%, transparent);
 	--st-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -40,6 +42,8 @@
 	--st-live-soft: color-mix(in oklab, #9dc06a 15%, transparent);
 	--st-danger: #f87171;
 	--st-danger-soft: color-mix(in oklab, #f87171 12%, transparent);
+	--st-warn: #fbbf24;
+	--st-warn-soft: color-mix(in oklab, #fbbf24 13%, transparent);
 }
 
 .sites-root .st-press {
