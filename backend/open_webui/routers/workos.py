@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.env import ENABLE_PROFILE_IMAGE_URL_FORWARDING
 from open_webui.internal.db import get_async_session
 from open_webui.utils.auth import get_verified_user
+from open_webui.utils.profile_image import sanitize_profile_image_url as _sanitize_profile_image_url
 from open_webui.storage.provider import Storage
 from open_webui.models.workos import (
     Teams, TeamMembers, Workspaces, WorkspaceMembers, Workstreams,
@@ -110,19 +111,11 @@ class MemberRoleForm(BaseModel):
 
 
 def sanitize_profile_image_url(url) -> str | None:
-    # Only genuine custom images travel to the client: uploaded avatars are
-    # data: URLs and OAuth pictures are http(s). The '/user.png' default and
-    # the per-user '/api/v1/users/{id}/profile/image' placeholder both mean
-    # "no upload" — mapped to None so the UI keeps its initials fallback.
-    # External http(s) URLs additionally honour the same forwarding policy as
-    # the profile-image endpoint: when forwarding is disabled the URL is
-    # dropped so viewer browsers never fetch a third-party origin.
-    if url:
-        if url.startswith('data:'):
-            return url
-        if url.startswith('http') and ENABLE_PROFILE_IMAGE_URL_FORWARDING:
-            return url
-    return None
+    # The rule itself lives in open_webui.utils.profile_image — shared with
+    # every other feature that ships an avatar URL to a client. This module
+    # keeps its own binding of the forwarding flag as the policy input, so the
+    # router's behaviour is exactly what it was before the lift.
+    return _sanitize_profile_image_url(url, forward_external=ENABLE_PROFILE_IMAGE_URL_FORWARDING)
 
 
 async def resolve_user_names(ids: list) -> list:

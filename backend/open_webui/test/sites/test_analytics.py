@@ -8,6 +8,12 @@ import pytest
 from open_webui.internal.db import get_async_db_context
 from open_webui.models.sites import SiteView, SiteViews
 
+# Imported at module level, not inside the tests that use it: the schema
+# fixture only creates tables registered on Base when it runs, so the `user`
+# table has to exist before the first test does, not by the time one happens
+# to import it.
+from open_webui.models.users import Users
+
 
 @pytest.mark.asyncio
 async def test_record_view_inserts_a_row():
@@ -885,11 +891,58 @@ async def test_get_viewers_returns_empty_for_a_site_with_no_views():
 
 
 @pytest.mark.asyncio
-async def test_analytics_endpoint_returns_named_viewers(monkeypatch, tmp_path):
-    from open_webui.models.users import Users
+async def test_get_viewers_labels_a_deleted_account_beside_a_live_one():
+    """A mixed roster: one resolvable user, one whose account is gone.
 
+    The deleted account's views are still counted in the totals beside the
+    roster, so the row has to survive with a label rather than disappear.
+    """
+    await Users.insert_new_user(id='u1', name='Sara', email='sara@x.io')
+    # Two views to 'ghost''s one, so the ranking is deterministic and the
+    # assertion pins the label, not the order the database felt like.
+    for _ in range(2):
+        await _record_at('s1', 'index.html', 'k1', False, NOW_MS, user_id='u1')
+    await _record_at('s1', 'index.html', 'k2', False, NOW_MS, user_id='ghost')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert [(p['user_id'], p['name']) for p in v['people']] == [('u1', 'Sara'), ('ghost', 'Deleted user')]
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_drops_the_default_avatar_placeholder():
+    """'/user.png' is the signup default, and it is truthy.
+
+    Shipped raw it would make the card render a generic silhouette for every
+    user who never uploaded an avatar, and the initials fallback would never
+    run.
+    """
+    await Users.insert_new_user(id='u1', name='Sara', email='sara@x.io', profile_image_url='/user.png')
+    await _record_at('s1', 'index.html', 'k1', False, NOW_MS, user_id='u1')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert v['people'][0]['profile_image_url'] is None
+
+
+@pytest.mark.asyncio
+async def test_get_viewers_keeps_an_uploaded_avatar():
+    """Uploaded avatars are data: URLs — inline bytes, no third-party fetch —
+    so sanitizing the roster must not cost real avatars."""
+    await Users.insert_new_user(id='u1', name='Sara', email='sara@x.io', profile_image_url='data:image/png;base64,AAAA')
+    await _record_at('s1', 'index.html', 'k1', False, NOW_MS, user_id='u1')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert v['people'][0]['profile_image_url'] == 'data:image/png;base64,AAAA'
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_returns_named_viewers(monkeypatch, tmp_path):
     site = await _seed_site(tmp_path, slug='api-viewers', public=True)
-    await Users.insert_new_user(id='u1', name='Sara', email='sara@x.io', profile_image_url='/img/a.png')
+    # A data: URL, i.e. an actually-uploaded avatar: the one profile image
+    # shape that survives sanitizing end to end.
+    await Users.insert_new_user(id='u1', name='Sara', email='sara@x.io', profile_image_url='data:image/png;base64,AAAA')
 
     # record_view stamps the real wall clock (not the pinned NOW_MS used
     # elsewhere in this file), so last_viewed_at is pinned against a window
@@ -910,7 +963,7 @@ async def test_analytics_endpoint_returns_named_viewers(monkeypatch, tmp_path):
         {
             'user_id': 'u1',
             'name': 'Sara',
-            'profile_image_url': '/img/a.png',
+            'profile_image_url': 'data:image/png;base64,AAAA',
             'views': 1,
             'last_viewed_at': last_viewed_at,
         }

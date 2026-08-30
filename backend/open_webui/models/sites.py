@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from open_webui.internal.db import Base, get_async_db_context
+from open_webui.utils.profile_image import sanitize_profile_image_url
 
 
 def _now() -> int:
@@ -445,7 +446,11 @@ class SiteViewsTable:
                     # are counted in `views`; dropping the row would make the
                     # roster fail to reconcile with the totals beside it.
                     'name': user.name if user else 'Deleted user',
-                    'profile_image_url': user.profile_image_url if user else None,
+                    # Sanitized, never raw: the placeholder defaults must come
+                    # back as None so the card falls back to initials, and an
+                    # external avatar URL must not turn the owner opening this
+                    # tab into a read receipt for whoever controls that origin.
+                    'profile_image_url': sanitize_profile_image_url(user.profile_image_url) if user else None,
                     'views': int(n),
                     'last_viewed_at': int(last),
                 }
