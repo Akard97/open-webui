@@ -475,6 +475,47 @@ SERVE_HEADERS = {
 
 BOT_UA_RE = re.compile(r'bot|crawl|spider|slurp|headless|curl|wget|python-requests', re.IGNORECASE)
 
+# Per-(site, client-IP) recording budget. A public site is an unauthenticated
+# write path: without a bound, anyone holding one site URL and a browser-shaped
+# User-Agent can insert rows at network speed. The cap is far above any human
+# browsing rate, so real analytics never hit it, while a single-source flood
+# degrades to at most VIEW_RATE_MAX rows per window. This is in-process state:
+# with N workers the effective cap is N times larger — still a bound, and
+# precision is not the point. Rotating source addresses defeats a per-IP cap
+# by construction; _VIEW_RATE_MAX_KEYS exists so such an attacker exhausts the
+# budget map, not this process's memory.
+VIEW_RATE_WINDOW_MS = 60_000
+VIEW_RATE_MAX = 60
+_VIEW_RATE_MAX_KEYS = 10_000
+_view_rate: dict[tuple[str, str], list[int]] = {}
+
+
+def _view_rate_ok(site_id: str, ip: str, *, now_ms: Optional[int] = None) -> bool:
+    """Count a would-be view against the (site, ip) budget; False means drop.
+
+    Fixed one-minute windows: each entry stores [window_index, count]. Stale
+    entries are swept only when the map is full — every view paying a sweep
+    would be O(map) work on every request. If the map is full of
+    current-window keys (an address-rotating flood), the view is allowed but
+    untracked: per-IP limiting cannot stop that attacker anyway, and bounded
+    memory matters more than counting them.
+    """
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    window = now_ms // VIEW_RATE_WINDOW_MS
+    entry = _view_rate.get((site_id, ip))
+    if entry is not None and entry[0] == window:
+        if entry[1] >= VIEW_RATE_MAX:
+            return False
+        entry[1] += 1
+        return True
+    if entry is None and len(_view_rate) >= _VIEW_RATE_MAX_KEYS:
+        for key in [k for k, v in _view_rate.items() if v[0] != window]:
+            del _view_rate[key]
+        if len(_view_rate) >= _VIEW_RATE_MAX_KEYS:
+            return True
+    _view_rate[(site_id, ip)] = [window, 1]
+    return True
+
 HTML_EXT_RE = re.compile(r'\.html?$', re.IGNORECASE)
 
 
@@ -545,6 +586,10 @@ async def _record_view(
         if not _is_html(filename):
             return
         if _is_bot(user_agent):
+            return
+        # Budget check before the token decode below: a flood that trips the
+        # cap must not cost a JWT verification + user lookup per request.
+        if not _view_rate_ok(site_id, ip):
             return
         if viewer is None and has_credentials:
             # Only a public site reaches here with viewer None: a private one

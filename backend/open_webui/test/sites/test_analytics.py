@@ -8,7 +8,7 @@ import pytest
 import open_webui.utils.profile_image as profile_image
 
 from open_webui.internal.db import get_async_db_context
-from open_webui.models.sites import SiteView, SiteViews
+from open_webui.models.sites import Site, SiteView, SiteViews
 
 # Imported at module level, not inside the tests that use it: the schema
 # fixture only creates tables registered on Base when it runs, so the `user`
@@ -16,9 +16,39 @@ from open_webui.models.sites import SiteView, SiteViews
 # to import it.
 from open_webui.models.users import Users
 
+# Same reason: Users.delete_user_by_id walks chats (and groups, already
+# registered by conftest) — those tables must exist for the deletion test.
+import open_webui.models.chats  # noqa: F401
+
+
+async def _site_row(site_id, *, user_id='o1'):
+    """Insert a bare Site row so record_view's existence guard passes.
+
+    record_view refuses to insert for a site id with no site row (that is the
+    delete-race guard), so DAO-level tests that once used free-floating ids
+    now need the row to exist. Direct insert, not Sites.insert_new_site: these
+    tests do not care about slugs or manifests.
+    """
+    async with get_async_db_context(None) as db:
+        db.add(
+            Site(
+                id=site_id,
+                user_id=user_id,
+                name='S',
+                slug=f'slug-{site_id}',
+                public=True,
+                files=[],
+                entry_file='index.html',
+                created_at=0,
+                updated_at=0,
+            )
+        )
+        await db.commit()
+
 
 @pytest.mark.asyncio
 async def test_record_view_inserts_a_row():
+    await _site_row('s1')
     await SiteViews.record_view('s1', 'index.html', 'k1', False)
     rows = await SiteViews.list_views('s1')
     assert len(rows) == 1
@@ -31,6 +61,7 @@ async def test_record_view_inserts_a_row():
 
 @pytest.mark.asyncio
 async def test_record_view_marks_owner_visits():
+    await _site_row('s1')
     await SiteViews.record_view('s1', 'index.html', 'k1', True)
     rows = await SiteViews.list_views('s1')
     assert rows[0].is_owner is True
@@ -228,6 +259,51 @@ async def test_deleting_a_site_purges_its_view_rows():
 
 
 @pytest.mark.asyncio
+async def test_record_view_is_a_no_op_for_a_deleted_site():
+    """The delete-race guard: recording runs as a background task after the
+    response, so a site can be deleted between serving and recording. The
+    insert must then do nothing — an orphan row would outlive the site
+    forever, since there is no foreign key and no default retention."""
+    await SiteViews.record_view('never-existed', 'index.html', 'k1', False, user_id='u1')
+    assert await SiteViews.list_views('never-existed') == []
+
+
+@pytest.mark.asyncio
+async def test_detach_user_anonymizes_views_but_keeps_the_rows():
+    await _site_row('s1')
+    await SiteViews.record_view('s1', 'index.html', 'k1', False, user_id='u42')
+    await SiteViews.record_view('s1', 'about.html', 'k2', False, user_id='u42')
+    await SiteViews.record_view('s1', 'index.html', 'k3', False, user_id='other')
+
+    detached = await SiteViews.detach_user('u42')
+
+    assert detached == 2
+    rows = await SiteViews.list_views('s1')
+    assert len(rows) == 3  # the views happened; totals must keep reconciling
+    assert sorted(r.user_id or '' for r in rows) == ['', '', 'other']
+
+    viewers = await SiteViews.get_viewers('s1', 30)
+    assert [p['user_id'] for p in viewers['people']] == ['other']
+    assert viewers['anonymous_views'] == 2
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_user_detaches_their_views():
+    """End to end through Users.delete_user_by_id: account deletion must strip
+    the account's identity from analytics, not leave the id linked to sites
+    and timestamps indefinitely."""
+    user = await Users.insert_new_user('udel', 'Doomed', 'doomed@x.io', role='user')
+    await _site_row('s1')
+    await SiteViews.record_view('s1', 'index.html', 'k1', False, user_id=user.id)
+
+    assert await Users.delete_user_by_id(user.id) is True
+
+    rows = await SiteViews.list_views('s1')
+    assert len(rows) == 1
+    assert rows[0].user_id is None
+
+
+@pytest.mark.asyncio
 async def test_prune_older_than_deletes_only_rows_past_the_retention_window():
     await _record_at('s1', 'index.html', 'old', False, NOW_MS - 100 * DAY_MS)
     await _record_at('s1', 'index.html', 'edge', False, NOW_MS - 31 * DAY_MS)
@@ -353,6 +429,62 @@ def test_is_html_accepts_documents(name):
 @pytest.mark.parametrize('name', ['pic.png', 'style.css', 'app.js', 'index.html.map', 'noext'])
 def test_is_html_rejects_assets(name):
     assert sites_router._is_html(name) is False
+
+
+RATE_NOW = 1_756_500_000_000  # any fixed instant; only window arithmetic matters
+
+
+@pytest.fixture
+def fresh_rate_state(monkeypatch):
+    """Isolate the module-global rate-limit map from other tests (and from
+    other rate tests): the serve-route tests above consume budget too."""
+    monkeypatch.setattr(sites_router, '_view_rate', {})
+
+
+def test_view_rate_limit_caps_a_single_source_flood(fresh_rate_state):
+    ok = [sites_router._view_rate_ok('s1', '1.2.3.4', now_ms=RATE_NOW) for _ in range(sites_router.VIEW_RATE_MAX + 5)]
+    assert ok.count(True) == sites_router.VIEW_RATE_MAX
+    assert ok[: sites_router.VIEW_RATE_MAX] == [True] * sites_router.VIEW_RATE_MAX
+    assert ok[sites_router.VIEW_RATE_MAX :] == [False] * 5
+
+
+def test_view_rate_limit_is_scoped_per_site_and_ip(fresh_rate_state):
+    for _ in range(sites_router.VIEW_RATE_MAX):
+        assert sites_router._view_rate_ok('s1', '1.2.3.4', now_ms=RATE_NOW) is True
+    assert sites_router._view_rate_ok('s1', '1.2.3.4', now_ms=RATE_NOW) is False
+    # A different visitor, and the same visitor on a different site, are
+    # untouched by s1's exhausted budget.
+    assert sites_router._view_rate_ok('s1', '5.6.7.8', now_ms=RATE_NOW) is True
+    assert sites_router._view_rate_ok('s2', '1.2.3.4', now_ms=RATE_NOW) is True
+
+
+def test_view_rate_limit_resets_each_window(fresh_rate_state):
+    for _ in range(sites_router.VIEW_RATE_MAX):
+        sites_router._view_rate_ok('s1', '1.2.3.4', now_ms=RATE_NOW)
+    assert sites_router._view_rate_ok('s1', '1.2.3.4', now_ms=RATE_NOW) is False
+    next_window = RATE_NOW + sites_router.VIEW_RATE_WINDOW_MS
+    assert sites_router._view_rate_ok('s1', '1.2.3.4', now_ms=next_window) is True
+
+
+def test_view_rate_limit_sweeps_stale_keys_instead_of_growing(fresh_rate_state):
+    for i in range(sites_router._VIEW_RATE_MAX_KEYS):
+        sites_router._view_rate_ok('s1', f'10.0.{i // 256}.{i % 256}', now_ms=RATE_NOW)
+    assert len(sites_router._view_rate) == sites_router._VIEW_RATE_MAX_KEYS
+    # A new key in the NEXT window sweeps every stale entry rather than
+    # growing the map past its bound.
+    later = RATE_NOW + sites_router.VIEW_RATE_WINDOW_MS
+    assert sites_router._view_rate_ok('s1', '9.9.9.9', now_ms=later) is True
+    assert len(sites_router._view_rate) == 1
+
+
+def test_view_rate_limit_fails_open_when_full_of_current_keys(fresh_rate_state):
+    """An address-rotating flood fills the map within one window. Per-IP
+    limiting cannot stop that attacker anyway; the promise kept here is
+    bounded memory, with views allowed rather than dropped."""
+    for i in range(sites_router._VIEW_RATE_MAX_KEYS):
+        sites_router._view_rate_ok('s1', f'10.1.{i // 256}.{i % 256}', now_ms=RATE_NOW)
+    assert sites_router._view_rate_ok('s1', 'one-more', now_ms=RATE_NOW) is True
+    assert len(sites_router._view_rate) == sites_router._VIEW_RATE_MAX_KEYS
 
 
 from types import SimpleNamespace
@@ -483,6 +615,7 @@ async def test_record_view_ignores_non_get_methods():
     """The method guard itself, exercised directly: it is the backstop that
     keeps HEAD uncounted if these routes are ever declared with
     methods=['GET', 'HEAD'] or mounted as plain Starlette routes."""
+    await _site_row('s-head')
     for method in ('HEAD', 'OPTIONS'):
         await sites_router._record_view(
             site_id='s-head',
@@ -509,6 +642,28 @@ async def test_record_view_ignores_non_get_methods():
         viewer=None,
     )
     assert len(await SiteViews.list_views('s-head')) == 1
+
+
+@pytest.mark.asyncio
+async def test_flood_beyond_the_cap_stops_recording(monkeypatch):
+    """The budget check wired into _record_view itself: once a (site, ip)
+    exhausts its window, further requests insert nothing."""
+    monkeypatch.setattr(sites_router, '_view_rate', {})
+    monkeypatch.setattr(sites_router, 'VIEW_RATE_MAX', 2)
+    await _site_row('s-flood')
+    for _ in range(5):
+        await sites_router._record_view(
+            site_id='s-flood',
+            owner_id='o1',
+            filename='index.html',
+            method='GET',
+            user_agent=BROWSER_UA,
+            ip='1.2.3.4',
+            has_credentials=False,
+            request=None,
+            viewer=None,
+        )
+    assert len(await SiteViews.list_views('s-flood')) == 2
 
 
 @pytest.mark.asyncio
@@ -752,6 +907,7 @@ async def test_analytics_endpoint_denies_without_the_site_publisher_permission(m
 
 @pytest.mark.asyncio
 async def test_record_view_stores_the_signed_in_viewer():
+    await _site_row('s1')
     await SiteViews.record_view('s1', 'index.html', 'k1', False, user_id='u42')
     rows = await SiteViews.list_views('s1')
     assert rows[0].user_id == 'u42'
@@ -759,6 +915,7 @@ async def test_record_view_stores_the_signed_in_viewer():
 
 @pytest.mark.asyncio
 async def test_record_view_leaves_anonymous_views_unattributed():
+    await _site_row('s1')
     await SiteViews.record_view('s1', 'index.html', 'k1', False)
     rows = await SiteViews.list_views('s1')
     assert rows[0].user_id is None

@@ -730,9 +730,15 @@ class UsersTable:
         try:
             from open_webui.models.groups import Groups
             from open_webui.models.chats import Chats
+            from open_webui.models.sites import SiteViews
 
             # Remove User from Groups
             await Groups.remove_user_from_all_groups(id)
+
+            # Strip the account's identity from site analytics: viewer rows
+            # would otherwise keep naming the deleted id indefinitely (the
+            # analytics table has no retention by default).
+            await SiteViews.detach_user(id, db=db)
 
             # Delete User Chats
             result = await Chats.delete_chats_by_user_id(id, db=db)

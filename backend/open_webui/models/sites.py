@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Boolean, Column, Index, JSON, Text, delete, func, select
+from sqlalchemy import BigInteger, Boolean, Column, Index, JSON, Text, delete, func, insert, literal, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
@@ -241,19 +241,51 @@ class SiteViewsTable:
         user_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> None:
+        """Insert one view row — but only while its site still exists.
+
+        Recording runs as a background task after the response, so it can race
+        site deletion: the delete commits, then this insert lands, and with no
+        foreign key and no default retention the orphan row would outlive the
+        site forever. The existence check therefore lives inside the INSERT
+        itself (INSERT ... SELECT ... WHERE EXISTS site) rather than as a
+        separate check-then-act query. A commit that still slips between this
+        statement's snapshot and a concurrent delete is swept by the delete,
+        which removes view rows in the same transaction as the site row; the
+        residual window is a single statement's execution, not the whole gap
+        between response and background task.
+        """
         async with get_async_db_context(db) as db:
-            db.add(
-                SiteView(
-                    id=str(uuid.uuid4()),
-                    site_id=site_id,
-                    path=path,
-                    visitor_key=visitor_key,
-                    is_owner=is_owner,
-                    user_id=user_id,
-                    created_at=_now(),
+            await db.execute(
+                insert(SiteView).from_select(
+                    ['id', 'site_id', 'path', 'visitor_key', 'is_owner', 'user_id', 'created_at'],
+                    select(
+                        literal(str(uuid.uuid4()), Text()),
+                        literal(site_id, Text()),
+                        literal(path, Text()),
+                        literal(visitor_key, Text()),
+                        literal(is_owner, Boolean()),
+                        literal(user_id, Text()),
+                        literal(_now(), BigInteger()),
+                    ).where(select(Site.id).where(Site.id == site_id).exists()),
                 )
             )
             await db.commit()
+
+    async def detach_user(self, user_id: str, db: Optional[AsyncSession] = None) -> int:
+        """Strip a deleted account's identity from its view rows.
+
+        Called from user deletion. The rows themselves stay — the views
+        happened, and the totals beside the viewer roster must keep
+        reconciling — but `user_id` reverts to NULL, which is exactly the
+        anonymous state: nothing else in a row identifies the person, and
+        the roster stops naming them. Without this, analytics (which has no
+        retention by default) would keep linking the deleted id to sites and
+        timestamps indefinitely.
+        """
+        async with get_async_db_context(db) as db:
+            result = await db.execute(update(SiteView).where(SiteView.user_id == user_id).values(user_id=None))
+            await db.commit()
+            return result.rowcount or 0
 
     async def prune_older_than(self, days: int, now_ms: Optional[int] = None, db: Optional[AsyncSession] = None) -> int:
         """Delete view rows older than `days` days; return how many went.
