@@ -70,7 +70,11 @@ Retention is a size bound on a hostile write path, not a reporting window, so it
 a plain millisecond timestamp and deliberately does not align with the analytics day
 buckets. It does not defend against a burst — only against unbounded accumulation.
 
-### Deliberate omission: `user_id`
+### Reversed: the `user_id` omission
+
+This section originally argued against storing the viewer's user id. That argument is kept
+below, unedited, rather than deleted: a spec that silently drops a decision it once argued
+for is worse than one that never made the argument. What changed, and why, follows it.
 
 The table stores `is_owner` but **not** the viewer's user id. `is_owner` is the only
 identity signal the feature needs, and storing viewer ids would make `site_view` a
@@ -90,6 +94,28 @@ reconstructing one. It does not give a grantee of a narrowly-shared private site
 meaningful anonymity from that site's owner. Anyone relying on this trade-off for a
 small-audience private site should be told that their reading is visible to the owner,
 rather than assuming the omission delivers a privacy property it does not.
+
+**That decision is reversed.** `docs/superpowers/specs/2026-08-30-sites-viewers-design.md`
+adds a viewer roster to the Overview tab — signed-in visitors named, everyone else
+aggregated as anonymous — and a named roster cannot be delivered without storing which user
+made each view. `site_view` now has a nullable `user_id` column.
+
+The consequence is exactly the one argued above, accepted knowingly rather than dismissed:
+`site_view` is now, for sites whose viewers are signed in, a per-employee browsing log of
+internal pages. Two things are part of that decision, not an afterthought:
+
+- The roster — and the `user_id` column behind it — is visible only to the site owner and
+  app admins, the same audience as the rest of the analytics endpoint. Non-owners still
+  receive `404`, not `403` (see *API*, below), so a caller cannot confirm the site exists,
+  let alone see who viewed it.
+- `SITES_ANALYTICS_RETENTION_DAYS` (see *Growth*, above), previously just a size bound on an
+  unauthenticated write path, now also bounds how long this per-viewer record persists.
+
+See `docs/superpowers/specs/2026-08-30-sites-viewers-design.md` for the full design: the
+roster shape, attribution scope (signed-in viewers are named on every site, including public
+ones, because a signed-in visitor's identity is already resolved today — this adds retention
+of that result, not new resolution), and the `unique_visitors` fix carried into the API
+section below.
 
 ## Data model
 
@@ -266,11 +292,15 @@ Response:
 
 - `views`, `series`, `unique_visitors`, and `top_pages` all **exclude** owner visits.
   `owner_views` is the separate owner count. The headline number is therefore real traffic.
-- `unique_visitors` is `COUNT(DISTINCT visitor_key)` over the window — a real count, not a
-  sketch or an estimate, and so **exact against honest clients**. It is not a guarantee
-  against a hostile one: `visitor_key` is derived from the client IP, and with the default
-  `FORWARDED_ALLOW_IPS=*` a caller picks its own apparent IP (see *visitor_key derivation*),
-  so every spoofed `X-Forwarded-For` value mints a fresh key and inflates the count.
+- `unique_visitors` is `COUNT(DISTINCT COALESCE(user_id, visitor_key))` over the window —
+  **exact** for signed-in viewers, who dedupe on their stable `user_id` across the whole
+  window. Anonymous viewers still dedupe on `visitor_key`, which deliberately rotates daily
+  (see *visitor_key derivation*), so that portion of the count is a sum of daily uniques
+  rather than a true window-wide count: a returning anonymous visitor is counted once per day
+  they visit, not once overall. Neither half is a guarantee against a hostile client either —
+  `visitor_key` is derived from the client IP, and with the default `FORWARDED_ALLOW_IPS=*` a
+  caller picks its own apparent IP, so every spoofed `X-Forwarded-For` value mints a fresh key
+  and inflates the anonymous portion further.
 - `series` is zero-filled across every UTC day in the window, so the chart draws a real
   gap as zero rather than interpolating a straight line between distant points.
 - `top_pages` returns the top 5 paths by view count.
