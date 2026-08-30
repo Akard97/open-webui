@@ -129,10 +129,15 @@ site_view
   path         Text        NOT NULL   served filename, e.g. "index.html"
   visitor_key  Text        NOT NULL   32 hex chars
   is_owner     Boolean     NOT NULL   default False
+  user_id      Text        nullable  the signed-in viewer; NULL means anonymous
   created_at   BigInteger  NOT NULL   epoch ms, matching sites.py::_now()
 
   index ix_site_view_site_created on (site_id, created_at)
 ```
+
+`user_id` was added by migration `c1d2e3f4a5b7` (see *Reversed: the `user_id` omission*,
+above, and `docs/superpowers/specs/2026-08-30-sites-viewers-design.md`), not by `b1c2d3e4f5a6`
+alongside the rest of the table.
 
 `created_at` is milliseconds, consistent with `Site.created_at` / `Site.updated_at`.
 
@@ -169,8 +174,9 @@ production. With the default `*`, `client.host` is caller-controlled.
 `SiteViewsTable` is added to the existing `backend/open_webui/models/sites.py`, next to
 `SitesTable`. It exposes:
 
-- `record_view(site_id, path, visitor_key, is_owner, db=None)`
-- `get_analytics(site_id, days, db=None)` — returns totals, daily series, top pages
+- `record_view(site_id, path, visitor_key, is_owner, user_id=None, db=None)`
+- `get_analytics(site_id, days, now_ms=None, db=None)` — returns totals, daily series, top
+  pages
 - `prune_older_than(days, now_ms=None, db=None) -> int` — retention; `days <= 0` is a no-op
   returning `0`
 
