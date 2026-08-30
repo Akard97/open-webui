@@ -146,6 +146,9 @@ New `SiteViewsTable.get_viewers(site_id, days, limit=8, now_ms=None, db=None) ->
 - Names and avatars come from `Users.get_users_by_user_ids(...)` in one batch call. A viewer
   whose account has since been deleted resolves to no row; those views fall back to a
   `Deleted user` label rather than vanishing, so the counts still reconcile with `views`.
+  (Since the post-review hardening below, account deletion detaches the id from its rows,
+  so this label is a backstop for rows that predate the fix or bypassed the delete flow,
+  not the normal outcome.)
 
 Two queries: one `GROUP BY user_id` over the window, one batch user lookup.
 
@@ -232,3 +235,28 @@ Modified:
 - `src/lib/components/sites/lib/analytics.ts` (+ its test)
 - `docs/superpowers/specs/2026-08-29-sites-analytics-design.md` — rewrite the
   "Deliberate omission: `user_id`" section as a recorded reversal
+
+## Post-review hardening (2026-08-30)
+
+An adversarial review after the build surfaced three gaps; all three are fixed in code, and
+none reopens the retention decision above (still deliberately off).
+
+1. **Account deletion now detaches identity.** `Users.delete_user_by_id` calls
+   `SiteViews.detach_user`, which sets `user_id` back to NULL on that account's view rows.
+   The rows stay — the views happened and totals must keep reconciling — but the record
+   stops naming the deleted account. Before this, deletion left the id linked to sites and
+   timestamps indefinitely, which the retention decision never meant to cover: that decision
+   was about live accounts, not about surviving deletion.
+2. **Recording is rate-limited per (site, client IP).** Public sites are an unauthenticated
+   write path; a browser-shaped User-Agent was the only gate. `_view_rate_ok` in the sites
+   router now enforces a fixed-window cap (60 views/min per site per IP, in-process, bounded
+   key map that fails open under address rotation — the bound protected there is this
+   process's memory, since per-IP limiting cannot stop a rotating attacker anyway). Honest
+   traffic never approaches the cap.
+3. **`record_view` refuses to insert for a deleted site.** Recording runs after the
+   response, so it races site deletion; the insert is now `INSERT … SELECT … WHERE EXISTS
+   site` — one statement, not check-then-act — so a site deleted before the background task
+   runs gains no orphan rows. The residual window is a single statement's execution racing
+   the delete transaction's snapshot; without foreign keys (this codebase uses none, and
+   SQLite would not enforce them as configured) that microsecond window is accepted and the
+   delete's own same-transaction sweep of view rows covers the other ordering.
