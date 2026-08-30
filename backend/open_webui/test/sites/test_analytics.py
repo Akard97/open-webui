@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+import open_webui.utils.profile_image as profile_image
+
 from open_webui.internal.db import get_async_db_context
 from open_webui.models.sites import SiteView, SiteViews
 
@@ -935,6 +937,39 @@ async def test_get_viewers_keeps_an_uploaded_avatar():
     v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
 
     assert v['people'][0]['profile_image_url'] == 'data:image/png;base64,AAAA'
+
+
+@pytest.mark.parametrize(
+    'forwarding_enabled, expected',
+    [
+        (True, 'https://cdn.example.com/avatar.jpg'),
+        (False, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_viewers_respects_external_avatar_forwarding_flag(monkeypatch, forwarding_enabled, expected):
+    """OAuth-provisioned users carry real http(s) avatars, and get_viewers
+    calls the sanitizer with no explicit `forward_external` — so this is the
+    one path that exercises the module's own default-from-env binding. If
+    forwarding is off, an external avatar URL must not reach the viewer
+    roster: it would let anyone with an avatar URL they control learn every
+    time the site owner opens the Overview tab (a read receipt).
+
+    Patches `open_webui.utils.profile_image.ENABLE_PROFILE_IMAGE_URL_FORWARDING`
+    specifically — that's the binding `sanitize_profile_image_url` actually
+    reads for its `forward_external is None` default. Patching
+    `open_webui.env` instead would be a silent no-op: the sanitizer module
+    already bound its own name at import time.
+    """
+    monkeypatch.setattr(profile_image, 'ENABLE_PROFILE_IMAGE_URL_FORWARDING', forwarding_enabled)
+    await Users.insert_new_user(
+        id='u1', name='Sara', email='sara@x.io', profile_image_url='https://cdn.example.com/avatar.jpg'
+    )
+    await _record_at('s1', 'index.html', 'k1', False, NOW_MS, user_id='u1')
+
+    v = await SiteViews.get_viewers('s1', 30, now_ms=NOW_MS)
+
+    assert v['people'][0]['profile_image_url'] == expected
 
 
 @pytest.mark.asyncio
