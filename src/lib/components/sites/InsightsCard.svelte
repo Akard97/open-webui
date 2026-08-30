@@ -70,7 +70,12 @@
 				</div>
 			</div>
 			<div>
-				<div class="text-xs font-medium text-gray-400 dark:text-gray-500">
+				<div
+					class="text-xs font-medium text-gray-400 dark:text-gray-500"
+					title={$i18n.t(
+						'Signed-in viewers are counted once. Anonymous visitors are counted once per day.'
+					)}
+				>
 					{$i18n.t('Unique visitors')}
 				</div>
 				<div class="mt-0.5 text-[21px] font-bold tabular-nums tracking-tight">
