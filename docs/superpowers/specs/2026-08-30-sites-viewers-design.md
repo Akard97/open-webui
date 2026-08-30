@@ -39,8 +39,15 @@ What follows from that, and is part of this design rather than an afterthought:
 
 - The roster is visible only to the site owner and app admins — the same audience as the rest
   of the analytics endpoint, which returns 404 rather than 403 to everyone else.
-- `SITES_ANALYTICS_RETENTION_DAYS` (already shipped, default off) is now the control that
-  bounds how long this record persists. It is worth setting once this ships.
+- `SITES_ANALYTICS_RETENTION_DAYS` (already shipped, default off) is the control that bounds
+  how long this record persists.
+
+  **The user was asked directly and chose to keep it off: named viewer records are retained
+  indefinitely.** This is recorded as an explicit decision, not an inherited default — the
+  merge-gate review's objection was precisely that leaning on a mitigation nobody had turned
+  on undercuts the argument for the reversal. The lever is documented in `.env.example` and
+  can be set later without a code change; until then, the access control below is the only
+  bound on this record.
 - The prior spec's section will be rewritten in place to record the reversal, not deleted.
   A spec that silently drops a decision it once argued for is worse than one that never made
   the argument.
