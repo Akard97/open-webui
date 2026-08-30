@@ -75,6 +75,13 @@ that is inherent to the daily rotation, which is not being weakened — so that 
 sum-of-daily-uniques. The UI states this rather than presenting a number that is exact for one
 half of its inputs and inflated for the other.
 
+The fix is not retroactive, and that is a transient worth naming: rows written before migration
+`c1d2e3f4a5b7` have `user_id IS NULL` and fall back to `visitor_key`, so for as long as the
+retention window still holds pre-migration rows, a signed-in daily visitor is counted once per
+pre-migration day *plus* once for all their post-migration rows. There is no backfill — an
+unattributed past view is the honest record, and the attribution was never captured to restore —
+so the residual overcount simply ages out as those rows leave the window.
+
 ## Data model
 
 Migration `c1d2e3f4a5b7`, `down_revision = 'b1c2d3e4f5a6'` (the current head).
