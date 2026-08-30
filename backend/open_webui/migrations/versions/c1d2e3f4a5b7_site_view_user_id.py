@@ -24,4 +24,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('site_view', 'user_id')
+    with op.batch_alter_table('site_view') as batch:
+        batch.drop_column('user_id')
