@@ -196,7 +196,7 @@
 	/>
 
 	<div class="grid gap-4 lg:grid-cols-2">
-		<ViewersCard {loading} {failed} {viewers} />
+		<ViewersCard {loading} {failed} {viewers} class={showTopPages ? '' : 'lg:col-span-2'} />
 		{#if showTopPages}
 			<TopPagesCard {loading} {topPages} />
 		{/if}

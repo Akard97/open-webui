@@ -9,13 +9,18 @@
 	const i18n = getContext('i18n');
 
 	// Presentational: OverviewTab owns the fetch and hands the roster down.
+	// `class` is how the parent hands down its grid placement — this card is
+	// the only child of the row whenever Top pages is hidden, so it has to be
+	// told to span both columns rather than leave half the row blank.
 	let {
 		loading = false,
 		failed = false,
-		viewers = { people: [], anonymous_views: 0, more: 0 }
+		viewers = { people: [], anonymous_views: 0, more: 0 },
+		class: className = ''
 	}: {
 		loading?: boolean;
 		failed?: boolean;
+		class?: string;
 		viewers?: {
 			people: {
 				user_id: string;
@@ -35,7 +40,7 @@
 	);
 </script>
 
-<div class="rounded-xl border border-[var(--st-hairline)] px-4 py-3.5">
+<div class="rounded-xl border border-[var(--st-hairline)] px-4 py-3.5 {className}">
 	<h4 class="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">
 		{$i18n.t('Viewers')}
 	</h4>
